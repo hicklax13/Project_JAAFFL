@@ -1061,3 +1061,296 @@ skew or direct Monte-Carlo opponent draw as refinement).
 [injury finder](https://www.playerprofiler.com/article/nfl-injured-players-injury-finder/)
 
 ---
+
+## 7. Subagent 3 — System & Architecture Planning
+
+> **Verbatim report from Subagent 3.** Mandate: integrate the chosen engine (Subagents 1 & 2)
+> and the platform findings into concrete, justified build specs mapped onto the existing JAAFFL
+> repo. Scope: personal, $0-besides-AI, text-only (ADR 0003). Every tool claim is cited;
+> unverifiable items are tagged **[UNVERIFIED]**.
+
+### 7.A Reasoning log (stepwise)
+
+**Step 1 — Anchor the plan to what actually exists, not to a greenfield ideal.** I read the full
+scaffold before deciding anything: the domain models, the provider protocol, every engine stub,
+the league layer, the warehouse/crosswalk stubs, the API, the shared Zod contracts, the extension,
+and the roadmap. **Conclusion: the scaffold's package boundaries already match the chosen engine's
+pipeline almost 1:1** — `projections → league(scoring/replacement) → opponents → simulate/optimize
+→ recommend`. That is a strong signal to *amend additively, not restructure*. The build plan is a
+set of concrete implementations and four targeted schema/tooling changes, not a rewrite. This
+honors "Transparent before clever" and ADR 0002 (local-first).
+
+**Step 2 — Identify the smallest set of *breaking* gaps between the scaffold and the chosen
+engine.** Exactly four places where the current contracts *cannot* express the engine:
+1. `LeagueSettings.scoring` is a flat `list[ScoringRule]` of `(stat, points_per_unit, applies_to)`
+   — a purely **linear** map. It structurally cannot represent CBS's **DST points-allowed tiers**,
+   **DST yards-allowed tiers**, or the **K 50+ yard bonus**. #1 required schema change.
+2. `providers/nflverse.py` imports the **deprecated `nfl_data_py`** and returns **pandas**; the
+   chosen backbone is **`nflreadpy`** (Polars) and needs ECR + expected-points, not just history.
+3. `RecommendedPick` has no fields for the **score decomposition** (MLV / VONA / risk / cliff). The
+   value proposition — and the assistant's "explain" tool — depends on surfacing *why*.
+4. The API has ingest (`POST /draft/events` + `WS /draft/ws`) and `GET /recommendation`, but **no
+   push channel** to stream recs to the overlay/dashboard.
+
+**Step 3 — Decide the compute topology from the latency constraint backward.** Hard constraint
+<2 s/pick, single laptop, no GPU, ≤~22 opponent picks between turns. The only reliable way: **move
+everything data-shaped to a pre-draft precompute** (projections μ/σ, league points, replacement
+baselines, tiers, ADP join, crosswalk) into an in-memory `DraftContext`, so the **per-pick hot path
+is pure arithmetic over arrays**: drop the picked player, recompute survival (closed-form Gaussian,
+vectorized NumPy), recompute MLV for a **bounded candidate set** via a tiny Hungarian assignment,
+add VONA/risk/cliff, sort. Milliseconds analytically; Monte-Carlo is a *refinement* inside the same
+budget, not the default.
+
+**Step 4 — Decide the solver for MLV before writing the optimizer.** MLV is "gain to the optimal
+9-slot starting lineup from adding p, including the WR/RB flex" = a **max-weight bipartite
+assignment** (players ↔ slots, flex eligibility as a mask) → the **Hungarian algorithm**
+(`scipy.optimize.linear_sum_assignment`), microseconds at 9 slots. **Not** OR-Tools CP-SAT on the
+hot path: CP-SAT is right for the richer *end-state* 17-slot roster ILP (bench, stacking,
+contingency) in the **season simulator (stretch)**, heavyweight for a per-pick assignment. So
+**Hungarian per-pick (v1), CP-SAT reserved for stretch** — OR-Tools stays in the `engine` extra.
+
+**Step 5 — Decide Polars-vs-pandas at the provider boundary.** `nflreadpy` is Polars-native and
+DuckDB scans Polars/Arrow **zero-copy**. Forcing `pd.DataFrame` adds a round-trip on every load.
+**Adopt Polars as the primary frame type at the data/provider boundary**, `.to_pandas()` only where
+a downstream lib demands (XGBoost residuals — stretch). Type-hint change to `providers/base.py` +
+`polars` in the `data` extra.
+
+**Step 6 — Decide the extension build tool and injection mechanism (where the real risk lives).**
+Live capture must run a **MAIN-world** script monkeypatching `WebSocket`/`fetch`/`XHR`. Two
+bundlers: **@crxjs/vite-plugin** (reads the existing `manifest.json`, minimal churn, endorsed by the
+extension README) vs **WXT** (generates manifest; ships `injectScript`; better-maintained). I
+verified WXT supports MAIN-world injection with parent-script messaging, and @crxjs supports
+declarative `world:"MAIN"`. **Decision: @crxjs for v1** (keeps `manifest.json` as source of truth,
+raw control for the three probes), **WXT as fallback**. Load-bearing manifest change (bundler-
+orthogonal): the MAIN-world probe must be `"world":"MAIN"` **`"run_at":"document_start"`** so
+`WebSocket` is patched *before* CBS opens its socket (current manifest uses `document_idle` — too
+late).
+
+**Step 7 — Decide durability (a mid-draft crash is unrecoverable if wrong).** Of the three stores,
+only the **live pick stream** is unrebuildable. So the append-only **draft-event log lives in
+SQLite (ACID)** and `DraftState` is a *fold over that log*; ingest writes the log **before**
+computing a rec, so a restart replays to the exact state. Parquet (nflverse snapshots) and DuckDB
+(analytics/materialized projections) are rebuildable. Crash-safe during the one moment that matters.
+
+**Step 8 — Keep the objective auditable and the heuristics bounded.** `Score(p)=MLV_p +
+κ·max(0,VONA_p) − λ(phase,slot)·σ̂_p + α·Cliff_p + capped modifiers`. Every term is computed by a
+*named module* and returned in a `ScoreComponents` object; every soft heuristic (bye-stack,
+handcuff, injury discount) is **clamped to ±a few points** via `EngineParams` so no rule dominates
+the value core. Hyperparameters (κ, λ-table, α, flex split, caps) live in a versioned
+`config/engine.json` so calibration tunes them without code changes.
+
+### 7.B Architecture decisions & rationale (incl. changes to the scaffold)
+
+Legend: **[KEEP]** confirm · **[CHANGE]** amend · **[ADD]** new.
+
+| # | Decision | Rationale | Rejected alternative |
+|---|----------|-----------|----------------------|
+| B1 | **[KEEP]** Python (backend/engine/data) + TS (extension/web); FastAPI on `127.0.0.1:8787`; local-first | Scientific stack + nflverse are Python-native; MV3 must be JS/TS; local-first satisfies ADR 0002/0003 + CBS ToS | Single-language JS engine (loses Polars/SciPy/OR-Tools); Rust (overkill) |
+| B2 | **[CHANGE]** `nfl_data_py` → **`nflreadpy`** (Polars); add `polars` to `data` extra; provider return `pd`→`pl.DataFrame` | `nfl_data_py` archived 2025-09-25; `nflreadpy` maintained, Polars, DuckDB zero-copy (verified `load_player_stats/load_ff_rankings/load_ff_opportunity`) | Keep pandas — round-trip every load |
+| B3 | **[CHANGE]** `LeagueSettings` full scoring map: keep linear `scoring`, **add** `scoring_tiers` (DST pts+yds allowed) + `scoring_bonuses` (K 50+); mirror in Zod | CBS "standard" DST scores on **both** pts- and yds-allowed tiers; K +2 at 50+; a linear list can't express brackets/thresholds | `scoring_format:"standard"` enum — discards exact values |
+| B4 | **[ADD]** Three $0 adapters: `NflreadpyProvider`, `FantasyFootballCalculatorProvider`, `CbsOnPageProvider`; paid ones disabled stubs | Verified $0 non-PPR/12-team stack: nflverse ECR+xEP+history, FFC ADP mean+SD (live 2026, 378-draft), CBS on-page for actual settings/projections/injuries | Hard FantasyPros dependency (violates $0); single source (loses blend) |
+| B5 | **[CHANGE]** Capture = **three-probe transport-agnostic**; MAIN-world at **`document_start`**; content script owns the WS; add `scripting` | `webRequest` can't read WS messages; CBS transport **[UNVERIFIED]** → all three probes, de-dup by `pickNumber`; patch `WebSocket` before page constructs it; content-script WS sidesteps SW lifecycle | `webRequest`/`declarativeNetRequest` (can't read WS); SW-owned socket (dies with SW) |
+| B6 | **[CHANGE]** Bundler **@crxjs/vite-plugin** (v1); WXT fallback | Reads existing `manifest.json`, minimal churn, raw control for three probes | WXT-first (larger change); plain esbuild (hand-roll HMR) |
+| B7 | **[CHANGE]** Per-pick MLV via **`scipy.optimize.linear_sum_assignment`** (Hungarian); CP-SAT reserved for stretch end-state/season ILP | MLV is a pure bipartite assignment (9 slots, flex mask) → Hungarian µs; CP-SAT heavy for hot path | CP-SAT per pick (latency); greedy fill (mishandles flex trade-off) |
+| B8 | **[CHANGE]** `RecommendedPick` gains `ScoreComponents` (`mlv, vona, risk_penalty, cliff_bonus, sigma, floor, ceiling, replacement_baseline, modifiers{}`); mirror in Zod | "Transparent before clever": overlay + `explain_recommendation` must show the decomposition | Opaque single `score` (unexplainable) |
+| B9 | **[CHANGE]** API: **[KEEP]** `/draft/events`+`/draft/ws`+`/recommendation`; **[ADD]** `WS /recs/ws` push + `GET /league/{id}` | Ingest exists; push channel needed so the overlay updates within <2 s without polling; `/recs/ws` matches the `/draft/ws` convention | Poll `/recommendation` (latency) |
+| B10 | **[ADD]** Precompute→hot-path: in-memory `DraftContext` + stateless per-pick `recompute()` | Only way to hit <2 s on a laptop | Recompute projections each pick (blows budget) |
+| B11 | **[ADD]** `config/engine.json` (`EngineParams`: κ, λ-table, α, flex split, caps, candidate cap, MC rollouts) via `jaaffl.config` | Calibration tunes without code changes; objective stays declarative | Hard-coded constants (untunable) |
+| B12 | **[KEEP]** Web (Next.js + AG Grid + ECharts + TanStack Virtual), read-only; assistant text-only (Responses API) | Free, appropriate; ADR 0003 (no voice) | Realtime/voice (out of scope) |
+| B13 | **[ADD]** Schema-parity CI (Pydantic JSON-Schema ↔ Zod round-trip) | Two contract definitions can silently drift | Manual sync (drifts) |
+
+### 7.C Module-by-module build spec
+
+Notation: **[E]** existing stub to implement · **[A]** amend · **[N]** new.
+
+**7.C.1 `packages/shared` (TS contracts).** **[A] `league.ts`**: add `ScoringTierSchema`
+(`{stat, brackets:{lower,upper|null,points}[]}`) + `ScoringBonusSchema` (`{stat,threshold,points}`);
+add `scoring_tiers`,`scoring_bonuses` to `LeagueSettingsSchema`. **[A] `events.ts`**: add required
+`pick_number` on capture events for **cross-probe de-dup** + optional `source:"ws"|"framework"|"dom"`.
+**[A] `recommendation.ts`**: add `ScoreComponentsSchema`, embed as `components` on
+`RecommendedPickSchema`. **[N]** canonical example JSON fixtures for schema-parity CI.
+
+**7.C.2 `apps/extension` (capture layer — highest risk).** **[A] `manifest.json`**: third
+`content_scripts` entry → `src/inject/cbs-main.inject.ts` with `"world":"MAIN"`,
+`"run_at":"document_start"`; add `"scripting"`; keep host perms narrow (CBS + `127.0.0.1:8787`).
+**[N] `src/inject/cbs-main.inject.ts` (MAIN world)** — three probes: (1) WS monkeypatch (wrap
+`send` + `message`); (2) fetch/XHR monkeypatch; (3) framework-state read (React fiber props);
+relay via `window.postMessage({source:"jaaffl-main",...})`. **[A] `src/content/cbs-draft.content.ts`
+(ISOLATED — trust boundary)**: receive frames + `MutationObserver` on board/ticker; **de-dup by
+`pick_number`**; validate via `parse.ts`; open `WS /draft/ws`; mount overlay. **[E] `src/lib/parse.ts`**:
+implement `parseLeagueSettings` (roster slots, flex eligibility, **full scoring incl. DST tiers + K
+bonus**, team count, **draft order from board**) + `parseDraftEvent`; golden-fixture-driven. **[E]
+`src/overlay/overlay.ts`**: subscribe `WS /recs/ws`; render best pick + top-5 with the `components`
+decomposition + next-turn survival %.
+
+**7.C.3 `jaaffl.domain` + `jaaffl.config`.** **[A] `domain/models.py`**: add `ScoringTier`,
+`ScoringBonus`, `scoring_tiers`/`scoring_bonuses` on `LeagueSettings`; add `ScoreComponents` on
+`RecommendedPick`; add `Capability.EXPECTED_POINTS` (+ optional `DRAFT_PICKS`). **[A] `config.py`**:
+add `jaaffl_season`, `jaaffl_enable_ffc=True`, `jaaffl_ffc_scoring="standard"`, `jaaffl_ffc_teams=12`,
+`jaaffl_engine_params_path`, `jaaffl_candidate_cap=180`, `jaaffl_mc_rollouts=2000`; **[N] `EngineParams`**
+from `config/engine.json`.
+
+**7.C.4 `jaaffl.{ingest, league, data, providers}`.** **[E] `ingest/cbs.py`**: implement
+`normalize_league_settings`/`normalize_draft_state`; **[N] `ingest/log.py`**: append every
+`DraftEvent` to the SQLite log (monotonic `seq`, `pick_number`) *before* engine work; `fold_state`
+rebuilds `DraftState` (crash-safe replay). **[A] `league/scoring.py`**: extend `league_points` to
+evaluate linear rules **+ tiered brackets (DST pts/yds allowed) + threshold bonuses (K 50+)**. **[E]
+`league/replacement.py`**: keep `starter_demand`; implement `replacement_values` = rank by league
+points within position, value at **dedicated demand + allocated flex share** (flex split from
+`EngineParams`); baselines RB≈22–24, WR≈40–42, QB/TE/K/DST≈13; **[N]** BEER/man-games blended toward
+VOLS at the scarce top end. **[A] `providers/nflverse.py` → `NflreadpyProvider`**: `nflreadpy`;
+caps `{HISTORICAL_STATS, RANKINGS, EXPECTED_POINTS}`; history→`load_player_stats`, ECR→`load_ff_rankings`,
+xEP→`load_ff_opportunity`; map ids via nflverse crosswalk (`load_ff_playerids`/`load_players` —
+confirm exact Python name **[VERIFY minor]**). **[N] `providers/ffc.py`**: cap `ADP`; GET
+`.../api/v1/adp/{scoring}?teams=12&year={season}`; parse → `{canonical_id:{adp,stdev,high,low,
+times_drafted,bye}}`; **cache daily**; note FFC mocks are 15-round → ADP thins past ~180, fall back
+to ECR for deep-round survival. **[N] `providers/cbs_onpage.py`**: caps `{PROJECTIONS,INJURIES,
+RANKINGS}` + authoritative `LeagueSettings`; **reads the CBS snapshot from the warehouse** (fed by
+the extension), not a network fetch. **[E] `data/warehouse.py`** + **[E] `data/crosswalk.py`**:
+deterministic nflverse-ID join + fuzzy fallback (name+team+pos), resolutions persisted in SQLite.
+
+**7.C.5 `jaaffl.engine` — the pipeline.** **[A] `projections.py::build_projections`** *(S0)*: blend
+CBS on-page + ECR + xEP [+ optional FP], **all recomputed under the exact CBS map** via
+`league.scoring`; **[A]** return `{stat_line, mu, sigma, floor, ceiling}`; σ/floor/ceiling from
+cross-source spread. **[N] `tiers.py`** *(S4)*: `sklearn.mixture.GaussianMixture` on ECR → `tier` +
+`cliff_bonus` (adds `scikit-learn` to `engine` extra). **[A] `optimize.py`**: **[N]
+`marginal_lineup_value(...)`** via `scipy.optimize.linear_sum_assignment` over 9 slots (flex mask,
+replacement-filled); **[E]** keep `optimize_roster` as CP-SAT for stretch. **[E]
+`opponents.py::pick_probabilities`** *(S2)*: closed-form `S_j(N)=1−Φ((N−m_j)/s_j)` (vectorized NumPy);
+horizon from the live board; **[N]** optional per-manager priors from `manager_tendencies`. **[E]
+`simulate.py::simulate_drafts`** *(MC refinement + stretch)*: vectorized MC rollouts for VONA's
+`E[best available]` when analytic is insufficient; the **stretch season simulator** reuses it → 
+playoff/championship odds. **[E] `recommend.py::recommend`** *(orchestrator)*: assemble the score,
+populate `ScoreComponents`, sort; reads `DraftContext` + live `DraftState`; **analytic VONA is the
+v1 default**, MC opt-in within budget.
+
+**7.C.6 `jaaffl.{api, assistant}`.** **[A] `api/app.py`**: keep existing; **[N]** `WS /recs/ws`,
+`GET /league/{id}`; ingest handler: append log → fold state → `recommend` → broadcast on `/recs/ws`.
+**[E] `assistant/tools.py::dispatch`** *(Stage 7, text-only)*: wire typed tools to warehouse/engine;
+`explain_recommendation` returns the `ScoreComponents` breakdown in prose; Responses API; no voice.
+
+**7.C.7 `apps/web`.** **[KEEP]** stack; consume `/recommendation` + `WS /recs/ws`; board (AG Grid),
+distributions/tiers (ECharts), survival curves, manager-tendency panel as history accrues. Secondary
+to the overlay for v1.
+
+### 7.D Compute & latency plan + library choices
+
+**Budget:** target **<2 s/pick**; **<200 ms** analytic, **<2 s** with MC VONA at N≈1–2k. Worst case
+= pick 1 (~300-player pool, horizon ~22).
+
+**Pre-draft precompute (once) → `DraftContext`:** projections μ/σ/floor/ceiling; league points per
+player; replacement baselines + flex allocation; tiers + cliff bonuses; FFC ADP mean/SD joined by
+canonical id; crosswalk. Materialized to DuckDB/Parquet, held in memory.
+
+**Per-pick hot path (stateless `recompute()`):** (1) drop picked player (O(1) mask); (2) vectorized
+survival `1−Φ((N−m)/s)` over available (~µs/300 players); (3) bounded candidates top-K
+(`candidate_cap≈180`); (4) MLV per candidate via `linear_sum_assignment` on a 9×(owned+replacement+
+candidate) matrix, base lineup cached, dominance shortcut (~tens of ms); (5) analytic VONA/risk/cliff/
+modifiers (MC only if enabled); (6) assemble + sort.
+
+**Libraries:** **NumPy** (vectorized survival/expected-max), **Polars** (nflverse-native, zero-copy
+to DuckDB) **[ADD `data`]**, **SciPy `linear_sum_assignment`** (Hungarian MLV), **OR-Tools CP-SAT**
+(stretch end-state/season ILP), **scikit-learn `GaussianMixture`** (tiers) **[ADD `engine`]**,
+**DuckDB+Parquet+SQLite** (analytics/cold/ACID), **Optuna** (offline tuning, never hot path).
+Single-thread suffices; MC is embarrassingly parallel (NumPy batch). No cloud/GPU.
+
+### 7.E Calibration, backtesting & testing plan
+
+- **E1 — Measure the flex RB/WR split from FFC ADP.** Rank RB+WR by ADP; fill 12 dedicated RB + 36
+  dedicated WR first; the next 12 by ADP fill the flex → `flex_RB=(#RB in top-60)−12`, `flex_WR=(#WR
+  in top-60)−36`; add MC variance from `stdev`. **Honest caveat: the measured split may differ from
+  Subagent 2's default — non-PPR RB scarcity can push a more RB-heavy flex; measuring is the point.**
+  → `EngineParams.flex_split`. `scripts/calibrate_flex_split.py`.
+- **E2 — Tune κ, λ-table, α, caps via mock-draft backtests.** Opponents draft by ADP+noise (FFC
+  `stdev`); our agent by `Score(p)`; score final rosters by projected **starting-lineup** points
+  (stretch: simulated-season wins). **Optuna** over (κ, λ, α, caps, flex_split) maximizing mean
+  value/playoff-odds **across all 12 slots**; also evaluate vs non-ADP opponents (VBD-only,
+  need-based) to avoid self-reference. `scripts/tune_engine_params.py` → `config/engine.json`.
+- **E3 — Validate the projection blend.** Backtest μ_p vs realized points 2021–2024 (`load_player_stats`
+  recomputed under CBS map); MAE/RMSE/Spearman of blend vs each single source; require blend ≥ best
+  single source; calibrate σ_p by interval coverage (~80% of realized inside the 80% band); split by
+  season. `scripts/validate_projections.py`.
+- **E4 — Regression-test capture (transport UNVERIFIED).** Save observed frames as **golden
+  fixtures**; unit-test `parse.ts` + three-probe **de-dup**; **Playwright** drives a saved draft-room
+  HTML fixture for the `MutationObserver` path; **manual-paste fallback** test.
+- **E5 — Schema-parity CI.** JSON Schema from Pydantic; round-trip canonical payloads through
+  Pydantic + Zod; fail on divergence.
+- **E6 — Engine offline evaluation.** Simulated-league tournament (our agent every slot vs ADP
+  opponents); report mean starting-lineup points + **stretch** MC playoff/championship odds vs
+  **VBD-only** and **ADP-only** baselines; success = ≥ baselines with significance across slots.
+  The honest efficacy check Subagent 1 flagged is missing from the literature.
+- **E7 — Latency tests.** Benchmark `recompute()` worst case; assert p95 <2 s; CI perf gate.
+
+### 7.F Phased build plan (mapped to ROADMAP; v1 vs stretch)
+
+Tags: **[v1]** deployable, **[str]** stretch.
+
+- **Stage 1 — CBS sync [v1].** @crxjs; MAIN-world injector (`document_start`, three probes); isolated
+  content script (de-dup, WS); `ingest/log.py` SQLite log + `fold_state`. *Exit:* picks stream +
+  replay after restart.
+- **Stage 2 — Normalize league settings [v1].** `parse.ts` + `ingest/cbs.py`; **B3 scoring change**
+  (tiered DST + K bonus) end-to-end; draft order from board; snapshot leagues. *Exit:* `LeagueSettings`
+  round-trips the exact CBS scoring map.
+- **Stage 3 — Warehouse [v1].** `warehouse.py` (Parquet/DuckDB/SQLite) + `crosswalk.py`. *Exit:*
+  snapshots materialized; ids resolve.
+- **Stage 4 — Data tiers [v1].** `NflreadpyProvider`, `FantasyFootballCalculatorProvider`,
+  `CbsOnPageProvider`; paid off. *Exit:* projections/ECR/xEP/ADP/CBS-on-page queryable behind the
+  protocol.
+- **Stage 5 — Transparent engine [v1 core].** `league.scoring`/`replacement` → `projections` (S0) →
+  `tiers` (S4) → `optimize.marginal_lineup_value` (S1) → `opponents` survival + analytic VONA (S2) →
+  risk (S3) → `recommend` + `ScoreComponents`. **[str]:** MC VONA; **rest-of-season Monte-Carlo
+  simulator → playoff/championship odds** (CP-SAT end-state); XGBoost residuals; offline RL audit.
+  *Exit:* `GET /recommendation` returns a decomposed, tuned rec in <2 s.
+- **Stage 6 — Two-surface UI.** Overlay (best pick + decomposition + survival %) **[v1]**; Next.js
+  dashboard **[v1 lite / str for depth]**; `WS /recs/ws` **[v1]**.
+- **Stage 7 — AI assistant [v1 lite].** Wire typed tools; `explain_recommendation` prose over
+  `ScoreComponents`; text-only. **[str]:** file-search league rules, web-search injuries.
+- **Cross-cutting.** E1–E3 **[v1]** (feed `config/engine.json` before the draft); E4 golden fixtures
+  **[v1]**; E5 parity CI **[v1]**; E6 tournament **[str]**; E7 perf gate **[v1]**; per-manager
+  tendencies **[str]** (wire the log day one, model once history accrues).
+
+**v1 definition of done:** live CBS picks → decomposed, league-correct, risk-aware, flex-aware
+recommendation in the overlay within 2 s, on the $0 data tier, with calibrated params and crash-safe
+replay. **Stretch = the season simulator (true playoff/championship-odds objective), MC-rollout VONA,
+residual ML, per-manager modeling, RL audit.**
+
+### 7.G Risks & mitigations
+
+| Risk | Severity | Mitigation |
+|------|----------|------------|
+| **CBS draft-room transport UNVERIFIED** | High | Three-probe transport-agnostic capture + de-dup; DOM `MutationObserver` fallback; **manual-paste fallback**; golden-fixture tests once frames observed; `document_start` timing |
+| **Free live-injury gap** (nflverse source lapsed post-2024) | Med | CBS on-page injury designations + official NFL report; optional $5.99 FantasyPros behind the flag |
+| **$0 projection quality** | Med | Blend CBS + ECR + xEP under the exact CBS map; validate (E3); label forward-year **ESTIMATED** |
+| **MV3 SW lifecycle** | Med | Content script (not SW) owns the WS; minimal SW; heartbeat/reconnect |
+| **FFC ADP thin past R15 / off-season empty** (`year=2025` returns "No ADP data") | Low-Med | Query current `season` only; fall back to ECR for deep-round survival |
+| **Calibration overfits ADP opponents** | Med | Evaluate vs VBD-only + need-based; cross-slot generalization; hold-out seasons |
+| **Contract drift (Zod vs Pydantic)** | Low-Med | Schema-parity CI (E5) |
+| **ToS / personal-use compliance** | High-if-ignored | Local-only, user's own session, no redistribution, narrow host perms, compliance doc as gate, non-commercial license; **no** `webRequest`/`declarativeNetRequest` |
+| **nflreadpy ID-crosswalk exact fn name [VERIFY]** | Low | Confirm from load-functions ref; fuzzy fallback covers CBS/FFC |
+
+### 7.H Sources
+
+**Verified for this plan:** nflreadpy — [docs](https://nflreadpy.nflverse.com/) ·
+[load functions](https://nflreadpy.nflverse.com/api/load_functions/) · [PyPI](https://pypi.org/project/nflreadpy/) ·
+[repo](https://github.com/nflverse/nflreadpy) *(confirmed `load_player_stats`, `load_ff_rankings`,
+`load_ff_opportunity`; Polars)*; FFC ADP API — [KB](https://help.fantasyfootballcalculator.com/article/42-adp-rest-api) ·
+live `https://fantasyfootballcalculator.com/api/v1/adp/standard?teams=12&year=2026` *(2026 non-PPR/
+12-team; per-player `adp, adp_formatted, stdev, high, low, times_drafted, bye, name, position, team,
+player_id`; `meta.total_drafts=378`; daily; 15-round)*; WXT — [content scripts](https://wxt.dev/guide/essentials/content-scripts.html) ·
+[MAIN-world options](https://wxt.dev/api/reference/wxt/interfaces/mainworldcontentscriptentrypointoptions);
+@crxjs — [npm](https://www.npmjs.com/package/@crxjs/vite-plugin) · [site](https://crxjs.dev/) ·
+[2025 framework comparison](https://redreamality.com/blog/the-2025-state-of-browser-extension-frameworks-a-comparative-analysis-of-plasmo-wxt-and-crxjs/);
+[SciPy `linear_sum_assignment`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linear_sum_assignment.html);
+[OR-Tools CP-SAT](https://developers.google.com/optimization/cp/cp_solver);
+[sklearn `GaussianMixture`](https://scikit-learn.org/stable/modules/generated/sklearn.mixture.GaussianMixture.html);
+[`world:"MAIN"` content scripts](https://developer.chrome.com/docs/extensions/reference/manifest/content-scripts);
+[chrome.webRequest](https://developer.chrome.com/docs/extensions/reference/api/webRequest);
+[MDN MutationObserver](https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver);
+[DuckDB Polars](https://duckdb.org/docs/guides/python/polars.html).
+
+**[UNVERIFIED] / caveats:** CBS draft-room transport & framework (design transport-agnostic); exact
+nflreadpy ID-crosswalk function name (confirm from load-functions ref); exact CBS DOM/state shapes
+(map from live capture); Subagent 2's flex-split default (must be measured — E1, likely revises
+RB-heavy in non-PPR); FantasyPros $5.99/mo (as advertised).
+
+---
