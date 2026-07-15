@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JAAFFL — Draft Room · Analytics Dashboard</title>
+<style>
+/* ============================================================================
+   JAAFFL — "The Draft Room" design foundation
+   A quant terminal with the poise of a private club. Brass on warm ink.
+   Dark-mode-first, fully theme-aware (light + dark), WCAG-AA.
+   Inline this whole block into each artifact's <style>. Style via tokens only.
+   ============================================================================ */
+
+/* ---- Tokens: LIGHT is the base; dark via media + [data-theme] overrides ---- */
+:root {
+  color-scheme: light dark;
+
+  /* Grounds & structure (warm bone paper) */
+  --plane:        #EAE7DD;   /* app background */
+  --surface:      #F1EEE6;   /* section ground */
+  --card:         #F8F6F0;   /* raised card / chart surface */
+  --card-2:       #FFFFFF;   /* popover / overlay */
+  --hairline:     rgba(38,32,18,0.12);
+  --hairline-2:   rgba(38,32,18,0.20);
+  --wash:         rgba(38,32,18,0.04);
+
+  /* Ink */
+  --ink:          #1B1810;
+  --ink-2:        #524C3C;
+  --ink-3:        #837B66;
+
+  /* Brass — the single bold accent, reserved for "recommended" + key affordance */
+  --brass:        #8A6D22;   /* accent text/rule on light (AA) */
+  --brass-solid:  #B8912F;   /* fills */
+  --brass-bright: #A07E28;
+  --brass-ink:    #1A1408;   /* ink on brass fill */
+  --brass-glow:   rgba(184,145,47,0.16);
+
+  /* Field green — quiet secondary, used sparingly */
+  --pine:         #2E5D46;
+
+  /* Status (fixed, never themed) — always shipped with icon/label */
+  --good:         #0ca30c;
+  --warning:      #fab219;
+  --serious:      #ec835a;
+  --critical:     #d03b3b;
+
+  /* Position categorical (validated CVD-safe on brand surfaces) — light steps */
+  --pos-qb:  #e87ba4;  /* magenta */
+  --pos-rb:  #2a78d6;  /* blue    */
+  --pos-wr:  #008300;  /* green   */
+  --pos-te:  #eda100;  /* yellow  */
+  --pos-k:   #1baf7a;  /* aqua    */
+  --pos-dst: #eb6834;  /* orange  */
+
+  /* Chart chrome */
+  --grid:        rgba(38,32,18,0.09);
+  --axis:        rgba(38,32,18,0.28);
+
+  /* Elevation */
+  --e1: 0 1px 0 var(--hairline), 0 1px 2px rgba(20,16,6,.06);
+  --e2: 0 2px 4px rgba(20,16,6,.06), 0 12px 28px -12px rgba(20,16,6,.20);
+  --e3: 0 8px 20px rgba(20,16,6,.10), 0 34px 70px -24px rgba(20,16,6,.34);
+
+  /* Type */
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, Cambria, serif;
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  --fs-xxs: .6875rem;  /* 11 */
+  --fs-xs:  .75rem;    /* 12 */
+  --fs-sm:  .8125rem;  /* 13 */
+  --fs-base: .9375rem; /* 15 */
+  --fs-md:  1.0625rem; /* 17 */
+  --fs-lg:  1.375rem;  /* 22 */
+  --fs-xl:  1.875rem;  /* 30 */
+  --fs-2xl: 2.75rem;   /* 44 */
+  --fs-3xl: 4rem;      /* 64 */
+
+  /* Radii — restrained; pills for chips only */
+  --r-xs: 3px; --r-sm: 5px; --r: 8px; --r-lg: 11px; --r-xl: 16px; --r-pill: 999px;
+
+  /* Motion */
+  --ease: cubic-bezier(.2,.7,.2,1);
+  --ease-io: cubic-bezier(.6,.05,.2,.95);
+  --t-fast: 120ms; --t: 200ms; --t-slow: 380ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    --plane:      #0E0C08;
+    --surface:    #14110B;
+    --card:       #1B1710;
+    --card-2:     #221D14;
+    --hairline:   rgba(228,212,176,0.12);
+    --hairline-2: rgba(228,212,176,0.22);
+    --wash:       rgba(228,212,176,0.05);
+
+    --ink:        #F3EEE1;
+    --ink-2:      #C4BBA6;
+    --ink-3:      #8E8672;
+
+    --brass:      #E7C877;   /* accent text on dark */
+    --brass-solid:#C8A24C;   /* fills */
+    --brass-bright:#F1D98F;
+    --brass-ink:  #1A1408;
+    --brass-glow: rgba(200,162,76,0.20);
+
+    --pine:       #7FB79A;
+
+    --pos-qb:  #d55181;
+    --pos-rb:  #3987e5;
+    --pos-wr:  #2FA14B;   /* green stepped up for dark legibility */
+    --pos-te:  #c98500;
+    --pos-k:   #199e70;
+    --pos-dst: #d95926;
+
+    --grid:     rgba(228,212,176,0.08);
+    --axis:     rgba(228,212,176,0.26);
+
+    --e1: 0 1px 0 rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.5);
+    --e2: 0 2px 6px rgba(0,0,0,.5), 0 16px 34px -14px rgba(0,0,0,.66);
+    --e3: 0 10px 30px rgba(0,0,0,.55), 0 40px 90px -30px rgba(0,0,0,.8);
+  }
+}
+
+:root[data-theme="dark"] {
+  --plane:#0E0C08; --surface:#14110B; --card:#1B1710; --card-2:#221D14;
+  --hairline:rgba(228,212,176,0.12); --hairline-2:rgba(228,212,176,0.22); --wash:rgba(228,212,176,0.05);
+  --ink:#F3EEE1; --ink-2:#C4BBA6; --ink-3:#8E8672;
+  --brass:#E7C877; --brass-solid:#C8A24C; --brass-bright:#F1D98F; --brass-ink:#1A1408; --brass-glow:rgba(200,162,76,0.20);
+  --pine:#7FB79A;
+  --pos-qb:#d55181; --pos-rb:#3987e5; --pos-wr:#2FA14B; --pos-te:#c98500; --pos-k:#199e70; --pos-dst:#d95926;
+  --grid:rgba(228,212,176,0.08); --axis:rgba(228,212,176,0.26);
+  --e1:0 1px 0 rgba(0,0,0,.5),0 1px 2px rgba(0,0,0,.5);
+  --e2:0 2px 6px rgba(0,0,0,.5),0 16px 34px -14px rgba(0,0,0,.66);
+  --e3:0 10px 30px rgba(0,0,0,.55),0 40px 90px -30px rgba(0,0,0,.8);
+}
+:root[data-theme="light"] { color-scheme: light; }
+
+/* ---- Reset & base ---- */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--plane); color: var(--ink);
+  font-family: var(--font-ui); font-size: var(--fs-base); line-height: 1.55;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+h1,h2,h3,h4 { font-family: var(--font-display); font-weight: 600; line-height: 1.1;
+  text-wrap: balance; letter-spacing: -0.01em; margin: 0; }
+a { color: var(--brass); text-decoration: none; }
+::selection { background: var(--brass-glow); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.num  { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+/* Uppercase micro-label */
+.eyebrow, .label {
+  font-family: var(--font-ui); font-size: var(--fs-xxs); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3);
+}
+
+/* Hairline rule */
+.rule { height: 1px; background: var(--hairline); border: 0; }
+.rule-brass { height: 1px; background: linear-gradient(90deg, var(--brass-solid), transparent); border: 0; }
+
+/* ---- Card ---- */
+.card {
+  background: var(--card); border: 1px solid var(--hairline); border-radius: var(--r-lg);
+  box-shadow: var(--e1);
+}
+
+/* ---- Chips / pills ---- */
+.chip {
+  display: inline-flex; align-items: center; gap: .4em;
+  font-size: var(--fs-xxs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  padding: .28em .6em; border-radius: var(--r-pill); border: 1px solid var(--hairline-2);
+  color: var(--ink-2); background: var(--wash);
+}
+/* Position chip: color-coded, always carries its letter label */
+.pos { display:inline-flex; align-items:center; justify-content:center; min-width: 2.35em;
+  padding: .2em .5em; border-radius: var(--r-sm); font-family: var(--font-ui);
+  font-size: var(--fs-xxs); font-weight: 800; letter-spacing: .06em; color: #fff; }
+.pos-QB{background:var(--pos-qb)} .pos-RB{background:var(--pos-rb)} .pos-WR{background:var(--pos-wr)}
+.pos-TE{background:var(--pos-te); color:#231a02} .pos-K{background:var(--pos-k)} .pos-DST{background:var(--pos-dst)}
+
+/* Status pill (icon + label; never color alone) */
+.stat-pill { display:inline-flex; align-items:center; gap:.4em; font-size:var(--fs-xxs);
+  font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:.26em .55em;
+  border-radius:var(--r-pill); border:1px solid transparent; }
+.is-good    { color: var(--good);     background: color-mix(in srgb, var(--good) 14%, transparent);     border-color: color-mix(in srgb, var(--good) 34%, transparent); }
+.is-warning { color: var(--warning);  background: color-mix(in srgb, var(--warning) 16%, transparent);  border-color: color-mix(in srgb, var(--warning) 40%, transparent); }
+.is-critical{ color: var(--critical); background: color-mix(in srgb, var(--critical) 15%, transparent); border-color: color-mix(in srgb, var(--critical) 38%, transparent); }
+
+/* ---- Buttons ---- */
+.btn { font-family: var(--font-ui); font-size: var(--fs-sm); font-weight: 600;
+  padding: .55em .95em; border-radius: var(--r); border: 1px solid var(--hairline-2);
+  background: var(--wash); color: var(--ink); cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease); }
+.btn:hover { border-color: var(--brass-solid); }
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--brass-solid); color: var(--brass-ink); border-color: transparent; box-shadow: 0 1px 0 rgba(0,0,0,.15), 0 0 0 0 var(--brass-glow); }
+.btn-primary:hover { background: var(--brass-bright); box-shadow: 0 0 0 4px var(--brass-glow); }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; border-radius: 3px; }
+
+/* ---- Score-component bar (the WHY visual) ---- */
+.sc-row { display:grid; grid-template-columns: 4.6em 1fr auto; align-items:center; gap:.6em; }
+.sc-track { position: relative; height: 7px; border-radius: var(--r-pill);
+  background: var(--wash); overflow: hidden; }
+.sc-fill { position:absolute; top:0; bottom:0; border-radius: var(--r-pill); }
+.sc-mid { position:absolute; top:-3px; bottom:-3px; width:1px; background: var(--hairline-2); }
+
+/* ---- Utility ---- */
+.stack { display:flex; flex-direction:column; }
+.row { display:flex; align-items:center; }
+.between { justify-content: space-between; }
+.wrap-x { overflow-x: auto; }
+.tnum { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+
+/* ============================================================================
+   PAGE — JAAFFL analytics dashboard shell (built on tokens above)
+   ============================================================================ */
+:root{ --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:22px; --sp-6:30px; }
+
+.sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden;
+  clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+
+body{ min-height:100vh; }
+
+/* ---- Top bar ---- */
+.topbar{ position:sticky; top:0; z-index:40; background:color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter:saturate(1.1) blur(8px); border-bottom:1px solid var(--hairline); box-shadow:var(--e1); }
+.topbar-in{ max-width:1680px; margin:0 auto; padding:10px var(--sp-5);
+  display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:var(--sp-4); }
+.brand{ display:flex; align-items:center; gap:var(--sp-3); min-width:0; }
+.wordmark{ font-family:var(--font-display); font-size:var(--fs-lg); font-weight:600; letter-spacing:.01em;
+  color:var(--ink); line-height:1; white-space:nowrap; }
+.wordmark b{ color:var(--brass); font-weight:600; }
+.brand-rule{ width:2px; height:26px; background:linear-gradient(var(--brass-solid),transparent); border-radius:2px; }
+.brand-sub{ font-size:var(--fs-xxs); color:var(--ink-3); letter-spacing:.1em; text-transform:uppercase; }
+
+.identity{ display:flex; gap:var(--sp-2); justify-content:center; flex-wrap:wrap; min-width:0; }
+.identity .chip{ background:var(--card); }
+
+.controls{ display:flex; align-items:center; gap:var(--sp-2); justify-content:flex-end; flex-wrap:wrap; }
+.clockbox{ display:flex; align-items:center; gap:var(--sp-2); padding:.3em .7em; border-radius:var(--r);
+  background:var(--card); border:1px solid var(--hairline-2); }
+.clockbox .k{ font-size:var(--fs-xxs); color:var(--ink-3); text-transform:uppercase; letter-spacing:.1em; }
+.clock{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:var(--fs-md);
+  font-weight:600; color:var(--brass); letter-spacing:.02em; }
+.pickno{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-weight:600; color:var(--ink); }
+.livedot{ width:7px; height:7px; border-radius:50%; background:var(--good); box-shadow:0 0 0 0 color-mix(in srgb,var(--good) 60%,transparent);
+  animation:pulse 2.4s var(--ease) infinite; }
+@keyframes pulse{ 0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--good) 55%,transparent)} 70%{box-shadow:0 0 0 6px transparent} 100%{box-shadow:0 0 0 0 transparent} }
+.icon-btn{ display:inline-flex; align-items:center; gap:.45em; }
+.tt-ico{ width:15px; height:15px; display:block; }
+
+/* ---- Shell grid ---- */
+.shell{ max-width:1680px; margin:0 auto; padding:var(--sp-5);
+  display:grid; grid-template-columns:236px minmax(0,1fr) 404px; gap:var(--sp-5);
+  align-items:start; }
+.rail{ grid-column:1; position:sticky; top:70px; }
+.main{ grid-column:2; min-width:0; display:flex; flex-direction:column; gap:var(--sp-5); }
+.analytics{ grid-column:3; min-width:0; display:flex; flex-direction:column; gap:var(--sp-5); }
+.scenarios{ grid-column:1 / -1; }
+
+/* ---- Panels ---- */
+.panel{ background:var(--card); border:1px solid var(--hairline); border-radius:var(--r-lg); box-shadow:var(--e1); }
+.pad{ padding:var(--sp-4); }
+.panel-h{ display:flex; align-items:baseline; justify-content:space-between; gap:var(--sp-2); margin-bottom:var(--sp-3); }
+.panel-title{ font-family:var(--font-display); font-size:var(--fs-md); font-weight:600; }
+.panel-note{ font-size:var(--fs-xxs); color:var(--ink-2); }
+
+/* ---- Left rail ---- */
+.nav{ list-style:none; margin:0 0 var(--sp-4); padding:0; display:flex; flex-direction:column; gap:2px; }
+.nav a{ display:flex; align-items:center; gap:.6em; padding:.5em .7em; border-radius:var(--r);
+  color:var(--ink-2); font-size:var(--fs-sm); font-weight:600; border:1px solid transparent;
+  transition:background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
+.nav a:hover{ background:var(--wash); color:var(--ink); }
+.nav a[aria-current="page"]{ background:color-mix(in srgb,var(--brass-glow) 90%, var(--card)); color:var(--ink);
+  border-color:color-mix(in srgb,var(--brass-solid) 40%,transparent); }
+.nav a[aria-current="page"] .nav-tick{ background:var(--brass-solid); }
+.nav-tick{ width:3px; height:14px; border-radius:2px; background:var(--hairline-2); flex:none; }
+.nav-k{ margin-left:auto; font-size:var(--fs-xxs); color:var(--ink-3); font-family:var(--font-mono); }
+
+.roster-h{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:.5em; }
+.roster-count{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:var(--fs-xs);
+  color:var(--brass); font-weight:600; }
+.slot{ display:grid; grid-template-columns:2.7em 1fr; align-items:center; gap:.5em;
+  padding:.32em .2em; border-bottom:1px solid var(--hairline); }
+.slot:last-child{ border-bottom:0; }
+.slot-lbl{ font-size:var(--fs-xxs); font-weight:700; letter-spacing:.06em; color:var(--ink-3); text-transform:uppercase; }
+.slot-fill{ display:flex; align-items:center; gap:.5em; min-width:0; }
+.slot-name{ font-family:var(--font-display); font-size:var(--fs-sm); color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.slot-team{ font-family:var(--font-mono); font-size:var(--fs-xxs); color:var(--ink-3); flex:none; }
+.slot-open{ font-size:var(--fs-xs); color:var(--ink-3); font-style:italic; }
+.slot.filled{ background:color-mix(in srgb,var(--wash) 60%, transparent); }
+.bench-row{ display:flex; align-items:center; justify-content:space-between; padding:.5em .2em 0; }
+.bench-row .k{ font-size:var(--fs-xxs); font-weight:700; letter-spacing:.06em; color:var(--ink-3); text-transform:uppercase; }
+
+/* position mini chip (board + rosters) */
+.pos-mini{ display:inline-flex; align-items:center; justify-content:center; min-width:1.9em; padding:.05em .35em;
+  border-radius:var(--r-xs); font-family:var(--font-ui); font-size:9px; font-weight:800; letter-spacing:.04em; color:#fff; flex:none; }
+.pm-QB{background:var(--pos-qb)} .pm-RB{background:var(--pos-rb)} .pm-WR{background:var(--pos-wr)}
+.pm-TE{background:var(--pos-te);color:#231a02} .pm-K{background:var(--pos-k)} .pm-DST{background:var(--pos-dst)}
+
+/* ---- Recommended banner ---- */
+.banner{ position:relative; overflow:hidden; border-color:color-mix(in srgb,var(--brass-solid) 42%, var(--hairline)); }
+.banner::before{ content:""; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(120% 140% at 100% 0%, var(--brass-glow), transparent 60%); }
+.banner-grid{ position:relative; display:grid; grid-template-columns:1.35fr 1fr; gap:var(--sp-5); }
+@media (max-width:720px){ .banner-grid{ grid-template-columns:1fr; } }
+.oc-eyebrow{ display:flex; align-items:center; gap:.6em; margin-bottom:.6em; }
+.oc-eyebrow .mono{ color:var(--brass); font-weight:600; }
+.rec-name{ font-family:var(--font-display); font-size:var(--fs-xl); font-weight:600; line-height:1.05; margin:.1em 0 .35em; }
+.rec-meta{ display:flex; align-items:center; gap:.5em; flex-wrap:wrap; margin-bottom:var(--sp-3); }
+.rec-team{ font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--ink-2); }
+.score-wrap{ display:flex; align-items:flex-end; gap:.5em; }
+.score-num{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:var(--fs-2xl);
+  font-weight:600; line-height:.9; color:var(--brass); letter-spacing:-.02em; }
+.score-cap{ font-size:var(--fs-xxs); color:var(--ink-3); text-transform:uppercase; letter-spacing:.12em; padding-bottom:.5em; }
+.why-h{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:.6em; }
+.sc-list{ display:flex; flex-direction:column; gap:.55em; }
+.sc-lbl{ font-size:var(--fs-xxs); font-weight:700; letter-spacing:.06em; color:var(--ink-2); text-transform:uppercase; }
+.sc-val{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:var(--fs-sm); color:var(--ink); min-width:3.2em; text-align:right; }
+.sc-val.neg{ color:var(--ink); } /* red conveyed by the fill bar; text stays AA-legible */
+.stats-strip{ display:flex; gap:var(--sp-4); flex-wrap:wrap; margin-top:var(--sp-3); padding-top:var(--sp-3); border-top:1px solid var(--hairline); }
+.mini-stat{ display:flex; flex-direction:column; gap:1px; }
+.mini-stat .k{ font-size:var(--fs-xxs); color:var(--ink-3); text-transform:uppercase; letter-spacing:.08em; }
+.mini-stat .v{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:var(--fs-sm); color:var(--ink); font-weight:600; }
+.banner-foot{ position:relative; display:flex; align-items:center; gap:var(--sp-2); flex-wrap:wrap; margin-top:var(--sp-4); }
+.survive-tag{ display:inline-flex; align-items:baseline; gap:.4em; font-size:var(--fs-xs); color:var(--ink-2); }
+.survive-tag b{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--ink); font-weight:600; }
+
+/* ---- Draft board ---- */
+.board-scroll{ border-radius:var(--r); }
+.board-grid{ display:grid; grid-template-columns:40px repeat(12, minmax(76px,1fr)); min-width:952px;
+  border-top:1px solid var(--hairline); border-left:1px solid var(--hairline); border-radius:var(--r); overflow:hidden; }
+.bh, .bcell, .brd-lbl{ border-right:1px solid var(--hairline); border-bottom:1px solid var(--hairline); }
+.bh{ padding:.4em 0; text-align:center; font-size:var(--fs-xxs); font-weight:700; letter-spacing:.04em;
+  color:var(--ink-3); background:var(--surface); text-transform:uppercase;
+  font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.bh.you{ color:var(--brass); background:color-mix(in srgb,var(--brass-glow) 70%,var(--surface)); }
+.brd-lbl{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; background:var(--surface);
+  font-size:var(--fs-xxs); color:var(--ink-3); font-weight:700;
+  font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.brd-lbl .dir{ font-family:var(--font-mono); font-size:9px; color:var(--ink-3); opacity:.8; }
+.bcell{ height:50px; padding:4px 6px; position:relative; display:flex; flex-direction:column; justify-content:space-between;
+  background:var(--card); transition:background var(--t-fast) var(--ease); }
+.bcell.empty{ background:repeating-linear-gradient(135deg, transparent, transparent 6px, var(--wash) 6px, var(--wash) 7px); }
+.bcell:hover{ background:var(--wash); }
+.bcell .ctop{ display:flex; align-items:center; justify-content:space-between; gap:3px; }
+.bcell .ovr{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:9px; color:var(--ink-3); }
+.bcell .cname{ font-family:var(--font-display); font-size:var(--fs-xs); color:var(--ink); line-height:1.05;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.c-QB{ background:color-mix(in srgb,var(--pos-qb) 15%, var(--card)); }
+.c-RB{ background:color-mix(in srgb,var(--pos-rb) 15%, var(--card)); }
+.c-WR{ background:color-mix(in srgb,var(--pos-wr) 15%, var(--card)); }
+.c-TE{ background:color-mix(in srgb,var(--pos-te) 16%, var(--card)); }
+.c-QB:hover{background:color-mix(in srgb,var(--pos-qb) 24%, var(--card))}
+.c-RB:hover{background:color-mix(in srgb,var(--pos-rb) 24%, var(--card))}
+.c-WR:hover{background:color-mix(in srgb,var(--pos-wr) 24%, var(--card))}
+.c-TE:hover{background:color-mix(in srgb,var(--pos-te) 26%, var(--card))}
+.col-you{ box-shadow: inset 1px 0 0 color-mix(in srgb,var(--brass-solid) 55%,transparent), inset -1px 0 0 color-mix(in srgb,var(--brass-solid) 55%,transparent); }
+.col-you.mine{ background:color-mix(in srgb,var(--brass-glow) 26%, var(--card)); }
+.onclock{ background:color-mix(in srgb,var(--brass-glow) 40%, var(--card)); outline:2px solid var(--brass-solid); outline-offset:-2px; z-index:2; }
+.oc-tag{ font-size:9px; font-weight:800; letter-spacing:.06em; color:var(--brass); text-transform:uppercase; }
+.oc-rec{ font-family:var(--font-display); font-size:var(--fs-xs); color:var(--brass); }
+
+/* ---- Ticker ---- */
+.ticker{ display:flex; flex-direction:column; }
+.trow{ display:grid; grid-template-columns:2.6em 4.4em auto 1fr auto; align-items:center; gap:.6em;
+  padding:.42em .2em; border-bottom:1px solid var(--hairline); transition:background var(--t-fast) var(--ease); }
+.trow:last-child{ border-bottom:0; }
+.trow:hover{ background:var(--wash); }
+.trow .ov{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:var(--fs-xs); color:var(--ink-3); }
+.trow .tm{ font-size:var(--fs-xxs); color:var(--ink-3); letter-spacing:.03em;
+  font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.trow .tm.you{ color:var(--brass); font-weight:700; }
+.trow .pl{ font-family:var(--font-display); font-size:var(--fs-sm); color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.trow .plteam{ font-family:var(--font-mono); font-size:var(--fs-xxs); color:var(--ink-3); }
+.trow.run{ box-shadow: inset 2px 0 0 var(--warning); }
+
+/* ---- Charts ---- */
+.chart{ width:100%; height:auto; display:block; }
+svg text{ font-family:var(--font-ui); }
+.ax-num, .ax-num text{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.legend{ display:flex; flex-wrap:wrap; gap:var(--sp-3); margin-top:var(--sp-3); }
+.lg{ display:inline-flex; align-items:center; gap:.4em; font-size:var(--fs-xxs); color:var(--ink-2); font-weight:600; letter-spacing:.03em; }
+.lg .sw{ width:16px; height:3px; border-radius:2px; display:block; }
+.lg .dot{ width:9px; height:9px; border-radius:50%; display:block; }
+.cap{ font-size:var(--fs-xxs); color:var(--ink-2); line-height:1.5; margin-top:var(--sp-3); }
+
+/* tier ladder */
+.tier-row{ display:grid; grid-template-columns:2.2em 1fr auto; align-items:center; gap:.6em; padding:.3em 0; }
+.tier-lbl{ font-family:var(--font-mono); font-size:var(--fs-xs); font-weight:700; color:var(--ink-2); }
+.tier-chips{ display:flex; gap:3px; flex-wrap:wrap; }
+.tchip{ width:15px; height:15px; border-radius:var(--r-xs); background:color-mix(in srgb,var(--pos-rb) 30%, var(--card));
+  border:1px solid color-mix(in srgb,var(--pos-rb) 40%, transparent); }
+.tchip.gone{ background:var(--wash); border-color:var(--hairline); opacity:.7; }
+.tchip.cook{ background:color-mix(in srgb,var(--brass-glow) 70%,var(--card)); border:1.5px solid var(--brass-solid);
+  box-shadow:0 0 0 2px var(--brass-glow); position:relative; }
+.tier-val{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:var(--fs-xxs); color:var(--ink-3); }
+.cook-flag{ display:flex; align-items:center; gap:.5em; margin:.2em 0 .1em; font-size:var(--fs-xs); }
+.cook-flag .nm{ font-family:var(--font-display); color:var(--brass); font-size:var(--fs-sm); }
+.cliff{ display:flex; align-items:center; gap:.6em; margin:.35em 0; }
+.cliff .ln{ flex:1; height:0; border-top:1.5px solid color-mix(in srgb,var(--critical) 55%,transparent); }
+.cliff .lb{ font-size:9px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--critical); }
+.cliff .lb .num{ font-family:var(--font-mono); }
+
+/* manager tendencies */
+.mgr{ padding:.55em 0; border-bottom:1px solid var(--hairline); }
+.mgr:last-child{ border-bottom:0; }
+.mgr-h{ display:flex; align-items:center; justify-content:space-between; gap:.5em; margin-bottom:.4em; }
+.mgr-name{ font-size:var(--fs-sm); font-weight:600; color:var(--ink); }
+.mgr-lean{ font-size:var(--fs-xxs); color:var(--ink-3); letter-spacing:.03em; }
+.mgr-bar{ display:flex; height:8px; border-radius:var(--r-pill); overflow:hidden; gap:2px; background:transparent; }
+.mgr-seg{ height:100%; }
+.mgr-seg:first-child{ border-radius:var(--r-pill) 0 0 var(--r-pill); }
+.mgr-seg:last-child{ border-radius:0 var(--r-pill) var(--r-pill) 0; }
+.mgr-foot{ display:flex; align-items:center; justify-content:space-between; margin-top:.4em; }
+.mgr-adp{ font-size:var(--fs-xxs); color:var(--ink-3); }
+.mgr-adp b{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-weight:600; color:var(--ink); }
+.mgr-adp .dir-mark{ font-size:9px; font-weight:900; }
+.mgr-adp .dir-reach{ color:var(--serious); } .mgr-adp .dir-value{ color:var(--good); }
+.mgr.pending{ opacity:.72; }
+.mgr-empty{ height:8px; border-radius:var(--r-pill); background:repeating-linear-gradient(135deg,transparent,transparent 5px,var(--wash) 5px,var(--wash) 6px); border:1px solid var(--hairline); }
+
+/* ---- Scenarios ---- */
+.scen-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:var(--sp-4); }
+@media (max-width:900px){ .scen-grid{ grid-template-columns:1fr; } }
+.scen{ background:var(--card); border:1px solid var(--hairline); border-radius:var(--r); padding:var(--sp-4);
+  display:flex; flex-direction:column; gap:var(--sp-3); position:relative; }
+.scen.rec{ border-color:color-mix(in srgb,var(--brass-solid) 55%,var(--hairline)); box-shadow:0 0 0 1px color-mix(in srgb,var(--brass-solid) 30%,transparent), var(--e1); }
+.scen-tag{ position:absolute; top:-9px; left:var(--sp-4); font-size:9px; font-weight:800; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--brass-ink); background:var(--brass-solid); padding:.3em .6em; border-radius:var(--r-pill); }
+.scen-h{ display:flex; align-items:center; gap:.5em; }
+.scen-title{ font-family:var(--font-display); font-size:var(--fs-md); font-weight:600; }
+.scen-big{ display:flex; align-items:baseline; gap:.4em; }
+.scen-pts{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:var(--fs-xl); font-weight:600; color:var(--ink); letter-spacing:-.01em; }
+.scen.rec .scen-pts{ color:var(--brass); }
+.scen-unit{ font-size:var(--fs-xxs); color:var(--ink-3); text-transform:uppercase; letter-spacing:.1em; }
+.scen-bar{ height:9px; border-radius:var(--r-pill); background:var(--wash); position:relative; overflow:hidden; }
+.scen-bar > span{ position:absolute; left:0; top:0; bottom:0; border-radius:var(--r-pill); background:var(--ink-3); }
+.scen.rec .scen-bar > span{ background:var(--brass-solid); }
+.scen-tiles{ display:flex; gap:var(--sp-4); }
+.scen-tile{ display:flex; flex-direction:column; gap:1px; }
+.scen-tile .k{ font-size:var(--fs-xxs); color:var(--ink-3); text-transform:uppercase; letter-spacing:.07em; }
+.scen-tile .v{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:var(--fs-md); font-weight:600; color:var(--ink); }
+.est{ font-size:9px; font-weight:700; letter-spacing:.08em; color:var(--ink-3); border:1px solid var(--hairline-2);
+  border-radius:var(--r-xs); padding:0 .3em; text-transform:uppercase; }
+
+/* ---- Footer ---- */
+.foot{ max-width:1680px; margin:0 auto; padding:0 var(--sp-5) var(--sp-6); color:var(--ink-3); font-size:var(--fs-xxs);
+  display:flex; gap:var(--sp-4); flex-wrap:wrap; align-items:center; }
+.foot .rule-brass{ flex:1; min-width:40px; }
+
+/* ---- Responsive collapse ---- */
+@media (max-width:1240px){
+  .shell{ grid-template-columns:220px minmax(0,1fr); }
+  .analytics{ grid-column:1 / -1; display:grid; grid-template-columns:repeat(2,1fr); gap:var(--sp-5); }
+}
+@media (max-width:900px){
+  .shell{ grid-template-columns:1fr; }
+  .rail{ grid-column:1; position:static; }
+  .main{ grid-column:1; }
+  .analytics{ grid-column:1; grid-template-columns:1fr; }
+  .identity{ display:none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ======================= TOP BAR ======================= -->
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <span class="wordmark">JA<b>AF</b>FL</span>
+      <span class="brand-rule" aria-hidden="true"></span>
+      <span class="brand-sub">The Draft Room</span>
+    </div>
+
+    <div class="identity" aria-label="League format">
+      <span class="chip"><span class="mono">12</span>-Team</span>
+      <span class="chip">Standard · Non-PPR</span>
+      <span class="chip">Snake · <span class="mono">17</span> RD</span>
+    </div>
+
+    <div class="controls">
+      <div class="clockbox" aria-label="On the clock: round 3, pick 3.03, overall 27">
+        <span class="k">Rd</span>
+        <span class="pickno">3</span>
+        <span class="k">·</span>
+        <span class="pickno">3.03</span>
+        <span class="k">·</span>
+        <span class="pickno">#27</span>
+        <span class="clock" aria-label="Draft clock 48 seconds">0:48</span>
+      </div>
+      <span class="stat-pill is-good" aria-label="Connection live, CBS synced">
+        <span class="livedot" aria-hidden="true"></span> Live — CBS synced
+      </span>
+      <button class="btn icon-btn" id="themeToggle" type="button" aria-pressed="true" aria-label="Toggle color theme">
+        <svg class="tt-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="6" fill="currentColor"/>
+          <path d="M12 6a6 6 0 000 12z" fill="var(--card)"/>
+        </svg>
+        <span class="tt-label">Dark</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ======================= SHELL ======================= -->
+<div class="shell">
+
+  <!-- ---------- LEFT RAIL ---------- -->
+  <nav class="rail" aria-label="Draft sections and roster">
+    <div class="panel pad">
+      <p class="label" style="margin:0 0 8px">Sections</p>
+      <ul class="nav">
+        <li><a href="#board" aria-current="page"><span class="nav-tick" aria-hidden="true"></span>Board <span class="nav-k">6/17</span></a></li>
+        <li><a href="#players"><span class="nav-tick" aria-hidden="true"></span>Players</a></li>
+        <li><a href="#tiers"><span class="nav-tick" aria-hidden="true"></span>Tiers</a></li>
+        <li><a href="#survival"><span class="nav-tick" aria-hidden="true"></span>Survival</a></li>
+        <li><a href="#managers"><span class="nav-tick" aria-hidden="true"></span>Managers</a></li>
+        <li><a href="#scenarios"><span class="nav-tick" aria-hidden="true"></span>Scenarios</a></li>
+      </ul>
+
+      <hr class="rule">
+      <div class="roster-h" style="margin-top:12px">
+        <p class="label" style="margin:0">Your roster</p>
+        <span class="roster-count">2 / 17</span>
+      </div>
+
+      <div class="stack" role="list" aria-label="Your roster by slot">
+        <div class="slot" role="listitem"><span class="slot-lbl">QB</span><span class="slot-open">Open</span></div>
+        <div class="slot filled" role="listitem"><span class="slot-lbl">RB</span>
+          <span class="slot-fill"><span class="pos-mini pm-RB">RB</span><span class="slot-name">Bijan Robinson</span><span class="slot-team">ATL</span></span></div>
+        <div class="slot filled" role="listitem"><span class="slot-lbl">WR</span>
+          <span class="slot-fill"><span class="pos-mini pm-WR">WR</span><span class="slot-name">Malik Nabers</span><span class="slot-team">NYG</span></span></div>
+        <div class="slot" role="listitem"><span class="slot-lbl">WR</span><span class="slot-open">Open</span></div>
+        <div class="slot" role="listitem"><span class="slot-lbl">WR</span><span class="slot-open">Open</span></div>
+        <div class="slot" role="listitem"><span class="slot-lbl">W/R</span><span class="slot-open">Open · WR or RB</span></div>
+        <div class="slot" role="listitem"><span class="slot-lbl">TE</span><span class="slot-open">Open</span></div>
+        <div class="slot" role="listitem"><span class="slot-lbl">K</span><span class="slot-open">Open</span></div>
+        <div class="slot" role="listitem"><span class="slot-lbl">DST</span><span class="slot-open">Open</span></div>
+      </div>
+      <div class="bench-row">
+        <span class="k">Bench</span>
+        <span class="mono" style="font-size:var(--fs-xs); color:var(--ink-3)">0 / 8</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ---------- MAIN COLUMN ---------- -->
+  <main class="main" id="board">
+
+    <!-- (a) Recommended pick banner -->
+    <section class="panel banner pad" aria-labelledby="rec-h">
+      <div class="banner-grid">
+        <div>
+          <div class="oc-eyebrow">
+            <span class="label" style="color:var(--brass)">On the clock</span>
+            <span class="mono">3.03</span><span class="label" style="letter-spacing:.06em">·</span><span class="mono">#27</span>
+          </div>
+          <p class="label" style="margin:0">Engine recommendation #1</p>
+          <h2 class="rec-name" id="rec-h">James Cook</h2>
+          <div class="rec-meta">
+            <span class="pos pos-RB">RB</span>
+            <span class="rec-team">BUF · Bye 7</span>
+            <span class="stat-pill is-warning" aria-label="Alert: run on running backs">
+              <svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 16H3z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M12 9v5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="16.6" r="1.1" fill="currentColor"/></svg>
+              RB run
+            </span>
+          </div>
+          <div class="score-wrap">
+            <span class="score-num" aria-label="Composite score 41.2">41.2</span>
+            <span class="score-cap">Composite<br>score</span>
+          </div>
+          <div class="stats-strip">
+            <div class="mini-stat"><span class="k">Floor</span><span class="v">118</span></div>
+            <div class="mini-stat"><span class="k">Ceiling</span><span class="v">196</span></div>
+            <div class="mini-stat"><span class="k">σ (risk)</span><span class="v">12.4</span></div>
+            <div class="mini-stat"><span class="k">Baseline</span><span class="v">RB23</span></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="why-h">
+            <span class="label">Why — score components</span>
+            <span class="chip" style="text-transform:none; letter-spacing:.02em">illustrative</span>
+          </div>
+          <div class="sc-list" role="list" aria-label="Score components">
+            <div class="sc-row" role="listitem">
+              <span class="sc-lbl">MLV</span>
+              <span class="sc-track"><span class="sc-fill" style="left:0; width:93%; background:var(--brass-solid)"></span></span>
+              <span class="sc-val">22.4</span>
+            </div>
+            <div class="sc-row" role="listitem">
+              <span class="sc-lbl">VONA</span>
+              <span class="sc-track"><span class="sc-fill" style="left:0; width:38%; background:var(--brass-solid)"></span></span>
+              <span class="sc-val">+9.1</span>
+            </div>
+            <div class="sc-row" role="listitem">
+              <span class="sc-lbl">Risk</span>
+              <span class="sc-track"><span class="sc-fill" style="left:0; width:9%; background:var(--critical)"></span></span>
+              <span class="sc-val neg">−2.1</span>
+            </div>
+            <div class="sc-row" role="listitem">
+              <span class="sc-lbl">Tier cliff</span>
+              <span class="sc-track"><span class="sc-fill" style="left:0; width:13%; background:var(--brass-solid)"></span></span>
+              <span class="sc-val">+3.0</span>
+            </div>
+          </div>
+          <div class="banner-foot">
+            <span class="survive-tag">Survives to your next pick <span class="mono">#46</span> · <b>18%</b></span>
+            <button class="btn btn-primary" type="button">Draft Cook</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- (b) Draft board -->
+    <section class="panel pad">
+      <div class="panel-h">
+        <h3 class="panel-title">Draft board</h3>
+        <span class="panel-note">Rounds <span class="mono">1–6</span> shown · full <span class="mono">17</span> scroll · snake order · slot <span class="mono">3</span> is you</span>
+      </div>
+      <div class="wrap-x board-scroll">
+        <div class="board-grid" role="table" aria-label="Draft board, 12 teams by round, snake order">
+          <!-- header row -->
+          <div class="bh" role="columnheader">RD</div>
+          <div class="bh" role="columnheader">1</div>
+          <div class="bh" role="columnheader">2</div>
+          <div class="bh you" role="columnheader">You · 3</div>
+          <div class="bh" role="columnheader">4</div>
+          <div class="bh" role="columnheader">5</div>
+          <div class="bh" role="columnheader">6</div>
+          <div class="bh" role="columnheader">7</div>
+          <div class="bh" role="columnheader">8</div>
+          <div class="bh" role="columnheader">9</div>
+          <div class="bh" role="columnheader">10</div>
+          <div class="bh" role="columnheader">11</div>
+          <div class="bh" role="columnheader">12</div>
+
+          <!-- Round 1 (→) -->
+          <div class="brd-lbl">R1<span class="dir">→</span></div>
+          <div class="bcell c-WR"><div class="ctop"><span class="pos-mini pm-WR">WR</span><span class="ovr">#1</span></div><span class="cname">Chase</span></div>
+          <div class="bcell c-WR"><div class="ctop"><span class="pos-mini pm-WR">WR</span><span class="ovr">#2</span></div><span class="cname">Jefferson</span></div>
+          <div class="bcell c-RB col-you mine"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#3</span></div><span class="cname">Robinson</span></div>
+          <div class="bcell c-RB"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#4</span></div><span class="cname">Barkley</span></div>
+          <div class="bcell c-WR"><div class="ctop"><span class="pos-mini pm-WR">WR</span><span class="ovr">#5</span></div><span class="cname">Lamb</span></div>
+          <div class="bcell c-RB"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#6</span></div><span class="cname">Gibbs</span></div>
+          <div class="bcell c-WR"><div class="ctop"><span class="pos-mini pm-WR">WR</span><span class="ovr">#7</span></div><span class="cname">St. Brown</span></div>
+          <div class="bcell c-RB"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#8</span></div><span class="cname">McCaffrey</span></div>
+          <div class="bcell c-WR"><div class="ctop"><span class="pos-mini pm-WR">WR</span><span class="ovr">#9</span></div><span class="cname">Nacua</span></div>
+          <div class="bcell c-RB"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#10</span></div><span class="cname">Henry</span></div>
+          <div class="bcell c-WR"><div class="ctop"><span class="pos-mini pm-WR">WR</span><span class="ovr">#11</span></div><span class="cname">A. Brown</span></div>
+          <div class="bcell c-RB"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#12</span></div><span class="cname">Achane</span></div>
+
+          <!-- Round 2 (←) -->
+          <div class="brd-lbl">R2<span class="dir">←</span></div>
+          <div class="bcell c-RB"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#24</span></div><span class="cname">Conner</span></div>
+          <div class="bcell c-RB"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#23</span></div><span class="cname">C. Brown</span></div>
+          <div class="bcell c-WR col-you mine"><div class="ctop"><span class="pos-mini pm-WR">WR</span><span class="ovr">#22</span></div><span class="cname">Nabers</span></div>
+          <div class="bcell c-RB"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#21</span></div><span class="cname">Walker</span></div>
+          <div class="bcell c-RB"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#20</span></div><span class="cname">Irving</span></div>
+          <div class="bcell c-WR"><div class="ctop"><span class="pos-mini pm-WR">WR</span><span class="ovr">#19</span></div><span class="cname">Adams</span></div>
+          <div class="bcell c-RB"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#18</span></div><span class="cname">Taylor</span></div>
+          <div class="bcell c-RB"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#17</span></div><span class="cname">Jacobs</span></div>
+          <div class="bcell c-WR"><div class="ctop"><span class="pos-mini pm-WR">WR</span><span class="ovr">#16</span></div><span class="cname">Harrison</span></div>
+          <div class="bcell c-RB"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#15</span></div><span class="cname">Jeanty</span></div>
+          <div class="bcell c-WR"><div class="ctop"><span class="pos-mini pm-WR">WR</span><span class="ovr">#14</span></div><span class="cname">Thomas Jr.</span></div>
+          <div class="bcell c-WR"><div class="ctop"><span class="pos-mini pm-WR">WR</span><span class="ovr">#13</span></div><span class="cname">Collins</span></div>
+
+          <!-- Round 3 (→) -->
+          <div class="brd-lbl">R3<span class="dir">→</span></div>
+          <div class="bcell c-RB"><div class="ctop"><span class="pos-mini pm-RB">RB</span><span class="ovr">#25</span></div><span class="cname">Hall</span></div>
+          <div class="bcell c-WR"><div class="ctop"><span class="pos-mini pm-WR">WR</span><span class="ovr">#26</span></div><span class="cname">Higgins</span></div>
+          <div class="bcell onclock col-you" aria-label="On the clock, pick 3.03, overall 27, recommended James Cook">
+            <div class="ctop"><span class="oc-tag">On clock</span><span class="ovr">#27</span></div><span class="oc-rec">Cook?</span></div>
+          <div class="bcell empty" aria-label="pick 28, open"></div>
+          <div class="bcell empty" aria-label="pick 29, open"></div>
+          <div class="bcell empty" aria-label="pick 30, open"></div>
+          <div class="bcell empty" aria-label="pick 31, open"></div>
+          <div class="bcell empty" aria-label="pick 32, open"></div>
+          <div class="bcell empty" aria-label="pick 33, open"></div>
+          <div class="bcell empty" aria-label="pick 34, open"></div>
+          <div class="bcell empty" aria-label="pick 35, open"></div>
+          <div class="bcell empty" aria-label="pick 36, open"></div>
+
+          <!-- Round 4 (←) -->
+          <div class="brd-lbl">R4<span class="dir">←</span></div>
+          <div class="bcell empty"></div><div class="bcell empty"></div>
+          <div class="bcell empty col-you" aria-label="your next pick 4.10, overall 46"><span class="oc-tag" style="color:var(--ink-3)">Next · #46</span></div>
+          <div class="bcell empty"></div><div class="bcell empty"></div><div class="bcell empty"></div>
+          <div class="bcell empty"></div><div class="bcell empty"></div><div class="bcell empty"></div>
+          <div class="bcell empty"></div><div class="bcell empty"></div><div class="bcell empty"></div>
+
+          <!-- Round 5 (→) -->
+          <div class="brd-lbl">R5<span class="dir">→</span></div>
+          <div class="bcell empty"></div><div class="bcell empty"></div>
+          <div class="bcell empty col-you"></div>
+          <div class="bcell empty"></div><div class="bcell empty"></div><div class="bcell empty"></div>
+          <div class="bcell empty"></div><div class="bcell empty"></div><div class="bcell empty"></div>
+          <div class="bcell empty"></div><div class="bcell empty"></div><div class="bcell empty"></div>
+
+          <!-- Round 6 (←) -->
+          <div class="brd-lbl">R6<span class="dir">←</span></div>
+          <div class="bcell empty"></div><div class="bcell empty"></div>
+          <div class="bcell empty col-you"></div>
+          <div class="bcell empty"></div><div class="bcell empty"></div><div class="bcell empty"></div>
+          <div class="bcell empty"></div><div class="bcell empty"></div><div class="bcell empty"></div>
+          <div class="bcell empty"></div><div class="bcell empty"></div><div class="bcell empty"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- (c) Pick log / ticker -->
+    <section class="panel pad">
+      <div class="panel-h">
+        <h3 class="panel-title">Pick log</h3>
+        <span class="stat-pill is-warning" aria-label="Run detected: 4 of last 6 picks were running backs">
+          <svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14l5-5 4 4 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 6h5v5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          RB run · 4 of last 6
+        </span>
+      </div>
+      <div class="ticker" role="list" aria-label="Recent picks, newest first">
+        <div class="trow" role="listitem"><span class="ov">#26</span><span class="tm">Slot 2</span><span class="pos pos-WR">WR</span><span class="pl">Tee Higgins</span><span class="plteam">CIN</span></div>
+        <div class="trow run" role="listitem"><span class="ov">#25</span><span class="tm">Slot 1</span><span class="pos pos-RB">RB</span><span class="pl">Breece Hall</span><span class="plteam">NYJ</span></div>
+        <div class="trow run" role="listitem"><span class="ov">#24</span><span class="tm">Slot 1</span><span class="pos pos-RB">RB</span><span class="pl">James Conner</span><span class="plteam">ARI</span></div>
+        <div class="trow run" role="listitem"><span class="ov">#23</span><span class="tm">Slot 2</span><span class="pos pos-RB">RB</span><span class="pl">Chase Brown</span><span class="plteam">CIN</span></div>
+        <div class="trow" role="listitem"><span class="ov">#22</span><span class="tm you">You · 3</span><span class="pos pos-WR">WR</span><span class="pl">Malik Nabers</span><span class="plteam">NYG</span></div>
+        <div class="trow run" role="listitem"><span class="ov">#21</span><span class="tm">Slot 4</span><span class="pos pos-RB">RB</span><span class="pl">Kenneth Walker III</span><span class="plteam">SEA</span></div>
+        <div class="trow run" role="listitem"><span class="ov">#20</span><span class="tm">Slot 5</span><span class="pos pos-RB">RB</span><span class="pl">Bucky Irving</span><span class="plteam">TB</span></div>
+        <div class="trow" role="listitem"><span class="ov">#19</span><span class="tm">Slot 6</span><span class="pos pos-WR">WR</span><span class="pl">Davante Adams</span><span class="plteam">LA</span></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ---------- RIGHT COLUMN — ANALYTICS ---------- -->
+  <aside class="analytics" aria-label="Draft analytics">
+
+    <!-- (a) Positional value curve -->
+    <section class="panel pad" id="players">
+      <div class="panel-h">
+        <h3 class="panel-title">Positional value curve</h3>
+        <span class="chip" style="text-transform:none; letter-spacing:.02em">illustrative</span>
+      </div>
+      <svg class="chart" viewBox="0 0 380 224" role="img"
+        aria-label="Line chart of value-over-replacement points by position rank for RB, WR, QB and TE. The RB line starts highest near 150 and cliffs steeply to zero around rank 23. WR starts near 118 and declines gently to zero near rank 41. QB and TE start lower and reach zero near rank 13; TE shows a large elite premium then a fast drop. Vertical rules mark each replacement baseline.">
+        <!-- gridlines (recessive, solid hairline) -->
+        <g stroke="var(--grid)" stroke-width="1">
+          <line x1="34" y1="140.7" x2="368" y2="140.7"/>
+          <line x1="34" y1="77.3" x2="368" y2="77.3"/>
+          <line x1="34" y1="14" x2="368" y2="14"/>
+        </g>
+        <!-- replacement baselines (faint vertical rules) -->
+        <g stroke="var(--hairline-2)" stroke-width="1">
+          <line x1="119.3" y1="14" x2="119.3" y2="204"/>
+          <line x1="190.3" y1="14" x2="190.3" y2="204"/>
+          <line x1="318.3" y1="14" x2="318.3" y2="204"/>
+        </g>
+        <g class="ax-num" font-size="8.5" fill="var(--ink-2)" text-anchor="middle">
+          <text x="119.3" y="216">QB/TE 13</text>
+          <text x="190.3" y="216">RB 23</text>
+          <text x="318.3" y="216">WR 41</text>
+        </g>
+        <!-- axes -->
+        <line x1="34" y1="14" x2="34" y2="204" stroke="var(--axis)" stroke-width="1"/>
+        <line x1="34" y1="204" x2="368" y2="204" stroke="var(--axis)" stroke-width="1"/>
+        <g class="ax-num" font-size="8.5" fill="var(--ink-2)" text-anchor="end">
+          <text x="29" y="207">0</text>
+          <text x="29" y="143.7">60</text>
+          <text x="29" y="80.3">120</text>
+          <text x="29" y="17">180</text>
+        </g>
+        <text x="8" y="112" font-size="8.5" fill="var(--ink-2)" transform="rotate(-90 8 112)" text-anchor="middle" letter-spacing="1">VOR PTS</text>
+        <!-- lines (2px, round) -->
+        <path fill="none" stroke="var(--pos-te)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+          d="M34,102.7 L41.1,130.1 L48.2,157.6 L55.3,172.3 L62.4,180.8 L69.5,187.1 L83.7,194.5 L98,199.8 L119.3,204"/>
+        <path fill="none" stroke="var(--pos-qb)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+          d="M34,128 L41.1,138.6 L48.2,149.1 L55.3,157.6 L69.5,170.2 L83.7,180.8 L98,191.3 L119.3,204"/>
+        <path fill="none" stroke="var(--pos-wr)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+          d="M34,79.4 L41.1,87.9 L48.2,97.4 L55.3,106.9 L62.4,114.3 L83.7,134.3 L112.2,151.2 L140.6,163.9 L169,173.4 L225.9,187.1 L268.5,195.6 L318.3,204"/>
+        <path fill="none" stroke="var(--pos-rb)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+          d="M34,45.7 L41.1,58.3 L48.2,75.2 L55.3,98.4 L62.4,115.3 L69.5,130.1 L83.7,149.1 L98,161.8 L112.2,172.3 L133.5,185 L154.8,194.5 L190.3,204"/>
+        <!-- elite (rank 1) endpoints emphasized w/ surface ring -->
+        <g stroke="var(--card)" stroke-width="2">
+          <circle cx="34" cy="45.7" r="4" fill="var(--pos-rb)"/>
+          <circle cx="34" cy="79.4" r="4" fill="var(--pos-wr)"/>
+          <circle cx="34" cy="102.7" r="4" fill="var(--pos-te)"/>
+          <circle cx="34" cy="128" r="4" fill="var(--pos-qb)"/>
+        </g>
+      </svg>
+      <div class="legend" aria-hidden="true">
+        <span class="lg"><span class="sw" style="background:var(--pos-rb)"></span>RB</span>
+        <span class="lg"><span class="sw" style="background:var(--pos-wr)"></span>WR</span>
+        <span class="lg"><span class="sw" style="background:var(--pos-qb)"></span>QB</span>
+        <span class="lg"><span class="sw" style="background:var(--pos-te)"></span>TE</span>
+      </div>
+      <p class="cap">In Standard (non-PPR), elite-RB scarcity is steep — the RB curve <b>cliffs early</b> and hits replacement by ~RB23. WR value stays flatter and deeper (to ~WR41), which is why breadth waits and the anchor RB does not.</p>
+    </section>
+
+    <!-- (b) Tiers + survival -->
+    <section class="panel pad" id="tiers">
+      <div class="panel-h">
+        <h3 class="panel-title">RB tiers &amp; survival</h3>
+        <span class="chip" style="text-transform:none; letter-spacing:.02em">illustrative</span>
+      </div>
+
+      <!-- tier ladder -->
+      <div role="img" aria-label="RB tier ladder. Tiers 1 and 2 are fully drafted. Tier 3 holds six backs; James Cook is the last remaining in Tier 3. A tier cliff of about 4.8 points drops to Tier 4.">
+        <div class="tier-row">
+          <span class="tier-lbl">T1</span>
+          <span class="tier-chips"><span class="tchip gone"></span><span class="tchip gone"></span><span class="tchip gone"></span><span class="tchip gone"></span></span>
+          <span class="tier-val">gone</span>
+        </div>
+        <div class="tier-row">
+          <span class="tier-lbl">T2</span>
+          <span class="tier-chips"><span class="tchip gone"></span><span class="tchip gone"></span><span class="tchip gone"></span><span class="tchip gone"></span></span>
+          <span class="tier-val">gone</span>
+        </div>
+        <div class="tier-row">
+          <span class="tier-lbl">T3</span>
+          <span class="tier-chips"><span class="tchip gone"></span><span class="tchip gone"></span><span class="tchip gone"></span><span class="tchip gone"></span><span class="tchip gone"></span><span class="tchip cook" title="James Cook — last in Tier 3"></span></span>
+          <span class="tier-val">~215</span>
+        </div>
+        <div class="cook-flag">
+          <span class="pos-mini pm-RB">RB</span><span class="nm">James Cook</span>
+          <span class="stat-pill is-good" style="padding:.14em .5em">Last in T3</span>
+        </div>
+        <div class="cliff"><span class="stat-pill is-critical" aria-label="Tier cliff: about 4.8 points down to the next tier">
+          <svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20L3 6h18z" fill="currentColor"/></svg>
+          Tier cliff <span class="mono">−4.8</span></span><span class="ln" aria-hidden="true"></span></div>
+        <div class="tier-row">
+          <span class="tier-lbl">T4</span>
+          <span class="tier-chips"><span class="tchip"></span><span class="tchip gone"></span><span class="tchip"></span><span class="tchip"></span></span>
+          <span class="tier-val">~185</span>
+        </div>
+        <div class="tier-row">
+          <span class="tier-lbl">T5</span>
+          <span class="tier-chips"><span class="tchip"></span><span class="tchip"></span><span class="tchip"></span><span class="tchip"></span><span class="tchip"></span></span>
+          <span class="tier-val">stream</span>
+        </div>
+      </div>
+
+      <hr class="rule" style="margin:14px 0 12px">
+      <p class="label" style="margin:0 0 8px" id="survival">Survival · P(available) vs overall pick</p>
+
+      <!-- survival curve -->
+      <svg class="chart" viewBox="0 0 380 202" role="img"
+        aria-label="Survival curves showing probability a player is still available versus overall pick number. James Cook (RB) falls steeply from about 96 percent now to 18 percent by your next pick, overall 46. Garrett Wilson (WR) declines gently to about 55 percent at pick 46. A vertical rule marks your next pick at overall 46.">
+        <!-- gridlines -->
+        <g stroke="var(--grid)" stroke-width="1">
+          <line x1="30" y1="134" x2="340" y2="134"/>
+          <line x1="30" y1="94" x2="340" y2="94"/>
+          <line x1="30" y1="54" x2="340" y2="54"/>
+          <line x1="30" y1="14" x2="340" y2="14"/>
+        </g>
+        <!-- your next pick rule -->
+        <line x1="220" y1="10" x2="220" y2="174" stroke="var(--brass-solid)" stroke-width="1.5"/>
+        <text x="220" y="8" font-size="8.5" fill="var(--brass)" text-anchor="middle" class="ax-num">NEXT · #46</text>
+        <!-- axes -->
+        <line x1="30" y1="14" x2="30" y2="174" stroke="var(--axis)" stroke-width="1"/>
+        <line x1="30" y1="174" x2="340" y2="174" stroke="var(--axis)" stroke-width="1"/>
+        <g class="ax-num" font-size="8.5" fill="var(--ink-2)" text-anchor="end">
+          <text x="26" y="177">0</text>
+          <text x="26" y="137">25</text>
+          <text x="26" y="97">50</text>
+          <text x="26" y="57">75</text>
+          <text x="26" y="17">100</text>
+        </g>
+        <g class="ax-num" font-size="8.5" fill="var(--ink-2)" text-anchor="middle">
+          <text x="30" y="186">27</text>
+          <text x="120" y="186">36</text>
+          <text x="340" y="186">58</text>
+        </g>
+        <text x="185" y="199" font-size="8" fill="var(--ink-2)" text-anchor="middle" letter-spacing="1">OVERALL PICK →</text>
+        <!-- Wilson (WR) -->
+        <path fill="none" stroke="var(--pos-wr)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+          d="M30,15.6 L60,22 L90,30 L120,39.6 L160,55.6 L190,70 L220,86 L260,103.6 L300,118 L340,129.2"/>
+        <!-- Cook (RB) -->
+        <path fill="none" stroke="var(--pos-rb)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+          d="M30,20.4 L60,42.8 L90,68.4 L120,94 L160,119.6 L190,134 L220,145.2 L260,156.4 L300,162.8 L340,166"/>
+        <!-- markers at #46 (surface ring) -->
+        <g stroke="var(--card)" stroke-width="2">
+          <circle cx="220" cy="86" r="4.5" fill="var(--pos-wr)"/>
+          <circle cx="220" cy="145.2" r="4.5" fill="var(--pos-rb)"/>
+        </g>
+        <!-- direct value labels at #46 -->
+        <g class="ax-num" font-size="10" font-weight="700">
+          <text x="228" y="82" fill="var(--ink)">55%</text>
+          <text x="228" y="149" fill="var(--ink)">18%</text>
+        </g>
+        <!-- end labels -->
+        <g font-size="9" fill="var(--ink-2)" font-weight="700">
+          <text x="345" y="129" text-anchor="start">Wilson</text>
+          <text x="345" y="166" text-anchor="start">Cook</text>
+        </g>
+      </svg>
+      <div class="legend" aria-hidden="true">
+        <span class="lg"><span class="sw" style="background:var(--pos-rb)"></span>Cook · RB</span>
+        <span class="lg"><span class="sw" style="background:var(--pos-wr)"></span>Wilson · WR</span>
+      </div>
+      <p class="cap">Take the RB now: <b class="mono">18%</b> of the time Cook survives to <span class="mono">#46</span>, but Wilson holds at <b class="mono">55%</b>. The WR can wait a round; the last Tier-3 back cannot.</p>
+    </section>
+
+    <!-- (c) Manager tendencies -->
+    <section class="panel pad" id="managers">
+      <div class="panel-h">
+        <h3 class="panel-title">Manager tendencies</h3>
+        <span class="panel-note">Model — <span class="mono">2</span> drafts logged</span>
+      </div>
+
+      <div class="mgr" role="img" aria-label="Team 7 draft lean: running-back heavy, roughly 55 percent RB, 25 percent WR. Reaches versus ADP plus 4.2 picks.">
+        <div class="mgr-h"><span class="mgr-name">Team <span class="mono">7</span></span><span class="mgr-lean">RB-heavy</span></div>
+        <div class="mgr-bar">
+          <span class="mgr-seg" style="width:55%; background:var(--pos-rb)" title="RB 55%"></span>
+          <span class="mgr-seg" style="width:25%; background:var(--pos-wr)" title="WR 25%"></span>
+          <span class="mgr-seg" style="width:10%; background:var(--pos-te)" title="TE 10%"></span>
+          <span class="mgr-seg" style="width:10%; background:var(--pos-qb)" title="QB 10%"></span>
+        </div>
+        <div class="mgr-foot"><span class="mgr-adp">Reaches vs ADP <span class="dir-mark dir-reach" aria-hidden="true">▲</span> <b>+4.2</b></span><span class="mgr-lean"><span class="mono">7</span> picks</span></div>
+      </div>
+
+      <div class="mgr" role="img" aria-label="Team 11 draft lean: wide-receiver heavy, roughly 60 percent WR. Drafts at value, minus 1.4 versus ADP.">
+        <div class="mgr-h"><span class="mgr-name">Team <span class="mono">11</span></span><span class="mgr-lean">WR-heavy</span></div>
+        <div class="mgr-bar">
+          <span class="mgr-seg" style="width:60%; background:var(--pos-wr)" title="WR 60%"></span>
+          <span class="mgr-seg" style="width:20%; background:var(--pos-rb)" title="RB 20%"></span>
+          <span class="mgr-seg" style="width:12%; background:var(--pos-qb)" title="QB 12%"></span>
+          <span class="mgr-seg" style="width:8%; background:var(--pos-te)" title="TE 8%"></span>
+        </div>
+        <div class="mgr-foot"><span class="mgr-adp">Reaches vs ADP <span class="dir-mark dir-value" aria-hidden="true">▼</span> <b>−1.4</b> <span style="color:var(--ink-3)">value</span></span><span class="mgr-lean"><span class="mono">7</span> picks</span></div>
+      </div>
+
+      <div class="mgr" role="img" aria-label="Team 4 draft lean: balanced across positions. Slightly reaches, plus 0.6 versus ADP.">
+        <div class="mgr-h"><span class="mgr-name">Team <span class="mono">4</span></span><span class="mgr-lean">Balanced</span></div>
+        <div class="mgr-bar">
+          <span class="mgr-seg" style="width:35%; background:var(--pos-wr)" title="WR 35%"></span>
+          <span class="mgr-seg" style="width:30%; background:var(--pos-rb)" title="RB 30%"></span>
+          <span class="mgr-seg" style="width:18%; background:var(--pos-qb)" title="QB 18%"></span>
+          <span class="mgr-seg" style="width:17%; background:var(--pos-te)" title="TE 17%"></span>
+        </div>
+        <div class="mgr-foot"><span class="mgr-adp">Reaches vs ADP <span class="dir-mark dir-reach" aria-hidden="true">▲</span> <b>+0.6</b></span><span class="mgr-lean"><span class="mono">6</span> picks</span></div>
+      </div>
+
+      <div class="mgr pending">
+        <div class="mgr-h"><span class="mgr-name">Team <span class="mono">9</span></span><span class="mgr-lean">Insufficient data</span></div>
+        <div class="mgr-empty" aria-hidden="true"></div>
+        <div class="mgr-foot"><span class="mgr-adp">Model grows as picks accrue</span><span class="mgr-lean"><span class="mono">1</span> pick</span></div>
+      </div>
+    </section>
+  </aside>
+
+  <!-- ---------- SCENARIO STRIP ---------- -->
+  <section class="scenarios" id="scenarios">
+    <div class="panel pad">
+      <div class="panel-h">
+        <h3 class="panel-title">Scenario comparison — what happens if…</h3>
+        <span class="panel-note">Projected starting-lineup points vs a <span class="mono">1,350</span> baseline · playoff odds <span class="est">est</span></span>
+      </div>
+      <div class="scen-grid">
+
+        <div class="scen rec" aria-label="Scenario: take James Cook now. Recommended.">
+          <span class="scen-tag">Recommended</span>
+          <div class="scen-h"><span class="pos pos-RB">RB</span><span class="scen-title">Take Cook now</span></div>
+          <div class="scen-big"><span class="scen-pts">1,412.5</span><span class="scen-unit">proj pts</span></div>
+          <div class="scen-bar" role="img" aria-label="Projected 1412.5 points, highest of the three"><span style="width:89%"></span></div>
+          <div class="scen-tiles">
+            <div class="scen-tile"><span class="k">Risk σ</span><span class="v">12.4</span></div>
+            <div class="scen-tile"><span class="k">Playoff <span class="est">est</span></span><span class="v">61%</span></div>
+          </div>
+        </div>
+
+        <div class="scen" aria-label="Scenario: take Drake London now.">
+          <div class="scen-h"><span class="pos pos-WR">WR</span><span class="scen-title">Take London now</span></div>
+          <div class="scen-big"><span class="scen-pts">1,404.0</span><span class="scen-unit">proj pts</span></div>
+          <div class="scen-bar" role="img" aria-label="Projected 1404 points"><span style="width:77%"></span></div>
+          <div class="scen-tiles">
+            <div class="scen-tile"><span class="k">Risk σ</span><span class="v">11.1</span></div>
+            <div class="scen-tile"><span class="k">Playoff <span class="est">est</span></span><span class="v">58%</span></div>
+          </div>
+        </div>
+
+        <div class="scen" aria-label="Scenario: wait and take the best running back at pick 46.">
+          <div class="scen-h"><span class="pos pos-RB">RB</span><span class="scen-title">Wait — best RB at #46</span></div>
+          <div class="scen-big"><span class="scen-pts">1,389.5</span><span class="scen-unit">proj pts</span></div>
+          <div class="scen-bar" role="img" aria-label="Projected 1389.5 points, lowest of the three"><span style="width:56%"></span></div>
+          <div class="scen-tiles">
+            <div class="scen-tile"><span class="k">Risk σ</span><span class="v">15.8</span></div>
+            <div class="scen-tile"><span class="k">Playoff <span class="est">est</span></span><span class="v">52%</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer class="foot">
+  <span>JAAFFL · The Draft Room — local-first draft assistant</span>
+  <hr class="rule-brass" aria-hidden="true">
+  <span>Projections illustrative · <span class="mono">2027</span> figures estimated · Strategy: anchor / Hero-RB, WR breadth mid-rounds, defer QB/TE unless elite, stream DST R<span class="mono">16</span> &amp; K R<span class="mono">17</span>.</span>
+</footer>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var btn = document.getElementById('themeToggle');
+  var label = btn.querySelector('.tt-label');
+  function current() {
+    var t = root.getAttribute('data-theme');
+    if (t === 'light' || t === 'dark') return t;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  function apply(t) {
+    root.setAttribute('data-theme', t);
+    btn.setAttribute('aria-pressed', String(t === 'dark'));
+    label.textContent = t === 'dark' ? 'Dark' : 'Light';
+  }
+  apply(current());
+  btn.addEventListener('click', function () {
+    apply(current() === 'dark' ? 'light' : 'dark');
+  });
+})();
+</script>
+</body>
+</html>

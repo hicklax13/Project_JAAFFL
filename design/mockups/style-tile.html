@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JAAFFL — The Draft Room · Design System</title>
+<style>
+/* ============================================================================
+   JAAFFL — "The Draft Room" design foundation (shared across all mockups)
+   A quant terminal with the poise of a private club. Brass on warm ink.
+   Dark-mode-first, fully theme-aware (light + dark), WCAG-AA.
+   ============================================================================ */
+:root {
+  color-scheme: light dark;
+  --plane:#EAE7DD; --surface:#F1EEE6; --card:#F8F6F0; --card-2:#FFFFFF;
+  --hairline:rgba(38,32,18,0.12); --hairline-2:rgba(38,32,18,0.20); --wash:rgba(38,32,18,0.04);
+  --ink:#1B1810; --ink-2:#524C3C; --ink-3:#837B66;
+  --brass:#8A6D22; --brass-solid:#B8912F; --brass-bright:#A07E28; --brass-ink:#1A1408; --brass-glow:rgba(184,145,47,0.16);
+  --pine:#2E5D46;
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --pos-qb:#e87ba4; --pos-rb:#2a78d6; --pos-wr:#008300; --pos-te:#eda100; --pos-k:#1baf7a; --pos-dst:#eb6834;
+  --grid:rgba(38,32,18,0.09); --axis:rgba(38,32,18,0.28);
+  --e1:0 1px 0 var(--hairline),0 1px 2px rgba(20,16,6,.06);
+  --e2:0 2px 4px rgba(20,16,6,.06),0 12px 28px -12px rgba(20,16,6,.20);
+  --e3:0 8px 20px rgba(20,16,6,.10),0 34px 70px -24px rgba(20,16,6,.34);
+  --font-display:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,Cambria,serif;
+  --font-ui:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --font-mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+  --fs-xxs:.6875rem; --fs-xs:.75rem; --fs-sm:.8125rem; --fs-base:.9375rem; --fs-md:1.0625rem;
+  --fs-lg:1.375rem; --fs-xl:1.875rem; --fs-2xl:2.75rem; --fs-3xl:4rem;
+  --r-xs:3px; --r-sm:5px; --r:8px; --r-lg:11px; --r-xl:16px; --r-pill:999px;
+  --ease:cubic-bezier(.2,.7,.2,1); --ease-io:cubic-bezier(.6,.05,.2,.95);
+  --t-fast:120ms; --t:200ms; --t-slow:380ms;
+}
+@media (prefers-color-scheme: dark){ :root:where(:not([data-theme="light"])){
+  --plane:#0E0C08; --surface:#14110B; --card:#1B1710; --card-2:#221D14;
+  --hairline:rgba(228,212,176,0.12); --hairline-2:rgba(228,212,176,0.22); --wash:rgba(228,212,176,0.05);
+  --ink:#F3EEE1; --ink-2:#C4BBA6; --ink-3:#8E8672;
+  --brass:#E7C877; --brass-solid:#C8A24C; --brass-bright:#F1D98F; --brass-ink:#1A1408; --brass-glow:rgba(200,162,76,0.20);
+  --pine:#7FB79A;
+  --pos-qb:#d55181; --pos-rb:#3987e5; --pos-wr:#2FA14B; --pos-te:#c98500; --pos-k:#199e70; --pos-dst:#d95926;
+  --grid:rgba(228,212,176,0.08); --axis:rgba(228,212,176,0.26);
+  --e1:0 1px 0 rgba(0,0,0,.5),0 1px 2px rgba(0,0,0,.5);
+  --e2:0 2px 6px rgba(0,0,0,.5),0 16px 34px -14px rgba(0,0,0,.66);
+  --e3:0 10px 30px rgba(0,0,0,.55),0 40px 90px -30px rgba(0,0,0,.8);
+}}
+:root[data-theme="dark"]{
+  --plane:#0E0C08; --surface:#14110B; --card:#1B1710; --card-2:#221D14;
+  --hairline:rgba(228,212,176,0.12); --hairline-2:rgba(228,212,176,0.22); --wash:rgba(228,212,176,0.05);
+  --ink:#F3EEE1; --ink-2:#C4BBA6; --ink-3:#8E8672;
+  --brass:#E7C877; --brass-solid:#C8A24C; --brass-bright:#F1D98F; --brass-ink:#1A1408; --brass-glow:rgba(200,162,76,0.20);
+  --pine:#7FB79A;
+  --pos-qb:#d55181; --pos-rb:#3987e5; --pos-wr:#2FA14B; --pos-te:#c98500; --pos-k:#199e70; --pos-dst:#d95926;
+  --grid:rgba(228,212,176,0.08); --axis:rgba(228,212,176,0.26);
+  --e1:0 1px 0 rgba(0,0,0,.5),0 1px 2px rgba(0,0,0,.5);
+  --e2:0 2px 6px rgba(0,0,0,.5),0 16px 34px -14px rgba(0,0,0,.66);
+  --e3:0 10px 30px rgba(0,0,0,.55),0 40px 90px -30px rgba(0,0,0,.8);
+}
+:root[data-theme="light"]{ color-scheme:light; }
+*,*::before,*::after{ box-sizing:border-box; }
+html{ -webkit-text-size-adjust:100%; }
+body{ margin:0; background:var(--plane); color:var(--ink); font-family:var(--font-ui);
+  font-size:var(--fs-base); line-height:1.55; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+h1,h2,h3,h4{ font-family:var(--font-display); font-weight:600; line-height:1.1; text-wrap:balance; letter-spacing:-.01em; margin:0; }
+a{ color:var(--brass); text-decoration:none; }
+::selection{ background:var(--brass-glow); }
+.mono,.num{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+.eyebrow,.label{ font-family:var(--font-ui); font-size:var(--fs-xxs); font-weight:600; text-transform:uppercase; letter-spacing:.14em; color:var(--ink-3); }
+.rule{ height:1px; background:var(--hairline); border:0; }
+.rule-brass{ height:1px; background:linear-gradient(90deg,var(--brass-solid),transparent); border:0; }
+.card{ background:var(--card); border:1px solid var(--hairline); border-radius:var(--r-lg); box-shadow:var(--e1); }
+.chip{ display:inline-flex; align-items:center; gap:.4em; font-size:var(--fs-xxs); font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:.28em .6em; border-radius:var(--r-pill); border:1px solid var(--hairline-2); color:var(--ink-2); background:var(--wash); }
+.pos{ display:inline-flex; align-items:center; justify-content:center; min-width:2.35em; padding:.2em .5em; border-radius:var(--r-sm); font-family:var(--font-ui); font-size:var(--fs-xxs); font-weight:800; letter-spacing:.06em; color:#fff; }
+.pos-QB{background:var(--pos-qb)} .pos-RB{background:var(--pos-rb)} .pos-WR{background:var(--pos-wr)} .pos-TE{background:var(--pos-te); color:#231a02} .pos-K{background:var(--pos-k)} .pos-DST{background:var(--pos-dst)}
+.stat-pill{ display:inline-flex; align-items:center; gap:.4em; font-size:var(--fs-xxs); font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:.26em .55em; border-radius:var(--r-pill); border:1px solid transparent; }
+.is-good{ color:var(--good); background:color-mix(in srgb,var(--good) 14%,transparent); border-color:color-mix(in srgb,var(--good) 34%,transparent); }
+.is-warning{ color:var(--warning); background:color-mix(in srgb,var(--warning) 16%,transparent); border-color:color-mix(in srgb,var(--warning) 40%,transparent); }
+.is-critical{ color:var(--critical); background:color-mix(in srgb,var(--critical) 15%,transparent); border-color:color-mix(in srgb,var(--critical) 38%,transparent); }
+.btn{ font-family:var(--font-ui); font-size:var(--fs-sm); font-weight:600; padding:.55em .95em; border-radius:var(--r); border:1px solid var(--hairline-2); background:var(--wash); color:var(--ink); cursor:pointer; transition:border-color var(--t-fast) var(--ease),background var(--t-fast) var(--ease),transform var(--t-fast) var(--ease); }
+.btn:hover{ border-color:var(--brass-solid); }
+.btn:active{ transform:translateY(1px); }
+.btn-primary{ background:var(--brass-solid); color:var(--brass-ink); border-color:transparent; box-shadow:0 1px 0 rgba(0,0,0,.15); }
+.btn-primary:hover{ background:var(--brass-bright); box-shadow:0 0 0 4px var(--brass-glow); }
+:focus-visible{ outline:2px solid var(--brass); outline-offset:2px; border-radius:3px; }
+.sc-row{ display:grid; grid-template-columns:4.6em 1fr auto; align-items:center; gap:.6em; }
+.sc-track{ position:relative; height:7px; border-radius:var(--r-pill); background:var(--wash); overflow:hidden; }
+.sc-fill{ position:absolute; top:0; bottom:0; border-radius:var(--r-pill); }
+.sc-mid{ position:absolute; top:-3px; bottom:-3px; width:1px; background:var(--hairline-2); }
+@media (prefers-reduced-motion: reduce){ *{ animation-duration:.001ms!important; transition-duration:.001ms!important; } }
+
+/* ---- Style-tile page layout ---- */
+.wrap{ max-width:1080px; margin:0 auto; padding:clamp(20px,4vw,56px) clamp(18px,4vw,40px) 96px; }
+.top{ position:sticky; top:0; z-index:5; display:flex; align-items:center; justify-content:space-between;
+  padding:14px clamp(18px,4vw,40px); background:color-mix(in srgb,var(--plane) 86%,transparent);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--hairline); }
+.brandmark{ display:flex; align-items:baseline; gap:.55em; }
+.brandmark .word{ font-family:var(--font-display); font-size:var(--fs-md); font-weight:600; letter-spacing:.02em; }
+.brandmark .tag{ font-size:var(--fs-xxs); }
+.toggle{ display:inline-flex; align-items:center; gap:.5em; }
+.masthead{ padding:clamp(28px,6vw,72px) 0 clamp(20px,3vw,32px); }
+.masthead h1{ font-size:clamp(2.6rem,7vw,var(--fs-3xl)); margin:.18em 0 .28em; }
+.masthead .lede{ max-width:60ch; color:var(--ink-2); font-size:var(--fs-md); }
+.masthead .kicker{ color:var(--brass); }
+.sec{ margin-top:clamp(40px,6vw,72px); }
+.sec > h2{ font-size:var(--fs-xl); margin-bottom:.15em; }
+.sec > .sub{ color:var(--ink-3); font-size:var(--fs-sm); max-width:62ch; margin-bottom:22px; }
+.secnum{ font-family:var(--font-mono); color:var(--brass); font-size:var(--fs-sm); margin-right:.6em; }
+.grid{ display:grid; gap:16px; }
+.g-swatch{ grid-template-columns:repeat(auto-fill,minmax(158px,1fr)); }
+.swatch{ border:1px solid var(--hairline); border-radius:var(--r); overflow:hidden; background:var(--card); }
+.swatch .chip-fill{ height:66px; }
+.swatch .meta{ padding:9px 11px; display:flex; flex-direction:column; gap:2px; }
+.swatch .role{ font-size:var(--fs-xs); font-weight:600; }
+.swatch .hex{ font-family:var(--font-mono); font-size:var(--fs-xxs); color:var(--ink-3); font-variant-numeric:tabular-nums; }
+.note{ font-size:var(--fs-xs); color:var(--ink-3); margin-top:10px; }
+.type-specimen{ padding:22px 24px; }
+.type-specimen .line{ display:flex; align-items:baseline; gap:16px; border-top:1px solid var(--hairline); padding:14px 0; flex-wrap:wrap; }
+.type-specimen .line:first-of-type{ border-top:0; }
+.type-specimen .tag{ width:120px; flex:none; }
+.disp-xxl{ font-family:var(--font-display); font-size:clamp(2.4rem,6vw,3.4rem); }
+.disp-xl{ font-family:var(--font-display); font-size:var(--fs-2xl); }
+.disp-l{ font-family:var(--font-display); font-size:var(--fs-xl); }
+.body-md{ font-size:var(--fs-md); max-width:54ch; color:var(--ink-2); }
+.num-xl{ font-family:var(--font-mono); font-size:var(--fs-2xl); font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+.two{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width:720px){ .two{ grid-template-columns:1fr; } .type-specimen .tag{ width:auto; } }
+.ramp{ display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; }
+.sp{ background:var(--brass-glow); border:1px solid var(--hairline-2); border-radius:2px; }
+.rad{ width:66px; height:66px; background:var(--wash); border:1px solid var(--hairline-2); display:flex; align-items:flex-end; justify-content:center; padding:6px; }
+.rad span{ font-family:var(--font-mono); font-size:var(--fs-xxs); color:var(--ink-3); }
+.elev{ display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
+@media (max-width:720px){ .elev{ grid-template-columns:1fr; } }
+.elev .box{ height:96px; border-radius:var(--r-lg); background:var(--card); border:1px solid var(--hairline); display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--ink-3); }
+.comp{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width:820px){ .comp{ grid-template-columns:1fr; } }
+.panel{ padding:18px 20px; }
+.panel h3{ font-family:var(--font-ui); font-size:var(--fs-xxs); font-weight:600; text-transform:uppercase; letter-spacing:.14em; color:var(--ink-3); margin-bottom:14px; }
+.tokline{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.motion-demo{ height:8px; width:100%; background:var(--wash); border-radius:var(--r-pill); overflow:hidden; }
+.motion-demo i{ display:block; height:100%; width:38%; border-radius:var(--r-pill); background:linear-gradient(90deg,var(--brass-solid),var(--brass-bright)); transition:width 1.4s var(--ease); }
+.panel:hover .motion-demo i{ width:88%; }
+.reco{ padding:0; overflow:hidden; }
+.reco .head{ display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:linear-gradient(180deg,var(--brass-glow),transparent); border-bottom:1px solid var(--hairline); }
+.reco .body{ padding:16px; display:flex; flex-direction:column; gap:14px; }
+.reco .who{ display:flex; align-items:center; gap:12px; }
+.reco .name{ font-family:var(--font-display); font-size:var(--fs-xl); }
+.reco .meta{ color:var(--ink-3); font-size:var(--fs-xs); }
+.reco .score{ margin-left:auto; text-align:right; }
+.reco .score b{ font-family:var(--font-mono); font-size:var(--fs-2xl); font-weight:600; letter-spacing:-.02em; color:var(--brass); }
+.foot{ margin-top:72px; color:var(--ink-3); font-size:var(--fs-xs); border-top:1px solid var(--hairline); padding-top:18px; }
+.legend-row{ display:flex; gap:16px; flex-wrap:wrap; align-items:center; }
+.lg{ display:inline-flex; align-items:center; gap:.5em; font-size:var(--fs-xs); color:var(--ink-2); }
+.dot{ width:11px; height:11px; border-radius:3px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brandmark">
+    <span class="word">JAAFFL</span>
+    <span class="tag eyebrow">Design System</span>
+  </div>
+  <button class="btn toggle" id="themeBtn" aria-label="Toggle light or dark theme">
+    <span id="themeLabel">Dark</span>
+  </button>
+</header>
+
+<div class="wrap">
+  <section class="masthead">
+    <p class="eyebrow"><span class="kicker">The Draft Room</span> — visual language v1</p>
+    <h1>A quant terminal with the poise of a private club.</h1>
+    <p class="lede">JAAFFL reads your live CBS snake draft and answers one question under a running clock:
+      <em>who, and why.</em> The interface has to be glanceable in a heartbeat yet dense enough to defend a pick —
+      so the system pairs an editorial serif with a monospaced ledger of numbers, sets everything on warm ink,
+      and spends its one bold note on <span style="color:var(--brass)">brass</span>.</p>
+  </section>
+
+  <section class="sec">
+    <h2><span class="secnum">01</span>Palette</h2>
+    <p class="sub">Neutrals are warm, not grey — a bias toward the brass so the ground reads chosen. Brass is the
+      single accent, reserved for the recommended pick and primary affordances. Status and position hues are
+      distinct, reserved roles. Each swatch adapts to the active theme; both hexes are listed (dark / light).</p>
+
+    <p class="label" style="margin-bottom:10px">Grounds &amp; ink</p>
+    <div class="grid g-swatch">
+      <div class="swatch"><div class="chip-fill" style="background:var(--plane)"></div><div class="meta"><span class="role">Plane</span><span class="hex">#0E0C08 / #EAE7DD</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--card)"></div><div class="meta"><span class="role">Card / surface</span><span class="hex">#1B1710 / #F8F6F0</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--card-2)"></div><div class="meta"><span class="role">Overlay</span><span class="hex">#221D14 / #FFFFFF</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--ink)"></div><div class="meta"><span class="role">Ink · primary</span><span class="hex">#F3EEE1 / #1B1810</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--ink-2)"></div><div class="meta"><span class="role">Ink · secondary</span><span class="hex">#C4BBA6 / #524C3C</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--ink-3)"></div><div class="meta"><span class="role">Ink · muted</span><span class="hex">#8E8672 / #837B66</span></div></div>
+    </div>
+
+    <p class="label" style="margin:22px 0 10px">Accent &amp; status</p>
+    <div class="grid g-swatch">
+      <div class="swatch"><div class="chip-fill" style="background:var(--brass-solid)"></div><div class="meta"><span class="role">Brass · accent</span><span class="hex">#C8A24C / #B8912F</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--pine)"></div><div class="meta"><span class="role">Pine · secondary</span><span class="hex">#7FB79A / #2E5D46</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--good)"></div><div class="meta"><span class="role">Good · safe to wait</span><span class="hex">#0ca30c</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--warning)"></div><div class="meta"><span class="role">Warning · run</span><span class="hex">#fab219</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--critical)"></div><div class="meta"><span class="role">Critical · scarce now</span><span class="hex">#d03b3b</span></div></div>
+    </div>
+
+    <p class="label" style="margin:22px 0 10px">Position categoricals — CVD-validated, always paired with the position letter</p>
+    <div class="grid g-swatch">
+      <div class="swatch"><div class="chip-fill" style="background:var(--pos-qb)"></div><div class="meta"><span class="role">QB</span><span class="hex">#d55181 / #e87ba4</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--pos-rb)"></div><div class="meta"><span class="role">RB</span><span class="hex">#3987e5 / #2a78d6</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--pos-wr)"></div><div class="meta"><span class="role">WR</span><span class="hex">#2FA14B / #008300</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--pos-te)"></div><div class="meta"><span class="role">TE</span><span class="hex">#c98500 / #eda100</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--pos-k)"></div><div class="meta"><span class="role">K</span><span class="hex">#199e70 / #1baf7a</span></div></div>
+      <div class="swatch"><div class="chip-fill" style="background:var(--pos-dst)"></div><div class="meta"><span class="role">DST</span><span class="hex">#d95926 / #eb6834</span></div></div>
+    </div>
+    <p class="note">Validated with the data-viz palette checker on both brand surfaces: all hard CVD gates pass
+      (worst adjacent ΔE 8.4 dark / 9.1 light). On the light surface four hues fall below 3:1 — covered by the
+      relief rule, since every mark is paired with its position letter and a table view exists.</p>
+  </section>
+
+  <section class="sec">
+    <h2><span class="secnum">02</span>Typography</h2>
+    <p class="sub">Three voices: a transitional serif for display and player names, a humanist sans for interface
+      text, and a true monospace for every number — scores, survival %, projections — so figures align and read
+      like a ledger. Type stays on a modular scale; numbers use tabular figures.</p>
+    <div class="card type-specimen">
+      <div class="line"><span class="tag label">Display · serif</span><span class="disp-xxl">James Cook</span></div>
+      <div class="line"><span class="tag label">Display · scale</span>
+        <span class="disp-xl">Anchor the scarce tier</span></div>
+      <div class="line"><span class="tag label">Interface · sans</span>
+        <span class="body-md">Value is the marginal gain to your optimal nine-man starting lineup — the WR/RB flex filled by whichever helps most.</span></div>
+      <div class="line"><span class="tag label">Data · mono</span>
+        <span class="num-xl">41.2</span>
+        <span class="mono" style="color:var(--ink-3); font-size:var(--fs-sm)">MLV 22.4 · VONA +9.1 · σ 12.4 · surv 18%</span></div>
+      <div class="line"><span class="tag label">Micro-label</span>
+        <span class="eyebrow">On the clock · 3.03 · overall #27</span></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2><span class="secnum">03</span>Space, radius &amp; elevation</h2>
+    <p class="sub">A 4px spacing base and a restrained radius set — small corners for structure, pills only for
+      chips. Three elevation steps carry the surface hierarchy from board to card to floating overlay.</p>
+    <div class="two">
+      <div class="card panel">
+        <h3>Spacing scale — 4 · 8 · 12 · 16 · 24 · 32 · 48</h3>
+        <div class="ramp">
+          <div class="sp" style="width:4px;height:16px"></div>
+          <div class="sp" style="width:8px;height:24px"></div>
+          <div class="sp" style="width:12px;height:32px"></div>
+          <div class="sp" style="width:16px;height:40px"></div>
+          <div class="sp" style="width:24px;height:52px"></div>
+          <div class="sp" style="width:32px;height:64px"></div>
+          <div class="sp" style="width:48px;height:76px"></div>
+        </div>
+        <h3 style="margin-top:22px">Radius — 3 · 5 · 8 · 11 · pill</h3>
+        <div class="ramp">
+          <div class="rad" style="border-radius:3px"><span>3</span></div>
+          <div class="rad" style="border-radius:5px"><span>5</span></div>
+          <div class="rad" style="border-radius:8px"><span>8</span></div>
+          <div class="rad" style="border-radius:11px"><span>11</span></div>
+          <div class="rad" style="border-radius:999px"><span>pill</span></div>
+        </div>
+      </div>
+      <div class="card panel">
+        <h3>Elevation — e1 board · e2 card · e3 overlay</h3>
+        <div class="elev">
+          <div class="box" style="box-shadow:var(--e1)">e1</div>
+          <div class="box" style="box-shadow:var(--e2)">e2</div>
+          <div class="box" style="box-shadow:var(--e3)">e3</div>
+        </div>
+        <h3 style="margin-top:22px">Motion — 200ms · ease (.2,.7,.2,1)</h3>
+        <div class="panel" style="padding:0">
+          <div class="motion-demo"><i></i></div>
+          <p class="note">Hover this card — fills ease out over 200–380ms on <span class="mono">cubic-bezier(.2,.7,.2,1)</span>.
+            Reduced-motion collapses all transitions to zero.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2><span class="secnum">04</span>Components</h2>
+    <p class="sub">The kit the two product surfaces are assembled from: position chips, reserved status pills,
+      buttons, the Score-Components "why" bars, and the recommended-pick card.</p>
+    <div class="comp">
+      <div class="card panel">
+        <h3>Position chips &amp; status pills</h3>
+        <div class="tokline" style="margin-bottom:16px">
+          <span class="pos pos-QB">QB</span><span class="pos pos-RB">RB</span><span class="pos pos-WR">WR</span>
+          <span class="pos pos-TE">TE</span><span class="pos pos-K">K</span><span class="pos pos-DST">DST</span>
+        </div>
+        <div class="tokline" style="margin-bottom:16px">
+          <span class="stat-pill is-good">◗ 76% survives</span>
+          <span class="stat-pill is-warning">▲ RB run</span>
+          <span class="stat-pill is-critical">● scarce now</span>
+        </div>
+        <div class="tokline">
+          <span class="chip">Standard · non-PPR</span>
+          <span class="chip">12-team</span>
+          <span class="chip">Snake · 17 rd</span>
+        </div>
+        <h3 style="margin-top:22px">Buttons</h3>
+        <div class="tokline">
+          <button class="btn btn-primary">Draft James Cook</button>
+          <button class="btn">Compare</button>
+          <button class="btn">Explain the pick</button>
+        </div>
+      </div>
+
+      <div class="card panel">
+        <h3>Score components — the "why"</h3>
+        <div class="stack" style="gap:11px">
+          <div class="sc-row"><span class="label" style="text-transform:none;letter-spacing:.02em">MLV</span>
+            <div class="sc-track"><span class="sc-fill" style="left:0;width:70%;background:var(--pos-rb)"></span></div>
+            <span class="mono" style="font-size:var(--fs-xs)">22.4</span></div>
+          <div class="sc-row"><span class="label" style="text-transform:none;letter-spacing:.02em">VONA</span>
+            <div class="sc-track"><span class="sc-fill" style="left:0;width:52%;background:var(--brass-solid)"></span></div>
+            <span class="mono" style="font-size:var(--fs-xs)">+9.1</span></div>
+          <div class="sc-row"><span class="label" style="text-transform:none;letter-spacing:.02em">Risk</span>
+            <div class="sc-track"><span class="sc-mid" style="left:50%"></span><span class="sc-fill" style="right:50%;width:11%;background:var(--critical)"></span></div>
+            <span class="mono" style="font-size:var(--fs-xs)">−2.1</span></div>
+          <div class="sc-row"><span class="label" style="text-transform:none;letter-spacing:.02em">Cliff</span>
+            <div class="sc-track"><span class="sc-fill" style="left:0;width:24%;background:var(--pine)"></span></div>
+            <span class="mono" style="font-size:var(--fs-xs)">+3.0</span></div>
+        </div>
+        <p class="note">Score(p) = MLV + κ·max(0,VONA) − λ(phase,slot)·σ̂ + α·Cliff + capped modifiers. Every term is
+          surfaced, never a black box.</p>
+      </div>
+    </div>
+
+    <div class="card reco" style="margin-top:16px">
+      <div class="head">
+        <span class="eyebrow">Recommended · on the clock</span>
+        <span class="stat-pill is-critical">● 18% survives to #46</span>
+      </div>
+      <div class="body">
+        <div class="who">
+          <span class="pos pos-RB">RB</span>
+          <div>
+            <div class="name">James Cook</div>
+            <div class="meta mono">BUF · bye 7 · RB · replacement RB23</div>
+          </div>
+          <div class="score"><span class="eyebrow" style="display:block">Score</span><b>41.2</b></div>
+        </div>
+        <hr class="rule-brass" />
+        <div class="stack" style="gap:9px">
+          <div class="sc-row"><span class="label" style="text-transform:none;letter-spacing:.02em">MLV</span>
+            <div class="sc-track"><span class="sc-fill" style="left:0;width:70%;background:var(--pos-rb)"></span></div>
+            <span class="mono" style="font-size:var(--fs-xs)">22.4</span></div>
+          <div class="sc-row"><span class="label" style="text-transform:none;letter-spacing:.02em">VONA</span>
+            <div class="sc-track"><span class="sc-fill" style="left:0;width:52%;background:var(--brass-solid)"></span></div>
+            <span class="mono" style="font-size:var(--fs-xs)">+9.1</span></div>
+        </div>
+        <div class="legend-row" style="margin-top:2px">
+          <span class="stat-pill is-warning">▲ RB run — 4 of last 6</span>
+          <span class="chip">Last in RB Tier 3 · cliff 3.0</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2><span class="secnum">05</span>Chart marks &amp; legend</h2>
+    <p class="sub">Data marks follow one spec across every surface: thin 2px lines, rounded data-ends anchored to a
+      baseline, ≥8px markers, recessive grid, emphasized endpoints, and a legend whenever two or more series share
+      a frame. Identity is never color-alone — position hues sit beside their letter or a direct label.</p>
+    <div class="card panel">
+      <div class="legend-row" style="margin-bottom:14px">
+        <span class="lg"><span class="dot" style="background:var(--pos-rb)"></span>RB</span>
+        <span class="lg"><span class="dot" style="background:var(--pos-wr)"></span>WR</span>
+        <span class="lg"><span class="dot" style="background:var(--pos-qb)"></span>QB</span>
+        <span class="lg"><span class="dot" style="background:var(--pos-te)"></span>TE</span>
+      </div>
+      <svg viewBox="0 0 640 200" width="100%" role="img" aria-label="Illustrative positional value curves: RB declines steeply, WR flatter, QB and TE gentle.">
+        <g stroke="var(--grid)" stroke-width="1">
+          <line x1="40" y1="20" x2="40" y2="170"/><line x1="40" y1="170" x2="620" y2="170"/>
+          <line x1="40" y1="60" x2="620" y2="60"/><line x1="40" y1="115" x2="620" y2="115"/>
+        </g>
+        <text x="34" y="24" text-anchor="end" font-family="var(--font-mono)" font-size="9" fill="var(--ink-3)">160</text>
+        <text x="34" y="118" text-anchor="end" font-family="var(--font-mono)" font-size="9" fill="var(--ink-3)">40</text>
+        <text x="34" y="172" text-anchor="end" font-family="var(--font-mono)" font-size="9" fill="var(--ink-3)">0</text>
+        <path d="M46,28 C120,52 190,120 300,150 C420,162 520,166 614,168" fill="none" stroke="var(--pos-rb)" stroke-width="2" stroke-linecap="round"/>
+        <path d="M46,58 C150,74 260,108 380,140 C470,156 540,162 614,166" fill="none" stroke="var(--pos-wr)" stroke-width="2" stroke-linecap="round"/>
+        <path d="M46,120 C160,128 300,140 460,152 C520,157 570,160 614,162" fill="none" stroke="var(--pos-qb)" stroke-width="2" stroke-linecap="round"/>
+        <path d="M46,126 C160,134 300,150 460,160 C520,163 570,165 614,167" fill="none" stroke="var(--pos-te)" stroke-width="2" stroke-linecap="round" stroke-dasharray="1 5"/>
+        <circle cx="46" cy="28" r="4" fill="var(--pos-rb)"/><circle cx="46" cy="58" r="4" fill="var(--pos-wr)"/>
+        <text x="330" y="60" font-family="var(--font-ui)" font-size="10" fill="var(--ink-3)">Replacement: RB≈23 · WR≈41 · QB/TE≈13</text>
+      </svg>
+      <p class="note">Illustrative. In Standard scoring the RB curve breaks early and hard while the WR curve stays
+        flat and deep — the shape behind "anchor a scarce RB, accumulate WR breadth."</p>
+    </div>
+  </section>
+
+  <p class="foot">JAAFFL — personal, local-first CBS draft assistant · Standard (non-PPR) · 12-team · 17-round snake ·
+    the WR/RB flex is WR-or-RB only. Design tokens are theme-aware (light + dark) and WCAG-AA. Projections shown are
+    illustrative; any forward-year figure is ESTIMATED.</p>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement, btn = document.getElementById('themeBtn'), lbl = document.getElementById('themeLabel');
+    function current() {
+      var t = root.getAttribute('data-theme');
+      if (t) return t;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    function sync() { lbl.textContent = current() === 'dark' ? 'Light' : 'Dark'; }
+    btn.addEventListener('click', function () {
+      root.setAttribute('data-theme', current() === 'dark' ? 'light' : 'dark');
+      sync();
+    });
+    sync();
+  })();
+</script>
+</body>
+</html>

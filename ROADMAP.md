@@ -5,6 +5,12 @@ Dependency-ordered build plan, distilled from the
 roadmap"). Each stage maps to package boundaries already scaffolded in the repo. Build in
 order — later stages assume the earlier contracts exist.
 
+> **Execution-ready detail:** the phased, task-level build plan that fills in each stage below —
+> with file paths, interfaces, schemas, acceptance criteria, a v1-vs-stretch split, and a
+> sequenced backlog — lives in [`docs/implementation-plan.md`](docs/implementation-plan.md)
+> (its §10 Phasing maps to these same stages). This roadmap is the index; the implementation
+> plan is the how.
+
 Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` done
 
 ## Stage 1 — CBS sync layer
