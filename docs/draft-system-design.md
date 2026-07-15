@@ -732,3 +732,332 @@ via nflverse (advertised but nflverse schedule flagged a lapsed source); Fantasy
 FantasyPros $5.99 figure (as advertised — verify current).
 
 ---
+
+## 6. Subagent 2 — Feature & Factor Expansion
+
+> **Verbatim report from Subagent 2.** Mandate: expand every feature/input/factor/weighting for
+> the selected engine components, scoped to this exact roster; justify inclusion/exclusion and
+> weights; fully specify the objective math. Scope lock: **12-team, snake, 17 rounds, NON-PPR
+> standard, roster QB1/RB1/WR3/(W-R)FLEX1/TE1/K1/DST1 + 8 bench.** Where the answer changes
+> because of *zero PPR*, the *WR/RB-only flex*, or *only one mandatory RB*, it is called out.
+
+### 6.A Reasoning log (stepwise)
+
+**Step 1 — Establish the currency: everything reduces to marginal, league-relative points, not
+raw points.** Raw projected points are not comparable across positions (a QB ~300, a WR ~180).
+The decision-relevant quantity is *how many more points a player gives your starting lineup than
+the freely-available alternative at that slot* — VOR/VBD ([FantasyPros VBD](https://www.fantasypros.com/2025/06/fantasy-football-draft-strategy-value-based-drafting-vorp-vols-vona/);
+[FFA](https://fantasyfootballanalytics.net/2024/08/winning-fantasy-football-with-projections-value-over-replacement-and-value-based-drafting.html)).
+The master feature list splits into **(Tier-1) features that enter the objective directly**
+(VOR/marginal-lineup-value, VONA, risk σ, tier cliffs) and **(Tier-2) features that only refine
+the projection μ and its spread σ *before* they hit the objective** (snap share, carry share,
+age, red-zone usage, etc.). Confusing the two is the most common design error; usage stats do
+**not** get their own additive weight — they move μ/σ. This framing governs the whole report.
+
+**Step 2 — Fix the replacement baselines from THIS roster's starter demand.** League-wide demand
+(12 teams): QB 12, TE 12, K 12, DST 12; combined RB/WR pool = RB 12 + WR 36 + flex 12 = **60
+RB/WR slots**. Flex is WR-or-RB only → QB/TE/K/DST baselines at **index ≈ 12–13** (shallow → VOR
+collapses to near-zero just past elite → *defer/stream*). RB and WR baselines depend on the flex
+split (Step 6). Reference framework: Subvertadown VOLS vs VORP vs man-games/BEER
+([baselines](https://subvertadown.com/article/guide-to-understanding-the-different-baselines-in-value-based-drafting-vbd-vols-vs-vorp-vs-man-games-and-beer-)).
+
+**Step 3 — Standard scoring re-shapes position value in two quantifiable ways.** (a) *WR value
+becomes breadth, not top-end* — removing the reception point strips ~1 pt/catch; a 90-catch
+possession WR loses ~90 pts vs PPR while a 45-catch deep threat loses ~45 → non-PPR **compresses
+the WR curve, pushes the WR baseline deep (~WR40)**, and re-weights the desirable-WR profile
+toward **yards + TDs (air yards, aDOT, deep/red-zone targets)** and away from raw reception
+volume. (b) *RB value becomes top-end scarcity* — the elite-RB cliff is steep and flattens fast
+(~RB20). This is why **Zero-RB is counter-indicated here** and QBs are *relatively* more valuable
+in non-PPR ([DraftSharks 12-team standard](https://www.draftsharks.com/article/fantasy-football-draft-strategy-guide/12-team-standard)).
+
+**Step 4 — Timing is opportunity cost: add VONA/survival on top of static VOR.** Static VOR says
+*how good*; VONA says *draft now vs wait* by discounting a player's value by the best value you
+expect still available at that position at your **next** pick ([FantasyPros](https://www.fantasypros.com/2025/06/fantasy-football-draft-strategy-value-based-drafting-vorp-vols-vona/);
+[Stanford Stevens](https://stanfordstevens.com/value_of_vona.html)). This needs survival
+probabilities → ADP **mean + SD** — and the FFC API delivers per-player `adp`, `stdev`, `high`,
+`low`, `times_drafted` (verified live). VONA makes the assistant "live."
+
+**Step 5 — Uncertainty is first-class: carry the whole distribution, tune λ by phase/slot.**
+Consensus-averaged projections beat any single source and give a **cross-source spread** → σ/floor/
+ceiling ([FFA projection accuracy](https://fantasyfootballanalytics.net/2024/12/which-fantasy-football-projections-are-most-accurate.html)).
+`utility = value − λ·σ`; λ is **phase- and slot-aware** (floor-tilt for starters, ceiling-tilt
+for cheap late bench). RB durability (~27% of RBs play a full season — [Footballguys](https://www.footballguys.com/article/2025-running-back-milage-myth-what-numbers-say-about-workload-injuries))
+is a direct σ-widener concentrated at RB.
+
+**Step 6 — Resolve the flex split empirically, not by assumption.** The split *is* the RB and WR
+baselines, so measure it (three $0 ways in Section 6.E). Non-PPR tilts the flex toward RB (WR
+curve compressed); prior is RB-heavy. Adopt **8 RB / 4 WR (RB baseline ≈ 20, WR ≈ 40)** default,
+expose as the single most important tunable, show how baselines move at 6/6 or 10/2.
+
+**Step 7 — Tiers as the guard rail; K/DST/QB/TE timing as corollaries.** Boris-Chen GMM tiers on
+ECR expose *cliffs* the continuous score hides ([Boris Chen draft kit](http://www.borischen.co/p/draft-kit.html))
+→ prevent reaching across a tier gap; fire "last-in-tier" urgency. Shallow baselines dictate: **K
+last (R17), DST second-to-last (R16), both streamed** (least predictable — only ~4/10 top-drafted
+Ks stay K1: [SI](https://www.si.com/onsi/fantasy/nfl/fantasy-football-strategy-guide-when-draft-kicker-defense);
+[FantasyPros](https://www.fantasypros.com/2025/06/fantasy-football-strategy-tips-dont-draft-a-kicker/));
+**QB/TE deferred** unless elite — exception: an **elite TE's edge over TE12 can exceed WR1's over
+WR24**, so a top-2/3 TE at value is a legitimate positional-advantage pick ([Sharp Football](https://www.sharpfootballanalysis.com/fantasy/fantasy-football-te-tiers/)).
+
+### 6.B Master feature / factor table
+
+Legend — **Class:** T1 = enters objective directly; T2 = refines projection μ; T2σ = refines
+spread σ/floor/ceiling; MOD = live draft modulator. **Weight** = relative importance for THIS
+league (Punt ≈ ignore; Low/Med/High/Core). Numeric defaults that feed the objective are in
+Section 6.C and marked *tunable*.
+
+**6.B.1 — Tier-1 objective features (the score is built from these)**
+
+| Feature | Source | Computation | Include/Exclude + why (this league) | Weight | Position/phase modulation |
+|---|---|---|---|---|---|
+| **Projected fantasy pts μ (per CBS scoring)** | CBS on-page (authoritative settings + projections) blended w/ nflverse `load_ff_rankings` ECR-implied pts + `load_ff_opportunity` xEP prior; optional FP API | Recompute each stat line under exact CBS map (Pass 1/25, TD6, INT−2; Rush 1/10, TD6; Rec 1/10, TD6, **Rec 0**). Simple average of sources | **INCLUDE — Core.** Everything else refines this; must be computed under *zero-PPR* or every skill value is wrong | **Core (1.0)** | Basis for all; recomputed live as CBS updates |
+| **Projection spread σ / floor / ceiling** | Cross-source dispersion + historical position weekly residual σ (nflreadpy) | σ_p = blend(cross-source SD, historical same-tier weekly SD); Floor≈10th pct, Ceiling≈90th | **INCLUDE — Core.** Enables risk term; non-PPR RB fragility & TE TD-dependence make σ position-specific | **Core** (risk arm) | RB & TE widest σ; bench weights ceiling; starters weight floor |
+| **Positional replacement baseline pts** | Derived from THIS roster + `load_ff_rankings` ranks | Baseline = projected pts at replacement index (QB13, TE13, K13, DST13, RB≈20–24, WR≈40–42), man-games-adjusted, VOLS-blended | **INCLUDE — Core.** Makes positions comparable; set *from this roster's starter counts* | **Core** | Deep WR (breadth), moderate/scarce RB, shallow QB/TE/K/DST |
+| **VOR / Marginal-Lineup-Value (flex-aware)** | Computed | MLV_p = gain to optimal replacement-filled 9-man lineup from adding p (bipartite incl. WR/RB flex) — §6.C | **INCLUDE — Core.** Generalizes VOR; auto-encodes roster need + flex; reduces to VOR on empty roster | **Core (currency)** | Falls to bench value once slot filled; flex lets a 4th WR add value |
+| **ADP mean** | FFC API (`adp`, non-PPR 12-tm, daily) + CBS on-page ADP | Consensus expected draft slot | **INCLUDE — High.** Drives survival/VONA + "is he a reach?" | **High** | Mid-draft value gaps exploitable |
+| **ADP dispersion (stdev, high, low)** | FFC API (`stdev`,`high`,`low`,`times_drafted`) — **verified present** | Survival S_j(N)=1−Φ((N−m_j)/s_j) | **INCLUDE — High.** Without SD, survival is a point-mass; SD is the engine of VONA realism | **High** | Wider SD (rookies/role-change) → hedge earlier |
+| **VONA / survival-discounted value** | Computed from ADP mean+SD + your snake schedule | VONA_p = MLV_p − E[MLV of best surviving player at pos(p) by next pick] | **INCLUDE — High.** Draft-now-vs-wait; the "live" differentiator | **High** (κ≈0.5–0.8) | High for RB (scarce), low for WR (deep); rises near your turn & during runs |
+| **Tier membership + gap-to-next-tier** | Boris-Chen GMM on ECR (`load_ff_rankings`) | 1-D GMM clustering; flag "last in tier" + inter-tier gap | **INCLUDE — Med/High.** Guard cliffs; last-in-tier urgency | **Med-High** (α≈0.3–0.5) | Steep early cliffs (elite RB, top-3 TE, top-5 QB); flat late |
+| **Bye week** | FFC API (`bye`) / nflreadpy | Penalize ≥3 starters sharing a bye; don't stack top-2 RB byes | **INCLUDE — Low.** Real but small; roster-construction constraint | **Low** (≤~3 pts) | Binds mid/late once starters set |
+| **Roster-state / slots filled** | Live (your picks) | Feeds MLV need weighting | **INCLUDE — High (structural).** Core to marginal value | **High** | Every pick |
+| **Positional-run detector** | Live CBS board vs FFC ADP | If position picks outpace ADP → boost that position's VONA | **INCLUDE — Med.** Runs = main live scarcity shock | **Med** (MOD) | Mid-draft RB runs classic |
+
+**6.B.2 — Tier-2 features that refine projection μ (usage/opportunity)** — these get **no additive
+score weight**; they adjust μ (recommend **capped ±10–15%**) and set confidence. Descending non-PPR
+importance:
+
+| Feature | Source | Computation | Include/Exclude + why | μ-influence | Modulation |
+|---|---|---|---|---|---|
+| **Snap share %** | nflreadpy snap counts | Trailing role %, 3–4 game window | **INCLUDE — High.** Durable leading indicator; ≥70% snaps ≈ 2× pts of <50% ([SIS/FRA](https://fantasyrankingsauthority.com/target-share-and-snap-count-rankings)) | High | RB & WR role security; flag committees |
+| **Carry share / rush attempts** | nflreadpy weekly/pbp | Share of team RB carries; volume | **INCLUDE — High (RB).** Non-PPR RB value ≈ volume + TDs | High (RB) | RB core; ~0 elsewhere |
+| **Opportunity share / weighted opp + xEP** | nflreadpy + `load_ff_opportunity` (xgboost xEP) | Carries+targets weighted by scoring value; actual−xEP = regression signal | **INCLUDE — High.** Stable prior + over/under-performer flag ([ffopportunity](https://ffopportunity.ffverse.com/)) | High | RB (carries+GL), WR/TE (targets) |
+| **Target share** | nflreadpy weekly/pbp | Share of team targets | **INCLUDE — Med/High WR/TE.** *Down-weighted vs PPR:* value the yards/TDs targets create, not catch count | Med-High (WR/TE) | Pair with aDOT; short-target WR worth less here |
+| **Air yards / aDOT / WOPR / deep-target share** | nflreadpy pbp | WOPR=1.5·tgt-share+0.7·air-yard-share | **INCLUDE — Med/High WR (non-PPR-specific).** Non-PPR rewards big plays/TDs → deep WRs gain | Med-High (WR) | Elevate boom WRs; standard-scoring re-weight |
+| **Red-zone & goal-line (inside-5)** | nflreadpy pbp | Weight goal-line > raw RZ; TD-rate prior | **INCLUDE — Med/High.** TDs 6 pts, non-PPR TD-heavy; use goal-line ([xTD](https://www.fantasypoints.com/nfl/articles/2023/xtd-touchdown-regression-candidates)) | Med-High | RB (GL carries), TE (RZ targets), WR |
+| **Route participation % / YPRR** | nflreadpy (routes) | Route %, yards per route run | **INCLUDE — Med WR/TE.** Role security + breakout | Med (WR/TE) | Confirms snaps; breakout ID |
+| **Team pace / plays / PROE** | nflreadpy pbp | Plays/game, pass-over-expected | **INCLUDE — Med.** Volume multiplier | Med | Pass-pace lifts WR/TE; run lifts RB |
+| **QB / passing-environment quality** | nflreadpy + projections | Team pass eff, QB proj | **INCLUDE — Med WR/TE.** Pass-catcher ceiling capped by QB | Med (WR/TE) | — |
+| **Target/carry competition & vacated volume** | nflreadpy depth charts, rosters | Teammate hierarchy; vacated targets/carries | **INCLUDE — Med.** Best breakout signal | Med | Rookie WR into vacated targets; new lead RB |
+| **O-line quality** | Proxy: nflreadpy adj-line-yards / rush eff | Team rush-eff proxy | **INCLUDE (proxy) — Low/Med RB.** Noisy at $0 | Low-Med (RB) | RB only; mark proxy/UNVERIFIED |
+| **Team implied total / Vegas** | Not in $0 list | Proxy via team offensive projection | **PARTIAL/EXCLUDE core.** No clean $0 Vegas feed | Low (proxy) | K/DST streaming benefits most |
+
+**6.B.3 — Tier-2σ features (intrinsic risk/availability — refine σ, floor, μ-haircut)**
+
+| Feature | Source | Computation | Include/Exclude + why | Weight | Modulation |
+|---|---|---|---|---|---|
+| **Age (position aging curve)** | nflreadpy rosters | WR peak 25–28 (~26.95), decline >30; RB peak ~25.5, cliff after 28 ([PFF](https://www.pff.com/news/fantasy-football-metrics-that-matter-aging-curves-by-position); [4for4](https://www.4for4.com/2025/preseason/production-curves-positional-breakouts-prime-years-and-falloffs-age)) | **INCLUDE — Med (position-specific).** RB age hard signal; WR softer | Med (RB)/Low-Med (WR) | RB μ-haircut + σ-widen ≥28; WR mild >30; QB/TE age-agnostic in range |
+| **Injury designation / current status** | CBS on-page + nflreadpy | Q/D/O → availability haircut, floor down | **INCLUDE — High when flagged.** Live, decisive | High (conditional) | Any position; live |
+| **Durability / games-missed history** | nflreadpy (career games) | Games-missed rate → σ widener, floor down | **INCLUDE — Med, concentrated at RB.** ~27% RBs full season; high-risk miss ~3× ([Footballguys](https://www.footballguys.com/article/2025-running-back-milage-myth-what-numbers-say-about-workload-injuries)) | Med (RB)/Low | Raises handcuff value of that RB's backup |
+| **Rookie / draft capital** | nflreadpy draft picks | Draft round → opportunity prior; wider σ | **INCLUDE — Med.** Capital predicts usage; rookies boom/bust | Med | Rookie RB (early capital) can leapfrog; rookie WR wide σ |
+| **Role-change flag (new team/promotion)** | nflreadpy roster+depth diffs | Flag changed team/depth rank | **INCLUDE — Med.** Widens σ | Med | Reduce confidence; ceiling-tilt if late |
+| **Historical weekly consistency / boom-bust** | nflreadpy weekly | Weekly σ, % boom & bust games | **INCLUDE — Med.** Calibrates floor/ceiling for λ | Med | Boom-bust fine for bench, bad for must-start |
+| **Experience / breakout-age (WR yr-3)** | nflreadpy | Years in league | **INCLUDE — Low.** Minor WR breakout prior | Low | WR only |
+
+**6.B.4 — Schedule & matchup (deliberately down-weighted)**
+
+| Feature | Source | Computation | Include/Exclude + why | Weight | Modulation |
+|---|---|---|---|---|---|
+| **Full-season SOS (positional)** | nflreadpy-derived / FantasyPros | Sum opponent positional pts-allowed | **INCLUDE — Low (tiebreaker).** Pre-season 17-wk SOS unstable; must not override volume ([Athlon](https://athlonsports.com/fantasy/fantasy-football-strength-of-schedule-for-beginners)) | Low | Tiebreak near-equal players |
+| **Early-season SOS (wks 1–4)** | derived | Opp quality wks 1–4 | **INCLUDE — Low.** Most stable slice | Low | Slight lean early starters |
+| **Playoff-weeks SOS (wks 15–17)** | derived | Opp quality wks 15–17 | **INCLUDE — Low.** Championship-week tiebreak | Low | Late bench/streamer tiebreak |
+
+**6.B.5 — K / DST (punt tier)**
+
+| Feature | Source | Computation | Include/Exclude + why | Weight | Modulation |
+|---|---|---|---|---|---|
+| **K: team implied total / dome / FG-rate** | nflreadpy + proxy | Weak TD/FG-volume prior | **INCLUDE — Punt.** Least predictable; VOR≈0 → **draft R17, then stream** | Punt | Never reach; matchup-stream |
+| **DST: sacks/INT/TD + pts- & yds-allowed tiers + SOS** | nflreadpy + schedule | Project turnovers/sacks; weight BOTH our pts- and yds-allowed tiers; favor DSTs vs low-total offenses | **INCLUDE — Punt (slight top-tier edge).** **Draft R16, stream by matchup** | Punt/Very-Low | Stream weak-offense opponents; wks 1–3 SOS |
+
+### 6.C Objective function & core math (fully specified for THIS roster)
+
+**6.C.0 Notation.** Starting slots `S = {QB, RB, WR1, WR2, WR3, FLEX(RB|WR), TE, K, DST}`; rostered
+players `R`. Per player: μ_p (season pts, CBS scoring), σ_p, floor f_p, ceiling c_p, ADP mean m_p,
+ADP SD s_p.
+
+**6.C.1 Stage 0 — Projection blend (produce μ_p, σ_p)**
+```
+μ_p = Σ_s w_s · proj_{s,p}   over sources s ∈ {CBS_onpage, ECR→pts (load_ff_rankings),
+                                              xEP prior (load_ff_opportunity), [FP API opt]}
+default w_s = 1/n  (simple average — empirically ≥ weighted; wisdom of crowd)
+σ_p = blend( SD across sources , historical same-position/tier weekly-residual SD )
+f_p = μ_p − z_lo·σ_p ,  c_p = μ_p + z_hi·σ_p   (z≈1.28 for 10/90 pct)
+```
+All `proj` recomputed under the **exact CBS map** (Rec = 0). This step is where non-PPR is
+enforced. ([Projection-averaging evidence](https://fantasyfootballanalytics.net/2024/12/which-fantasy-football-projections-are-most-accurate.html))
+
+**6.C.2 Replacement baselines — the load-bearing computation for THIS roster.**
+Raw starter demand (12 teams): `QB 12 | TE 12 | K 12 | DST 12`; `RB/WR pool = 12·RB(1) + 12·WR(3)
++ 12·flex = 60`. Flex split (default **8 RB / 4 WR**): `RB demand = 12+8 = 20 → VOLS RB20`;
+`WR demand = 36+4 = 40 → VOLS WR40`.
+
+**Man-games (BEER) deepening** — rostered starters miss games (byes+injury), covered from the same
+pool, so *effective* replacement is deeper. Extra bodies ≈ (starters × games_missed)/17:
+```
+RB: 20 × ~4 = 80/17 ≈ +4.7 → ≈ RB25   (RBs: only ~27% full season)
+WR: 40 × ~2.5 = 100/17 ≈ +5.9 → ≈ WR46
+QB: 12 × ~2 = 24/17 ≈ +1.4 → QB13–14
+TE: 12 × ~2.5 = 30/17 ≈ +1.8 → TE13–14
+```
+**Blend toward VOLS for the scarce top end** (`baseline = 0.5·VOLS + 0.5·man-games`):
+
+| Pos | VOLS idx | Man-games idx | **Recommended baseline (tunable)** | Behavior |
+|---|---|---|---|---|
+| QB | 12 | 13–14 | **QB13** | shallow → **defer** |
+| RB | 20 | 25 | **RB22–24** | moderate/scarce top → **anchor early** |
+| WR | 40 | 46 | **WR42** | deep → **breadth, wait** |
+| TE | 12 | 13–14 | **TE13** | shallow → **defer unless elite** |
+| K | 12 | 12–13 | **K13** | flat → **round 17** |
+| DST | 12 | 13 | **DST13** | flat → **round 16** |
+
+**Flex-split sensitivity:** 6 RB/6 WR → RB18/WR42; 10 RB/2 WR → RB22/WR38. RB baseline swings ±2
+ranks ≈ 2–4 pts VOR on the RB20 bubble — enough to flip mid-round RB-vs-WR → *measure it live*.
+**Dynamic VBD:** recompute baselines during the draft from *remaining* startable slots as
+positions deplete (a mid-draft RB run raises the effective RB baseline) — the bridge into VONA.
+
+**6.C.3 Stage 1 — Flex-aware Marginal Lineup Value (the value currency).** Define the
+replacement-filled baseline lineup `B(R)`: fill every *empty* starting slot with a phantom
+replacement at that slot's position (flex phantom = max(RB_base, WR_base)); take the optimal
+assignment value.
+```
+L*(R) = max over position-legal assignments of  Σ_slot μ(player_in_slot)
+MLV_p = L*( B(R ∪ {p}) ) − L*( B(R) )
+```
+Properties: **empty roster** → MLV = μ − baseline = classic VOR (cross-position comparable; does
+*not* over-rank raw QB points); **WR/RB flex native** (flex phantom = max(RB_base, WR_base); a 4th
+WR still beats the flex phantom); **need automatic** (once QB slot holds a real QB, a 2nd QB's MLV
+≈ μ_QB2 − μ_QB1 → auto-deferred; no hand-tuned "need multiplier"). Assignment = Hungarian on 9
+slots (or trivially best RB→RB, best 3 WR→WR1-3, flex = max(next RB, next WR)).
+
+**6.C.4 Stage 2 — VONA / survival (opportunity cost, the live engine).** For player `j`, future
+overall pick `N`, FFC ADP mean `m_j`, SD `s_j`:
+```
+Survival  S_j(N) = P(slot_j > N) = 1 − Φ( (N − m_j) / s_j )
+N* = your next overall pick (snake schedule)
+E[BestAvail_π(N*)] = survival-weighted expected max MLV among position-π players (≈ MLV of the
+                     π-player whose cumulative survival first crosses ~0.5)
+VONA_p = MLV_p − E[BestAvail_{pos(p)}(N*)]
+```
+**Worked example:** you hold 3.01 (overall 25); next pick 4.12 (overall 48), 23 away. WR `m=30,
+s=8`: `S(48)=1−Φ(2.25)=0.012` → ~1% lasts → high VONA now. RB `m=55, s=10`: `S(48)=1−Φ(−0.7)=0.758`
+→ **76%** available → low VONA → safe to wait. Exactly the WR-vs-RB call, from data FFC returns.
+
+**6.C.5 Stage 3 — Risk term & the λ schedule.**
+```
+Value_p   = MLV_p + κ · max(0, VONA_p)        # value + scarcity urgency, κ≈0.5–0.8 (avoid double-count)
+Utility_p = Value_p − λ(phase, slot) · σ̂_p     # σ̂ = σ normalized to season-pts scale
+```
+λ schedule (**λ>0 = floor-tilt**, **λ<0 = ceiling-tilt**; *tunable*):
+
+| Phase (rounds) | Intent | Default λ | Rationale |
+|---|---|---|---|
+| R1–2 anchors | mild floor | **+0.2 to +0.4** | protect premium capital; bank the berth |
+| R3–6 core starters | mild floor | **+0.1 to +0.3** | reliable weekly starters |
+| R7–9 flex/starter fill | neutral | **≈ 0** | best value |
+| R10–13 bench upside | ceiling | **−0.2 to −0.4** | cheap lottery tickets |
+| R14–17 deep bench | strong ceiling | **−0.3 to −0.5** | pure swings (K/DST exempt = punt) |
+
+**Slot override (dominates phase):** filling your **last open startable slot** at a position →
+force floor-tilt (+); surplus depth/stash → force ceiling-tilt (−). Upgrade path: a Stage-6
+Monte-Carlo season simulator (maximize P(playoffs)/P(title)) endogenizes this, with λ as the live
+proxy.
+
+**6.C.6 Stage 4 — Tier cliff guard.** From Boris-Chen GMM tiers on ECR:
+```
+CliffBonus_p = (MLV_p − MLV_{best player in next tier down at pos(p)})  if p is LAST in tier, else 0
+```
+Add `α · CliffBonus_p`, α≈0.3–0.5; hard-flag "about to reach across a tier gap to a needier
+position." ([Boris Chen](http://www.borischen.co/2013/08/ppr-draft-tiers-and-clustering_7.html))
+
+**6.C.7 Final canonical score.**
+```
+Score(p) =  MLV_p                       # flex-aware value core (replacement + need + flex)
+          + κ · max(0, VONA_p)          # scarcity urgency (survival from ADP mean+SD), κ≈0.5–0.8
+          − λ(phase,slot) · σ̂_p         # risk, λ per schedule
+          + α · CliffBonus_p            # tier-cliff urgency, α≈0.3–0.5
+          + Σ modifiers                 # bye-stack −, handcuff-synergy +, SOS tiebreak ± (capped ≤~3–5 pts)
+```
+Rank candidates by `Score(p)`; surface top-N with tier, survival %, VONA, floor/ceiling. **All
+Greek-letter weights are tunables with the defaults above.**
+
+### 6.D Position-by-position feature/weighting playbook
+
+**QB (1 · baseline QB13 · DEFER).** VOR ≈ 0 past top ~4–5 → wait (R7–10) unless elite falls.
+Non-PPR nudges QBs *slightly* earlier than PPR ([DraftSharks](https://www.draftsharks.com/article/fantasy-football-draft-strategy-guide/12-team-standard))
+but they still lose to elite RB/WR. **Dominant feature: rushing yards/TDs**, then pass volume,
+team total, weapons, pass-block. λ small. Draft exactly **one**; 2nd QB only a late stash.
+
+**RB (1 mandatory + flex · baseline RB22–24 · ANCHOR EARLY).** Scarcity position: non-PPR + one
+mandatory RB makes the elite tier steep, flat by ~RB20 → **Zero-RB counter-indicated**; secure
+1–2 bellcows R1–3. **μ features: carry share, snap share, goal-line carries, weighted opp/xEP,
+pass-down role. σ: age (cliff 28–29), durability (27% full-season) → widest σ.** VONA urgency
+**high**. Handcuffs = premium late ceiling stashes (championship leverage).
+
+**WR (3 + flex · baseline WR40–42 · BREADTH, ACCUMULATE).** Deep baseline → each marginal WR worth
+less than PPR, but you need 3–4 → **volume-draft WRs mid-rounds**. **Non-PPR profile: weight air
+yards/aDOT/deep-target/red-zone/TD-rate UP, raw reception/target *count* DOWN.** VONA urgency
+**low** (breadth) except during a WR run. λ: floor for WR1, ceiling-tolerant WR3/flex/bench.
+
+**TE (1 · baseline TE13 · DEFER unless elite).** Non-premium → TE6–12 flat/replaceable → default
+**defer/stream**. **Exception: a top-2/3 elite TE whose edge over TE12 can exceed WR1's over WR24**
+([Sharp Football](https://www.sharpfootballanalysis.com/fantasy/fantasy-football-te-tiers/)) — worth
+a mid-round pick; below it, punt/stream. High TD-dependence → wide σ.
+
+**K (1 · baseline K13 · ROUND 17, STREAM).** Least predictable (~4/10 top Ks stay K1); edge ≈ 0.
+**Never reach; draft last; stream on team-total/dome/matchup.** ([SI](https://www.si.com/onsi/fantasy/nfl/fantasy-football-strategy-guide-when-draft-kicker-defense);
+[FantasyPros](https://www.fantasypros.com/2025/06/fantasy-football-strategy-tips-dont-draft-a-kicker/))
+
+**DST (1 · baseline DST13 · ROUND 16, STREAM).** Wildly variable; thin top-tier edge. **Draft
+second-to-last; stream weak-offense opponents.** Scoring has **both points- AND yards-allowed
+tiers** → favor DSTs facing low-total, low-yardage offenses; wks 1–3 SOS for the drafted one.
+
+**Flex (WR/RB only).** Its league composition *is* the RB/WR baseline (§6.C.2); default 8 RB/4 WR,
+**measure live**. On your roster, filled by the §6.C.3 assignment.
+
+**Bench (8 spots, ~R9–17 minus 1 K + 1 DST → ~6 skill stashes).** **Ceiling-tilt (λ<0), high-σ
+lottery tickets** — handcuffs, upside young WRs, role-change breakouts. **Skew RB-heavy** (thin
+position + injury churn — [DraftSharks](https://www.draftsharks.com/article/fantasy-football-draft-strategy-guide/12-team-standard)).
+Early-bench (R9–11) = safer bye/injury insurance; last picks = pure upside swings.
+
+### 6.E Open questions / tunables to calibrate + Sources
+
+**Primary tunable — the flex RB/WR split (sets RB & WR baselines).** Default 8 RB/4 WR → RB≈20,
+WR≈40. Three $0 ways to pin it: (1) **ADP-implied** — from FFC non-PPR 12-team ADP, count RB vs WR
+in the top-108; flex_RB = (RBs in top-108 − 12), flex_WR = (WRs in top-108 − 36); rerun daily.
+(2) **Optimizer-implied** — run the §6.C.3 optimizer over projections across simulated rosters;
+tally optimal flex RB vs WR. (3) **Backtest** — from nflreadpy weekly, compute season-long optimal
+flex for top-60 RB/WR. Prior RB-heavy; expect 6/6 → 10/2. Sensitivity: 6/6→RB18/WR42; 10/2→RB22/WR38.
+
+**Other tunables (defaults given; knobs):** **κ (VONA)** 0.5–0.8 (raise near your turn/during runs;
+*UNVERIFIED optimum — mock-draft backtest*); **λ schedule** (R1–2 sign debatable — A/B vs a
+playoff-odds sim); **α (cliff)** 0.3–0.5; **projection-blend weights** start simple-average;
+**μ-refinement cap** ±10–15%; **man-games missed assumptions** (RB~4, WR~2.5, QB/TE~2 → swap in
+nflreadpy history); **O-line/team-total** proxies only (UNVERIFIED at $0; FP API $5.99/mo would
+firm up); **red-zone** prefer goal-line/inside-5; **survival model** normal-approx default (truncated/
+skew or direct Monte-Carlo opponent draw as refinement).
+
+**Sources:** [FantasyPros VBD](https://www.fantasypros.com/2025/06/fantasy-football-draft-strategy-value-based-drafting-vorp-vols-vona/) ·
+[FantasyPros glossary](https://support.fantasypros.com/hc/en-us/articles/115005868747) ·
+[FP VBD rankings](https://www.fantasypros.com/nfl/rankings/vbd.php) ·
+[FFA VOR/VBD](https://fantasyfootballanalytics.net/2024/08/winning-fantasy-football-with-projections-value-over-replacement-and-value-based-drafting.html) ·
+[FFA projection accuracy](https://fantasyfootballanalytics.net/2024/12/which-fantasy-football-projections-are-most-accurate.html) ·
+[Subvertadown baselines](https://subvertadown.com/article/guide-to-understanding-the-different-baselines-in-value-based-drafting-vbd-vols-vs-vorp-vs-man-games-and-beer-) ·
+[Subvertadown snake scarcity](https://subvertadown.com/article/fantasy-snake-drafts-and-strategizing-for-scarcity----snake-value-based-drafting) ·
+[VONA value](https://stanfordstevens.com/value_of_vona.html) ·
+[FFC ADP API](https://help.fantasyfootballcalculator.com/article/42-adp-rest-api) ·
+[FFC non-PPR ADP](https://fantasyfootballcalculator.com/adp) ·
+[Boris Chen draft kit](http://www.borischen.co/p/draft-kit.html) ·
+[Boris Chen clustering](http://www.borischen.co/2013/08/ppr-draft-tiers-and-clustering_7.html) ·
+[ffopportunity xEP](https://ffopportunity.ffverse.com/) ·
+[load_ff_opportunity](https://nflreadr.nflverse.com/reference/load_ff_opportunity.html) ·
+[PFF aging curves](https://www.pff.com/news/fantasy-football-metrics-that-matter-aging-curves-by-position) ·
+[4for4 production curves](https://www.4for4.com/2025/preseason/production-curves-positional-breakouts-prime-years-and-falloffs-age) ·
+[snap/target-share predictiveness](https://fantasyrankingsauthority.com/target-share-and-snap-count-rankings) ·
+[xTD / red-zone regression](https://www.fantasypoints.com/nfl/articles/2023/xtd-touchdown-regression-candidates) ·
+[SOS = tiebreaker](https://athlonsports.com/fantasy/fantasy-football-strength-of-schedule-for-beginners) ·
+[TE tiers](https://www.sharpfootballanalysis.com/fantasy/fantasy-football-te-tiers/) ·
+[When to draft K/DST](https://www.si.com/onsi/fantasy/nfl/fantasy-football-strategy-guide-when-draft-kicker-defense) ·
+[Don't draft a kicker](https://www.fantasypros.com/2025/06/fantasy-football-strategy-tips-dont-draft-a-kicker/) ·
+[Non-PPR 12-team strategy](https://www.draftsharks.com/article/fantasy-football-draft-strategy-guide/12-team-standard) ·
+[RB durability](https://www.footballguys.com/article/2025-running-back-milage-myth-what-numbers-say-about-workload-injuries) ·
+[injury finder](https://www.playerprofiler.com/article/nfl-injured-players-injury-finder/)
+
+---
