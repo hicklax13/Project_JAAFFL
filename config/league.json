@@ -1,0 +1,57 @@
+{
+  "_comment": "PERSISTENT LEAGUE MEMORY for JAAFFL. Any coding or agent work MUST read this file (and CLAUDE.md) BEFORE beginning, to avoid loss of critical configuration. These settings are owner-provided and IMMUTABLE — never paraphrase, summarize, or change them without explicit owner approval.",
+  "version": 1,
+  "immutable": true,
+  "source": "Owner-provided league constitution (verbatim).",
+  "last_confirmed": "2026-07-15",
+  "league": {
+    "platform": "CBS Sports",
+    "draft_type": "snake",
+    "teams": 12,
+    "draft_order": {
+      "method": "Decided in-person, then entered into CBS Sports system",
+      "infer_from_team_count": false,
+      "note": "Do NOT assume a simple snake order from team count alone. The actual order is decided in person and entered into CBS; read the real order from the CBS draft room."
+    },
+    "scoring_format": "Standard",
+    "scoring_note": "Standard = non-PPR (0 points per reception). Exact per-category values follow CBS 'Standard' defaults; confirm precise yardage/TD/turnover and K/DST values from the league's CBS scoring settings page before relying on them for point projections.",
+    "draft_rounds": 17,
+    "roster_slots_per_team": {
+      "QB": 1,
+      "RB": 1,
+      "WR": 3,
+      "WR/RB": 1,
+      "TE": 1,
+      "K": 1,
+      "DST": 1,
+      "Bench": 8
+    }
+  },
+  "roster_derived_facts": {
+    "starters_total": 9,
+    "starters_breakdown": "QB 1 + RB 1 + WR 3 + WR/RB flex 1 + TE 1 + K 1 + DST 1 = 9",
+    "bench": 8,
+    "total_roster_size": 17,
+    "picks_equal_rounds": "9 starters + 8 bench = 17 = draft_rounds; every pick fills a roster slot.",
+    "flex": {
+      "slot": "WR/RB",
+      "eligible_positions": ["WR", "RB"],
+      "excludes": ["TE", "QB", "K", "DST"]
+    },
+    "strategic_notes": [
+      "WR-HEAVY roster: 3 mandatory WR starters PLUS a WR/RB-only flex (no TE eligibility in flex). Only 1 RB is mandatory to start.",
+      "Standard (non-PPR) scoring de-emphasizes high-volume/possession receivers relative to PPR, but the 3WR + WR/RB-flex requirement raises league-wide WR demand regardless.",
+      "K and DST each occupy exactly 1 starting slot; conventional strategy drafts them last (final 1-2 rounds).",
+      "Deep bench (8) over 17 rounds allows handcuffs, upside stashes, and positional insurance."
+    ]
+  },
+  "hard_constraints_verbatim": [
+    "Draft Type: Snake",
+    "Teams: 12",
+    "Draft Order: Decided in-person, then entered into CBS Sports system",
+    "Scoring Format: Standard",
+    "Draft Rounds: 17",
+    "Roster Slots per Team: QB = 1, RB = 1, WR = 3, WR/RB = 1, TE = 1, K = 1, DST = 1, Bench = 8"
+  ],
+  "agent_usage_contract": "Before any draft-system implementation, an agent must (1) load this file, (2) treat every value in 'league' and 'hard_constraints_verbatim' as fixed input, (3) compute replacement/VOR baselines against THIS roster (not generic defaults), and (4) surface — not silently change — any apparent conflict with these settings."
+}
