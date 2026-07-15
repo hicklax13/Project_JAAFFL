@@ -1,0 +1,21 @@
+{
+  "name": "@jaaffl/extension",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Manifest V3 CBS sync layer + in-draft overlay.",
+  "scripts": {
+    "dev": "tsc --noEmit --watch",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"(no tests yet)\" && exit 0",
+    "lint": "echo \"(lint: add eslint)\" && exit 0"
+  },
+  "dependencies": {
+    "@jaaffl/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.0.x",
+    "typescript": "^5.7.2"
+  }
+}

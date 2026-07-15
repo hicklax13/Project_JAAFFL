@@ -1,0 +1,55 @@
+# ---- Secrets / local env ----
+.env
+.env.*
+!.env.example
+*.local
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+*.duckdb
+*.duckdb.wal
+
+# ---- Node / JS ----
+node_modules/
+.pnpm-store/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+coverage/
+
+# ---- Browser extension build output ----
+apps/extension/dist/
+apps/extension/.output/
+*.crx
+*.pem
+
+# ---- Local data warehouse artifacts ----
+# Keep the directory (data/.gitkeep) but never commit generated data.
+/data/**
+!/data/.gitkeep
+!/data/README.md
+*.parquet
+*.sqlite
+*.sqlite3
+*.db
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp

@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jaaffl"
+version = "0.0.0"
+description = "CBS Fantasy Football Live Draft Assistant — Python backend (companion API, data warehouse, draft engine, assistant)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "JAAFFL project owner" }]
+
+# Base install stays light. Heavier capabilities are optional extras so the $0
+# prototype can start minimal and grow one stage at a time.
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "pydantic>=2.6",
+  "pydantic-settings>=2.2",
+  "httpx>=0.27",
+  "structlog>=24.1",
+]
+
+[project.optional-dependencies]
+# Stage 3–4: local warehouse + free historical data.
+data = [
+  "duckdb>=0.10",
+  "pyarrow>=15",
+  "pandas>=2.2",
+  "nfl_data_py>=0.3.2",
+]
+# Stage 5: simulation + constrained optimization + residual ML.
+engine = [
+  "numpy>=1.26",
+  "scipy>=1.12",
+  "ortools>=9.9",
+  "xgboost>=2.0",
+  "optuna>=3.6",
+]
+# Stage 7: text-only AI assistant (OpenAI Responses API). No voice/Realtime.
+assistant = [
+  "openai>=1.40",
+]
+dev = [
+  "ruff>=0.9",
+  "pytest>=8.1",
+  "pytest-asyncio>=0.23",
+  "mypy>=1.9",
+]
+all = ["jaaffl[data,engine,assistant]"]
+
+[project.scripts]
+jaaffl-api = "jaaffl.api:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jaaffl"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "TID"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
