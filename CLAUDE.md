@@ -27,6 +27,10 @@ read the real order from the CBS room.
 
 ## Key documents
 
+- **[`docs/implementation-plan.md`](docs/implementation-plan.md)** — the **execution-ready build
+  plan** (phased, testable): system architecture + the four scaffold changes, database / engine /
+  providers / extension specs, the luxury UI/UX design system + published mockups, calibration /
+  testing / evaluation, deployment, and a sequenced task backlog. **Start here to build.**
 - **[`docs/draft-system-design.md`](docs/draft-system-design.md)** — the comprehensive draft
   strategy + system design + build plan (research, reasoning, architecture, recommendations).
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`ROADMAP.md`](ROADMAP.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md)
