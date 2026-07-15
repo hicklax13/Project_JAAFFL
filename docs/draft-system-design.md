@@ -17,7 +17,7 @@ sections for the reasoning that supports them.
 2. [Memorialized league settings & constraints (immutable)](#2-memorialized-league-settings--constraints-immutable)
 3. [Orchestration methodology (subagents & process)](#3-orchestration-methodology-subagents--process)
 4. [Subagent 1 — Research Validation & Algorithm Selection](#4-subagent-1--research-validation--algorithm-selection)
-5. [Subagent (Platform & Tool Vetting)](#5-subagent--platform--tool-vetting)
+5. [Platform and Tool Vetting Subagent](#5-platform-and-tool-vetting-subagent)
 6. [Subagent 2 — Feature & Factor Expansion](#6-subagent-2--feature--factor-expansion)
 7. [Subagent 3 — System & Architecture Planning](#7-subagent-3--system--architecture-planning)
 8. [Subagent 4 — Documentation & Fidelity Review](#8-subagent-4--documentation--fidelity-review)
@@ -445,7 +445,7 @@ mock/ADP data before finalizing baselines.
 
 ---
 
-## 5. Subagent (Platform & Tool Vetting)
+## 5. Platform and Tool Vetting Subagent
 
 > **Verbatim report.** Mandate: validate/refresh CBS integration realities, $0 data sources,
 > and the live-draft tech stack against current (2025–2026) sources, and map them onto the
@@ -1021,7 +1021,7 @@ Early-bench (R9–11) = safer bye/injury insurance; last picks = pure upside swi
 
 **Primary tunable — the flex RB/WR split (sets RB & WR baselines).** Default 8 RB/4 WR → RB≈20,
 WR≈40. Three $0 ways to pin it: (1) **ADP-implied** — from FFC non-PPR 12-team ADP, count RB vs WR
-in the top-108; flex_RB = (RBs in top-108 − 12), flex_WR = (WRs in top-108 − 36); rerun daily.
+the top-60 RB/WR by ADP; flex_RB = (RBs in top-60 − 12), flex_WR = (WRs in top-60 − 36); rerun daily.
 (2) **Optimizer-implied** — run the §6.C.3 optimizer over projections across simulated rosters;
 tally optimal flex RB vs WR. (3) **Backtest** — from nflreadpy weekly, compute season-long optimal
 flex for top-60 RB/WR. Prior RB-heavy; expect 6/6 → 10/2. Sensitivity: 6/6→RB18/WR42; 10/2→RB22/WR38.
@@ -1354,3 +1354,322 @@ nflreadpy ID-crosswalk function name (confirm from load-functions ref); exact CB
 RB-heavy in non-PPR); FantasyPros $5.99/mo (as advertised).
 
 ---
+
+## 8. Subagent 4 — Documentation & Fidelity Review
+
+> **Verbatim report from Subagent 4.** Adversarial audit of `docs/draft-system-design.md` (§1–§7
+> as it stood pre-synthesis), `config/league.json`, and `CLAUDE.md`. Line numbers below reference
+> the pre-§8 draft the auditor read; they are evidence of the audit, not live anchors. The
+> orchestrator applied the C1 fix and the §5 label/anchor cleanup before publishing, and closes the
+> Part-D items in §10.
+
+*Adversarial audit. Every finding cites a file/section/line. Verdict in Part E.*
+
+### 8.A Fidelity audit — are the fixed settings preserved EXACTLY?
+
+**Result: PASS in all three files. Zero deviations, paraphrases, or arithmetic errors in the
+settings themselves.** Every number and label is reproduced verbatim.
+
+| Setting (authoritative) | doc §2 | `config/league.json` | `CLAUDE.md` | Status |
+|---|---|---|---|---|
+| Draft Type: **Snake** | L60 | L9 + verbatim L49 | L14 | ✓ exact |
+| Teams: **12** | L61 | L10 + verbatim L50 | L15 | ✓ exact |
+| Draft Order: **Decided in-person, then entered into CBS Sports system** | L62 | L12 + verbatim L51 | L16 | ✓ exact (verbatim, all 3) |
+| Scoring Format: **Standard** | L63 | L16 + verbatim L52 | L17 | ✓ exact |
+| Draft Rounds: **17** | L64 | L18 + verbatim L53 | L18 | ✓ exact |
+| QB **1** / RB **1** / WR **3** / WR-RB **1** / TE **1** / K **1** / DST **1** / Bench **8** | L66–73 | L20–27 + verbatim L54 | L18 | ✓ exact (incl. **WR=3** and the **WR/RB** flex) |
+| Derived: **9 starters + 8 bench = 17 = rounds** | L77 | L31–35 | L20 | ✓ consistent |
+| Flex = **WR or RB only** (no TE/QB) | L78 | L36–40 (`excludes: TE,QB,K,DST`) | L20–21 | ✓ consistent |
+| **Standard = non-PPR** (0/reception) | L80 | L17 | L21 | ✓ consistent |
+| League starter demand math (60 RB/WR of 108) | L84–86 | — | — | ✓ arithmetic checks (12+36+12=60; 12×9=108) |
+
+**Cross-checks performed and passed:** no body section contradicts a fixed setting. Searched the
+full doc for `PPR`, `10/14-team`, `15/16/18-round`, `WR=2`, `auction`, `non-snake` — every
+`non-PPR`/`12-team`/`17-round`/`Standard`/`snake` usage is correct. The only `15-round` references
+correctly describe **FFC's external mock-draft data format** (flagged as a limitation vs. our
+17-round league, with an ECR fallback for deep rounds) — not a misstatement of league settings. The
+persistent-memory file carries an `immutable:true` flag, an `agent_usage_contract`, and a "never
+paraphrase/change" comment.
+
+### 8.B Completeness checklist
+
+| # | Required element | Status | Location | Note |
+|---|---|---|---|---|
+| a | Deep research on quantitative snake-draft methods + claim validation + SOTA ID | **PRESENT** | §4 (4.A 10-step reasoning; 4.B 11-method catalog w/ evidence tags; 4.C SOTA; 4.D ranked core) | Genuinely adversarial ("no peer-reviewed optimal live snake-draft solver exists"; equilibrium claim flagged simulation-based; Becker & Sun UNVERIFIED/paywalled) |
+| b | Feature/factor/weighting expansion + include/exclude justification, scoped | **PRESENT** | §6.B (5 tables, each "Include/Exclude + why (this league)" + Weight); §6.C math; §6.D playbook | Strong T1/T2/T2σ separation |
+| c | System/architecture/build specs + tool selection rationale + CBS scope | **PRESENT** | §5 (CBS B1–B6, data tiers, stack); §7 (B1–B13 w/ rejected alts, 7.C module spec, 7.D latency, 7.F phased, 7.G risks) | |
+| d | Each subagent's explicit STEPWISE reasoning, clearly labeled | **PRESENT** | §4.A (Steps 1–10), §5.A (1–8), §6.A (1–7), §7.A (1–8) — all "Step N —" | |
+| e | Citations/links throughout | **PRESENT** | §4.E, §5.E, §6.E, §7.H + dense inline links | Abundant; evidence-quality tags defined |
+| f | Persistent memory established AND referenced as required-before-work | **PRESENT** | `config/league.json` (`agent_usage_contract`); `CLAUDE.md` ("read first"); §2; §3 ("written before any research") | |
+| g | Draft-strategy recommendations scoped to settings | **PARTIAL** | §4.D, §6.D (defer QB/TE, anchor RB, WR breadth, Zero-RB counter-indicated, K R17/DST R16) | Present but **distributed**; no single round-by-round playbook yet → **§10 must consolidate** |
+
+### 8.C Inconsistencies & errors found (with exact fixes)
+
+**C1 — [PRIMARY / substantive] Flex-split MEASUREMENT universe contradicts itself: "top-108" vs
+"top-60".** §6.E method (1) said "count RB vs WR in the **top-108**…"; §6.E method (3) and §7.E1 use
+"**top-60**". Only **top-60** is self-consistent: the RB/WR startable pool is 60 (12 RB + 36 WR + 12
+flex), so `flex_RB + flex_WR = 60 − 48 = 12`. **Fix:** §6.E method (1) "top-108" → "**top-60 (RB/WR
+startable pool)**"; canonical method = §7.E1. *(Orchestrator: applied.)*
+
+**C2 — [presentational drift, reconcilable] Three coexisting replacement-baseline ranges.** §4:
+RB18–22/WR40/index-12; §5: RB 18–24 / WR 40–48; §6 & §7: RB22–24 / WR40–42 / ≈13. Not a hard
+contradiction — §6.C.2 bridges them (VOLS RB20 → man-games RB25 → 0.5/0.5 blend → RB22–24). **Fix:**
+§10 states **one canonical set (RB≈22–24, WR≈40–42, QB/TE/K/DST≈13)** and labels RB18–22/WR40/index-12
+the first-principles pre-deepening anchors.
+
+**C-note (requested check — no action):** the feared **"8 WR / 4 RB" transposition does NOT exist**.
+Every flex-split statement is the canonical **8 RB / 4 WR (RB baseline ≈20, WR ≈40)**; sensitivity
+cases (6/6→RB18/WR42; 10/2→RB22/WR38) are all RB-anchored and arithmetically correct. **Do NOT flip
+any section WR-heavy — that would introduce an error.**
+
+**Consistency checks that PASSED:** objective function identical where repeated (§6.C.7 == §7 Step 8);
+κ (0.5–0.8) and α (0.3–0.5) consistent; **K R17, DST R16** consistent across §6; verified/UNVERIFIED
+tags consistent (FFC fields verified; flex split measure-live; nflreadpy crosswalk `[VERIFY]`; Becker
+& Sun paywalled). The worked VONA example is numerically correct (3.01=overall 25; 4.12=overall 48;
+survival 1.2% / 76%).
+
+**C3 — [minor] TOC anchor for item 5 likely broken** (double vs single hyphen from the removed
+parenthesis). **Fix:** correct the anchor / relabel. *(Orchestrator: relabeled §5 to "Platform and
+Tool Vetting Subagent" with a matching anchor.)*
+
+**C4 — [minor readability] Subagent numbering non-contiguous** (§5 platform agent unnumbered between
+1 and 2). *(Orchestrator: relabeled for clarity.)*
+
+**C5 — [minor] Partial roster-slot enumeration in an example** (§5.D4 lists only WR/FLEX/K/DST/BENCH).
+Illustrative; ensure the actual `LeagueSettings` schema enumerates **all 8** slot types.
+
+### 8.D Gaps the synthesis (§10) MUST close
+
+1. **Executive recommendation** — one-paragraph "the system is X, the strategy is Y," carrying
+   forward the honest caveat that **no peer-reviewed optimal live snake-draft solver exists** so the
+   build is not oversold.
+2. **Consolidated round-by-round draft-strategy playbook (R1–R17)** — the element-(g) gap. Fold §4.D
+   + §6.D into one table.
+3. **One canonical replacement-baseline statement** (resolves C2): RB≈22–24, WR≈40–42, QB/TE/K/DST≈13.
+4. **One canonical objective-function + tunable-defaults block**: `Score(p)=MLV + κ·max(0,VONA) −
+   λ(phase,slot)·σ̂ + α·Cliff + capped mods`, κ 0.5–0.8, the λ schedule, α 0.3–0.5, flex **8 RB/4 WR**.
+5. **Canonical flex-split MEASUREMENT method** (resolves C1): standardize on **top-60**.
+6. **Consolidated tunables / open-items / next-steps**, naming: measure the flex split (E1); confirm
+   the nflreadpy crosswalk fn `[VERIFY]`; CBS transport UNVERIFIED → three-probe mitigation; free
+   live-injury gap → CBS on-page + optional FantasyPros; efficacy unproven → the E6 offline
+   tournament is the validation gate.
+7. **Explicit v1-vs-stretch line**: v1 = live decomposed rec in <2 s on the $0 tier; stretch = season
+   simulator / MC-VONA / residual ML / RL audit.
+
+### 8.E Overall verdict
+
+**Faithful: YES (unqualified).** All fixed settings appear verbatim and unaltered in the doc §2,
+`config/league.json`, and `CLAUDE.md` — including **WR=3**, the **WR/RB-only flex**, **Standard=non-PPR**,
+**in-person→CBS draft order**, and **9 starters / 8 bench / 17 rounds**.
+
+**Complete: YES, with one consolidation gap** — draft-strategy recommendations are present but not yet
+consolidated into a single round-by-round playbook (§10's job, itemized in Part D).
+
+**Internally consistent: MOSTLY — one substantive fix required (C1: §6.E "top-108" → "top-60").**
+Everything else is reconcilable presentational drift (C2, to converge in §10) or cosmetic (C3/C4/C5).
+The suspected "8 WR / 4 RB" transposition does not exist — the doc is uniformly "8 RB / 4 WR".
+
+**Gate recommendation: PASS conditional on (1) applying the C1 top-60 fix, and (2) §10 delivering the
+Part-D consolidations.** *(Orchestrator: C1 applied; §10 delivers the Part-D consolidations below.)*
+
+---
+
+## 9. Orchestrator verification log
+
+The orchestrator independently re-verified the highest-impact, load-bearing claims from the
+subagent reports with its own web searches/fetches, rather than trusting them on report. Outcomes:
+
+| # | Claim (source) | Verification method | Outcome |
+|---|---|---|---|
+| V1 | The academic state-of-the-art references are real and correctly characterized (Subagent 1 §4) | WebSearch on draft-optimization DP/MDP literature | **CONFIRMED.** Fry, Lundberg & Ohlmann (stochastic DP, proven intractable → heuristic), Becker & Sun (MIP for draft + lineup), Lee & Liu / Cambridge JDM (competitive sequential decision-making, the large-sample "groupthink is beatable" study), and Matthews et al. (belief-state MDP + Bayesian Q-learning, **FPL not snake**) all exist and are characterized correctly, including the honest "**no peer-reviewed optimal live snake-draft solver exists**" conclusion. |
+| V2 | `nfl_data_py` is deprecated in favor of `nflreadpy` (Platform §5 / Subagent 3 §7) | WebSearch | **CONFIRMED.** `nfl_data_py` deprecated; repo **archived read-only 2025‑09‑25**; users directed to `nflreadpy` (Polars). The scaffold's `nfl_data_py` reference is a real, required correction. |
+| V3 | The Fantasy Football Calculator ADP API is genuinely free and supports non-PPR + 12-team (Platform §5, Subagent 2 §6) | WebFetch of the FFC API docs | **CONFIRMED.** "Free for personal **and** commercial use"; endpoint `…/api/v1/adp/{scoring}?teams=12&year=…`; JSON; updates daily; attribution requested. |
+| V4 | The FFC ADP response carries a per-player **`stdev`** (the dispersion the entire VONA/survival engine consumes) (Subagent 2 §6.C.4) | WebFetch of the **live** endpoint `…/adp/standard?teams=12&year=2024` | **CONFIRMED live.** Each player object has `player_id, name, position, team, adp, adp_formatted, times_drafted, high, low, stdev, bye` (e.g., McCaffrey `stdev: 0.5`). The VONA data plumbing works end-to-end on the $0 tier. |
+| V5 | **Standard (non-PPR) scoring makes Zero-RB counter-indicated** — the single most actionable strategic conclusion (Subagent 1 §4.A Step 4, Subagent 2 §6) | WebSearch on Zero-RB in non-PPR | **CONFIRMED.** Multiple sources: "Zero RB is a terrible idea in any non-PPR league"; pass-catching RBs lose their reception value; the recommended non-PPR alternative is **Hero-RB** (one anchor RB early, then accumulate) — which is exactly the emergent behavior of the recommended engine for this roster. |
+
+**Cross-report consistency (orchestrator check).** After the C1 fix, the four subagent reports are
+mutually consistent on the load-bearing quantities: the objective function, the replacement
+baselines (once §4/§5's first-principles anchors are read as pre-man-games figures — reconciled in
+§10), κ/λ/α defaults, the **8 RB / 4 WR** flex default, and the K‑R17/DST‑R16 timing. The fidelity
+audit (§8) confirms the immutable settings are reproduced verbatim in all three artifacts.
+
+**What remains genuinely UNVERIFIED (carried into §10's open items — not hidden):**
+- **CBS draft-room transport & DOM/state shapes** — not publicly documented; the mitigation is the
+  three-probe, transport-agnostic capture + de-dup, confirmed *after* live frames are observed.
+- **Exact `nflreadpy` ID-crosswalk function name** (`load_ff_playerids` / `load_players`) — confirm
+  from the load-functions reference; a fuzzy name+team+position fallback covers CBS/FFC regardless.
+- **The flex RB/WR split** (default 8/4) — must be *measured* from live non-PPR 12-team FFC ADP
+  (§10 method, top-60); non-PPR may push it more RB-heavy.
+- **Engine efficacy** — no external proof exists (V1); the project's own **offline simulated-league
+  tournament (§7.E6)** is the validation gate, not a vendor claim.
+- **Free live-injury coverage post-2024** — incomplete via nflverse; mitigated by CBS on-page
+  designations (+ optional $5.99 FantasyPros).
+
+---
+
+## 10. Reflection & Synthesis (orchestrator)
+
+This section draws the conclusions the earlier sections earned. It consolidates the four subagent
+reports and the verification log into (10.1) an executive recommendation, (10.2) the synthesized
+system, (10.3) the canonical engine spec, (10.4) a round-by-round draft playbook, (10.5) the build
+plan at a glance, (10.6) the tunables/open-items list, and (10.7) scope & compliance.
+
+### 10.1 Executive recommendation
+
+**The system:** a **local-first, $0 (besides AI), personal-use CBS live-draft assistant** — a
+Manifest V3 browser extension that reads the draft from your own authenticated CBS session (via a
+transport-agnostic three-probe capture) and streams picks to a local FastAPI backend, which runs a
+**transparent, Monte-Carlo-augmented Value-Based-Drafting engine** and pushes a decomposed
+recommendation to an in-page overlay (and a Next.js dashboard) in **under two seconds per pick**.
+
+**The strategy the engine produces (for *this* roster):** because scoring is **Standard (non-PPR)**
+and the roster demands **3 WR + a WR/RB-only flex with only one mandatory RB**, the correct,
+data-derived play is **anchor/Hero-RB, not Zero-RB**: secure **1–2 scarce workhorse RBs early**,
+**accumulate WR volume** through the middle rounds (valuing yards/TDs/air-yards over raw catches),
+**defer QB and TE** unless an elite tier falls (an elite TE is the one positional-advantage
+exception), stream **DST in Round 16 and K in Round 17**, and fill the **8-man bench with RB-skewed,
+high-ceiling stashes** (handcuffs + breakouts). **Zero-RB is explicitly counter-indicated here.**
+
+**Honest bound on the claim (do not oversell):** the research found **no peer-reviewed, empirically
+validated optimal live snake-draft solver** — the strongest academic results solve a *different*
+game (salary-cap team selection), and practitioner "edge" numbers are unverified. What is
+recommended is the **deployable state-of-the-art** (roster-correct VBD/VONA + opponent simulation +
+risk + flex-aware assignment + tiers), and its efficacy for this league is proven **by the project's
+own offline simulated-league tournament (§7.E6)**, not by a vendor claim.
+
+**v1 vs. stretch, at executive altitude:** **v1** = a live, league-correct, risk-aware, flex-aware,
+*decomposed* recommendation in the overlay within 2 s on the free data tier, with calibrated
+parameters and crash-safe replay. **Stretch** = a rest-of-season Monte-Carlo **season simulator**
+that optimizes true playoff/championship odds, Monte-Carlo VONA, XGBoost residual projections,
+per-manager tendency modeling, and an offline RL audit.
+
+### 10.2 The synthesized system (one picture)
+
+```
+CBS draft room (your authenticated tab)
+  │  three-probe capture (MAIN-world WS/fetch/XHR monkeypatch @document_start
+  │  + framework-state read + MutationObserver DOM fallback), de-duped by pick_number
+  ▼
+apps/extension  ──ws://127.0.0.1:8787/draft/ws──►  backend (FastAPI, local)
+                                                     │  jaaffl.ingest → append-only SQLite log
+                                                     │                → fold_state(DraftState)
+   overlay ◄──ws /recs/ws──┐                         │  jaaffl.engine.recommend(DraftContext, state)
+   (best pick + WHY +      │                         │    Stage0 projections μ/σ (exact CBS scoring)
+    survival %)            │                         │    Stage1 flex-aware MLV  (Hungarian)
+apps/web dashboard ◄───────┘                         │    Stage2 VONA/survival  (FFC ADP mean+SD)
+   (board, tiers, curves)                            │    Stage3 risk λ(phase,slot)·σ̂
+                                                     │    Stage4 tier cliff (GMM)
+   data tiers ($0): nflreadpy (history/ECR/xEP) ─────┤    → Recommendation + ScoreComponents
+   FFC ADP (mean+SD) · CBS on-page (live settings) ──┘    (precompute → <2s stateless per-pick recompute)
+```
+
+### 10.3 Canonical engine spec (resolves C1 & C2)
+
+**Canonical replacement baselines for this roster** (the one true set; §4/§5's RB18–22/WR40/index-12
+are the *first-principles, pre-man-games anchors* that deepen to these after bye/injury adjustment
+and VOLS-blending — see §6.C.2):
+
+| Position | Canonical replacement baseline | Draft behavior |
+|---|---|---|
+| RB | **≈ RB22–24** (VOLS RB20 → man-games RB25, 0.5/0.5 blend) | scarce top end → **anchor early** |
+| WR | **≈ WR40–42** (deep) | breadth → **accumulate mid-rounds** |
+| QB | **≈ QB13** (shallow) | **defer** (target ~R7–10) |
+| TE | **≈ TE13** (shallow) | **defer unless elite** (top‑2/3 exception) |
+| K | **≈ K13** (flat) | **Round 17**, then stream |
+| DST | **≈ DST13** (flat) | **Round 16**, then stream |
+
+**Canonical objective function** (identical to §6.C.7 / §7 Step 8):
+```
+Score(p) =  MLV_p                        # flex-aware Marginal Lineup Value (Hungarian over the 9 starting slots)
+          + κ · max(0, VONA_p)           # scarcity/opportunity-cost urgency from ADP survival
+          − λ(phase, slot) · σ̂_p         # risk: floor-tilt for starters, ceiling-tilt for bench
+          + α · CliffBonus_p             # tier-cliff urgency (Boris-Chen GMM on ECR)
+          + Σ capped modifiers           # bye-stack −, handcuff-synergy +, SOS tiebreak ± (each ≤ ~3–5 pts)
+```
+**Canonical tunable defaults** (versioned in `config/engine.json`): **κ = 0.5–0.8**; **α = 0.3–0.5**;
+**flex split = 8 RB / 4 WR**; **λ schedule** — R1–2 **+0.2…+0.4**, R3–6 **+0.1…+0.3**, R7–9 **≈0**,
+R10–13 **−0.2…−0.4**, R14–17 **−0.3…−0.5** (with a *slot override*: last open startable slot → floor,
+surplus/stash → ceiling). VONA survival is analytic Gaussian by default: `S_j(N) = 1 − Φ((N − m_j)/s_j)`.
+
+**Canonical flex-split measurement (resolves C1 — use top-60, not top-108):** rank all RB+WR by
+non-PPR 12-team FFC ADP; the **top-60** are the startable RB/WR pool (12 RB + 36 WR + 12 flex).
+Then `flex_RB = (#RB in top-60) − 12` and `flex_WR = (#WR in top-60) − 36`, so `flex_RB + flex_WR =
+60 − 48 = 12`. Re-measure daily pre-draft; non-PPR scarcity may push the split **more RB-heavy** than
+the 8/4 default — this is the single highest-value calibration.
+
+### 10.4 Consolidated round-by-round draft playbook (element g)
+
+A slot-agnostic round-band guide for a **12-team, Standard (non-PPR), 17-round snake** with this
+roster. The engine adapts to the **actual** draft order (read live from CBS — never assumed) and to
+the board; this table is the human-readable strategy the engine encodes. Targets are *positions/
+profiles*, not named players (which are season-specific).
+
+| Round(s) | Primary target | Why (this league) | Risk (λ) |
+|---|---|---|---|
+| **R1–2** | **Anchor: 1–2 elite workhorse RBs** (take an elite WR/rare elite TE only if MLV clearly says so) | RB is the scarce, steep-cliff position in non-PPR; securing top-end RB marginal value is the highest-leverage move; **Zero-RB is counter-indicated** | floor-tilt (+0.2…+0.4) |
+| **R3–4** | **Second core piece**: best RB *or* WR by MLV/VONA; aim for ~2 RB + 1–2 WR by end of R4; grab an **elite TE** here if one falls | Lock the scarce RB tier before it empties; begin WR accumulation; elite-TE edge over TE12 can beat WR1-over-WR24 | floor-tilt (+0.1…+0.3) |
+| **R5–6** | **Fill starting WRs** (you need 3 + a WR/RB flex): best-value RB/WR; heed **VONA** during position runs | WR value here is *breadth*; weight air-yards/aDOT/deep & red-zone targets over raw catch volume | ~neutral |
+| **R7–9** | **Complete the starting nine**: your **QB** lands here (a top‑8‑ish QB) unless an elite fell; keep adding WR/RB; last shot at a startable TE if you punted | QB baseline is shallow (QB13) → deferring costs little; prioritize rushing-QB upside | ~neutral |
+| **R10–11** | **Bench insurance**: safer bye/injury cover for your starters; **handcuff your anchor RBs** | Protect the starting lineup first; RB injury churn (~27% full-season) makes handcuffs high-value | mild ceiling |
+| **R12–15** | **Upside swings** (ceiling-tilt): young breakout WRs, high-upside backup RBs with standalone value, optional 2nd QB/TE if streaming-averse; **skew RB-heavy** | Championships are won by ceiling; cheap lottery tickets; bench should carry more RBs than WRs | ceiling (−0.2…−0.4) |
+| **R16** | **DST** (stream target) | Draft one DST facing a weak/low-total offense in Wks 1–3; our scoring rewards it via **both** points- and yards-allowed tiers | punt |
+| **R17** | **K** (stream target) | Least predictable position; never reach; pick on team-total/dome/matchup | punt |
+
+**Standing rules the engine enforces:** measure value as **marginal gain to your optimal 9-man
+starting lineup** (the WR/RB flex is filled by whichever of your best remaining RB/WR helps most);
+use **VONA** to decide *take-now-vs-wait* (high urgency on RB, low on WR); never draft K/DST before
+R16/R17; treat forward-year (2027) outputs as **ESTIMATED**.
+
+### 10.5 Build plan at a glance (v1 vs stretch — full detail in §7.F)
+
+- **Stage 1** CBS sync (`@crxjs`; MAIN-world `document_start` three-probe; SQLite append-only log) — **v1**
+- **Stage 2** Normalize league settings incl. the **full CBS scoring map** (DST dual tiers + K bonus) — **v1**
+- **Stage 3** DuckDB/SQLite/Parquet warehouse + ID crosswalk — **v1**
+- **Stage 4** `$0` providers: `nflreadpy` + FFC ADP + CBS-on-page (paid off) — **v1**
+- **Stage 5** Transparent engine: projections → league scoring/replacement → Hungarian MLV → analytic
+  VONA → risk → `recommend` + `ScoreComponents` — **v1 core**; MC-VONA + **season simulator (playoff/
+  championship odds)** + XGBoost residuals + RL audit — **stretch**
+- **Stage 6** Overlay (best pick + decomposition + survival %) — **v1**; Next.js dashboard — **v1‑lite/stretch**
+- **Stage 7** Text-only assistant (`explain_recommendation` over `ScoreComponents`) — **v1‑lite**
+- **Four required scaffold changes** (from §7): (1) `LeagueSettings` gains `scoring_tiers`+`scoring_bonuses`;
+  (2) `nfl_data_py`→`nflreadpy` (Polars); (3) `RecommendedPick` gains `ScoreComponents`; (4) add `WS /recs/ws`.
+
+### 10.6 Consolidated tunables & open items (next steps, in priority order)
+
+1. **Measure the flex RB/WR split** from live non-PPR 12-team FFC ADP (§10.3 top-60 method) → set
+   `EngineParams.flex_split`. *Highest-value calibration; likely more RB-heavy than 8/4 in non-PPR.*
+2. **Calibrate κ, the λ schedule, α, and modifier caps** via the mock-draft backtest (§7.E2, Optuna),
+   evaluated across all 12 draft slots and against non-ADP opponent models.
+3. **Validate the projection blend** (§7.E3) against 2021–2024 realized points under the exact CBS map;
+   require the blend to beat the best single source; calibrate σ by interval coverage.
+4. **Confirm the `nflreadpy` ID-crosswalk function name** (`load_ff_playerids`/`load_players`) `[VERIFY]`;
+   fuzzy name+team+position fallback covers CBS/FFC regardless.
+5. **Capture-layer golden fixtures** once real CBS frames are observed (§7.E4); keep the **manual-paste
+   fallback** for the UNVERIFIED transport.
+6. **Injury freshness:** wire CBS on-page injury designations; optionally enable the $5.99 FantasyPros
+   feed behind its flag if you want a guaranteed feed.
+7. **Prove efficacy offline** (§7.E6 simulated-league tournament vs VBD-only and ADP-only baselines) —
+   this is the project's own validation gate, since none exists in the literature.
+
+### 10.7 Scope & compliance recap
+
+Everything above is scoped to a **personal, non-commercial, user-authorized, local-only** tool
+(ADR 0003; `docs/legal-and-compliance.md`): CBS data is read only from your own session, no
+`webRequest`/`declarativeNetRequest`, narrow host permissions, no redistribution, and the repo's
+personal, non-commercial license. Paid providers stay **off** by default; the whole v1 runs at **$0
+besides AI usage**, text-only (no voice). The immutable league settings (§2) govern every baseline
+and must never be paraphrased or changed — they live in `config/league.json`, which any coding agent
+must load before work.
+
+**Bottom line:** the research validates a clear, buildable, honest path from the current scaffold to
+a first production-grade prototype: implement the four scaffold changes and Stages 1–7 (v1),
+calibrate the flex split and risk parameters, prove it offline, and only then reach for the season-
+simulator stretch. The strategy it will produce for your league is anchor-RB + WR-breadth + late
+QB/TE + streamed K/DST — the correct, evidence-backed response to Standard scoring and a WR-heavy,
+one-mandatory-RB roster.
+
+---
+
+*End of document. Persistent memory: [`../config/league.json`](../config/league.json) · project
+memory: [`../CLAUDE.md`](../CLAUDE.md). This document and the memory file must be kept in sync with
+any change to league settings — which, per the constitution, do not change.*
