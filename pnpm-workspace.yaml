@@ -1,0 +1,5 @@
+# The Python backend is intentionally NOT part of this workspace.
+# Only JS/TS packages are globbed here.
+packages:
+  - apps/*
+  - packages/*

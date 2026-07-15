@@ -1,0 +1,23 @@
+{
+  "name": "@jaaffl/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared wire contracts (Zod schemas) for JAAFFL — mirror of the backend jaaffl.domain models.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"(no tests yet)\" && exit 0",
+    "lint": "echo \"(lint: add eslint)\" && exit 0"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
