@@ -246,7 +246,7 @@ body{ min-height:100vh; }
 .identity{ display:flex; gap:var(--sp-2); justify-content:center; flex-wrap:wrap; min-width:0; }
 .identity .chip{ background:var(--card); }
 
-.controls{ display:flex; align-items:center; gap:var(--sp-2); justify-content:flex-end; }
+.controls{ display:flex; align-items:center; gap:var(--sp-2); justify-content:flex-end; flex-wrap:wrap; }
 .clockbox{ display:flex; align-items:center; gap:var(--sp-2); padding:.3em .7em; border-radius:var(--r);
   background:var(--card); border:1px solid var(--hairline-2); }
 .clockbox .k{ font-size:var(--fs-xxs); color:var(--ink-3); text-transform:uppercase; letter-spacing:.1em; }
@@ -273,7 +273,7 @@ body{ min-height:100vh; }
 .pad{ padding:var(--sp-4); }
 .panel-h{ display:flex; align-items:baseline; justify-content:space-between; gap:var(--sp-2); margin-bottom:var(--sp-3); }
 .panel-title{ font-family:var(--font-display); font-size:var(--fs-md); font-weight:600; }
-.panel-note{ font-size:var(--fs-xxs); color:var(--ink-3); }
+.panel-note{ font-size:var(--fs-xxs); color:var(--ink-2); }
 
 /* ---- Left rail ---- */
 .nav{ list-style:none; margin:0 0 var(--sp-4); padding:0; display:flex; flex-direction:column; gap:2px; }
@@ -327,7 +327,7 @@ body{ min-height:100vh; }
 .sc-list{ display:flex; flex-direction:column; gap:.55em; }
 .sc-lbl{ font-size:var(--fs-xxs); font-weight:700; letter-spacing:.06em; color:var(--ink-2); text-transform:uppercase; }
 .sc-val{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:var(--fs-sm); color:var(--ink); min-width:3.2em; text-align:right; }
-.sc-val.neg{ color:var(--critical); }
+.sc-val.neg{ color:var(--ink); } /* red conveyed by the fill bar; text stays AA-legible */
 .stats-strip{ display:flex; gap:var(--sp-4); flex-wrap:wrap; margin-top:var(--sp-3); padding-top:var(--sp-3); border-top:1px solid var(--hairline); }
 .mini-stat{ display:flex; flex-direction:column; gap:1px; }
 .mini-stat .k{ font-size:var(--fs-xxs); color:var(--ink-3); text-transform:uppercase; letter-spacing:.08em; }
@@ -378,7 +378,8 @@ body{ min-height:100vh; }
 .trow:last-child{ border-bottom:0; }
 .trow:hover{ background:var(--wash); }
 .trow .ov{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:var(--fs-xs); color:var(--ink-3); }
-.trow .tm{ font-size:var(--fs-xxs); color:var(--ink-3); letter-spacing:.03em; }
+.trow .tm{ font-size:var(--fs-xxs); color:var(--ink-3); letter-spacing:.03em;
+  font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
 .trow .tm.you{ color:var(--brass); font-weight:700; }
 .trow .pl{ font-family:var(--font-display); font-size:var(--fs-sm); color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .trow .plteam{ font-family:var(--font-mono); font-size:var(--fs-xxs); color:var(--ink-3); }
@@ -387,12 +388,12 @@ body{ min-height:100vh; }
 /* ---- Charts ---- */
 .chart{ width:100%; height:auto; display:block; }
 svg text{ font-family:var(--font-ui); }
-.ax-num{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.ax-num, .ax-num text{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
 .legend{ display:flex; flex-wrap:wrap; gap:var(--sp-3); margin-top:var(--sp-3); }
 .lg{ display:inline-flex; align-items:center; gap:.4em; font-size:var(--fs-xxs); color:var(--ink-2); font-weight:600; letter-spacing:.03em; }
 .lg .sw{ width:16px; height:3px; border-radius:2px; display:block; }
 .lg .dot{ width:9px; height:9px; border-radius:50%; display:block; }
-.cap{ font-size:var(--fs-xxs); color:var(--ink-3); line-height:1.5; margin-top:var(--sp-3); }
+.cap{ font-size:var(--fs-xxs); color:var(--ink-2); line-height:1.5; margin-top:var(--sp-3); }
 
 /* tier ladder */
 .tier-row{ display:grid; grid-template-columns:2.2em 1fr auto; align-items:center; gap:.6em; padding:.3em 0; }
@@ -423,8 +424,9 @@ svg text{ font-family:var(--font-ui); }
 .mgr-seg:last-child{ border-radius:0 var(--r-pill) var(--r-pill) 0; }
 .mgr-foot{ display:flex; align-items:center; justify-content:space-between; margin-top:.4em; }
 .mgr-adp{ font-size:var(--fs-xxs); color:var(--ink-3); }
-.mgr-adp b{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-weight:600; }
-.mgr-adp b.reach{ color:var(--serious); } .mgr-adp b.value{ color:var(--good); }
+.mgr-adp b{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-weight:600; color:var(--ink); }
+.mgr-adp .dir-mark{ font-size:9px; font-weight:900; }
+.mgr-adp .dir-reach{ color:var(--serious); } .mgr-adp .dir-value{ color:var(--good); }
 .mgr.pending{ opacity:.72; }
 .mgr-empty{ height:8px; border-radius:var(--r-pill); background:repeating-linear-gradient(135deg,transparent,transparent 5px,var(--wash) 5px,var(--wash) 6px); border:1px solid var(--hairline); }
 
@@ -490,7 +492,9 @@ svg text{ font-family:var(--font-ui); }
 
     <div class="controls">
       <div class="clockbox" aria-label="On the clock: round 3, pick 3.03, overall 27">
-        <span class="k">Round 3</span>
+        <span class="k">Rd</span>
+        <span class="pickno">3</span>
+        <span class="k">·</span>
         <span class="pickno">3.03</span>
         <span class="k">·</span>
         <span class="pickno">#27</span>
@@ -624,7 +628,7 @@ svg text{ font-family:var(--font-ui); }
     <section class="panel pad">
       <div class="panel-h">
         <h3 class="panel-title">Draft board</h3>
-        <span class="panel-note">Rounds 1–6 shown · full 17 scroll · snake order · slot 3 is you</span>
+        <span class="panel-note">Rounds <span class="mono">1–6</span> shown · full <span class="mono">17</span> scroll · snake order · slot <span class="mono">3</span> is you</span>
       </div>
       <div class="wrap-x board-scroll">
         <div class="board-grid" role="table" aria-label="Draft board, 12 teams by round, snake order">
@@ -761,7 +765,7 @@ svg text{ font-family:var(--font-ui); }
           <line x1="190.3" y1="14" x2="190.3" y2="204"/>
           <line x1="318.3" y1="14" x2="318.3" y2="204"/>
         </g>
-        <g class="ax-num" font-size="8.5" fill="var(--ink-3)" text-anchor="middle">
+        <g class="ax-num" font-size="8.5" fill="var(--ink-2)" text-anchor="middle">
           <text x="119.3" y="216">QB/TE 13</text>
           <text x="190.3" y="216">RB 23</text>
           <text x="318.3" y="216">WR 41</text>
@@ -769,13 +773,13 @@ svg text{ font-family:var(--font-ui); }
         <!-- axes -->
         <line x1="34" y1="14" x2="34" y2="204" stroke="var(--axis)" stroke-width="1"/>
         <line x1="34" y1="204" x2="368" y2="204" stroke="var(--axis)" stroke-width="1"/>
-        <g class="ax-num" font-size="8.5" fill="var(--ink-3)" text-anchor="end">
+        <g class="ax-num" font-size="8.5" fill="var(--ink-2)" text-anchor="end">
           <text x="29" y="207">0</text>
           <text x="29" y="143.7">60</text>
           <text x="29" y="80.3">120</text>
           <text x="29" y="17">180</text>
         </g>
-        <text x="8" y="112" font-size="8.5" fill="var(--ink-3)" transform="rotate(-90 8 112)" text-anchor="middle" letter-spacing="1">VOR PTS</text>
+        <text x="8" y="112" font-size="8.5" fill="var(--ink-2)" transform="rotate(-90 8 112)" text-anchor="middle" letter-spacing="1">VOR PTS</text>
         <!-- lines (2px, round) -->
         <path fill="none" stroke="var(--pos-te)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
           d="M34,102.7 L41.1,130.1 L48.2,157.6 L55.3,172.3 L62.4,180.8 L69.5,187.1 L83.7,194.5 L98,199.8 L119.3,204"/>
@@ -830,7 +834,9 @@ svg text{ font-family:var(--font-ui); }
           <span class="pos-mini pm-RB">RB</span><span class="nm">James Cook</span>
           <span class="stat-pill is-good" style="padding:.14em .5em">Last in T3</span>
         </div>
-        <div class="cliff" aria-hidden="true"><span class="lb">Tier cliff <span class="num">−4.8</span></span><span class="ln"></span></div>
+        <div class="cliff"><span class="stat-pill is-critical" aria-label="Tier cliff: about 4.8 points down to the next tier">
+          <svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20L3 6h18z" fill="currentColor"/></svg>
+          Tier cliff <span class="mono">−4.8</span></span><span class="ln" aria-hidden="true"></span></div>
         <div class="tier-row">
           <span class="tier-lbl">T4</span>
           <span class="tier-chips"><span class="tchip"></span><span class="tchip gone"></span><span class="tchip"></span><span class="tchip"></span></span>
@@ -862,19 +868,19 @@ svg text{ font-family:var(--font-ui); }
         <!-- axes -->
         <line x1="30" y1="14" x2="30" y2="174" stroke="var(--axis)" stroke-width="1"/>
         <line x1="30" y1="174" x2="340" y2="174" stroke="var(--axis)" stroke-width="1"/>
-        <g class="ax-num" font-size="8.5" fill="var(--ink-3)" text-anchor="end">
+        <g class="ax-num" font-size="8.5" fill="var(--ink-2)" text-anchor="end">
           <text x="26" y="177">0</text>
           <text x="26" y="137">25</text>
           <text x="26" y="97">50</text>
           <text x="26" y="57">75</text>
           <text x="26" y="17">100</text>
         </g>
-        <g class="ax-num" font-size="8.5" fill="var(--ink-3)" text-anchor="middle">
+        <g class="ax-num" font-size="8.5" fill="var(--ink-2)" text-anchor="middle">
           <text x="30" y="186">27</text>
           <text x="120" y="186">36</text>
           <text x="340" y="186">58</text>
         </g>
-        <text x="185" y="199" font-size="8" fill="var(--ink-3)" text-anchor="middle" letter-spacing="1">OVERALL PICK →</text>
+        <text x="185" y="199" font-size="8" fill="var(--ink-2)" text-anchor="middle" letter-spacing="1">OVERALL PICK →</text>
         <!-- Wilson (WR) -->
         <path fill="none" stroke="var(--pos-wr)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
           d="M30,15.6 L60,22 L90,30 L120,39.6 L160,55.6 L190,70 L220,86 L260,103.6 L300,118 L340,129.2"/>
@@ -908,46 +914,46 @@ svg text{ font-family:var(--font-ui); }
     <section class="panel pad" id="managers">
       <div class="panel-h">
         <h3 class="panel-title">Manager tendencies</h3>
-        <span class="panel-note">Model — 2 drafts logged</span>
+        <span class="panel-note">Model — <span class="mono">2</span> drafts logged</span>
       </div>
 
       <div class="mgr" role="img" aria-label="Team 7 draft lean: running-back heavy, roughly 55 percent RB, 25 percent WR. Reaches versus ADP plus 4.2 picks.">
-        <div class="mgr-h"><span class="mgr-name">Team 7</span><span class="mgr-lean">RB-heavy</span></div>
+        <div class="mgr-h"><span class="mgr-name">Team <span class="mono">7</span></span><span class="mgr-lean">RB-heavy</span></div>
         <div class="mgr-bar">
           <span class="mgr-seg" style="width:55%; background:var(--pos-rb)" title="RB 55%"></span>
           <span class="mgr-seg" style="width:25%; background:var(--pos-wr)" title="WR 25%"></span>
           <span class="mgr-seg" style="width:10%; background:var(--pos-te)" title="TE 10%"></span>
           <span class="mgr-seg" style="width:10%; background:var(--pos-qb)" title="QB 10%"></span>
         </div>
-        <div class="mgr-foot"><span class="mgr-adp">Reaches vs ADP <b class="reach">+4.2</b></span><span class="mgr-lean">7 picks</span></div>
+        <div class="mgr-foot"><span class="mgr-adp">Reaches vs ADP <span class="dir-mark dir-reach" aria-hidden="true">▲</span> <b>+4.2</b></span><span class="mgr-lean"><span class="mono">7</span> picks</span></div>
       </div>
 
       <div class="mgr" role="img" aria-label="Team 11 draft lean: wide-receiver heavy, roughly 60 percent WR. Drafts at value, minus 1.4 versus ADP.">
-        <div class="mgr-h"><span class="mgr-name">Team 11</span><span class="mgr-lean">WR-heavy</span></div>
+        <div class="mgr-h"><span class="mgr-name">Team <span class="mono">11</span></span><span class="mgr-lean">WR-heavy</span></div>
         <div class="mgr-bar">
           <span class="mgr-seg" style="width:60%; background:var(--pos-wr)" title="WR 60%"></span>
           <span class="mgr-seg" style="width:20%; background:var(--pos-rb)" title="RB 20%"></span>
           <span class="mgr-seg" style="width:12%; background:var(--pos-qb)" title="QB 12%"></span>
           <span class="mgr-seg" style="width:8%; background:var(--pos-te)" title="TE 8%"></span>
         </div>
-        <div class="mgr-foot"><span class="mgr-adp">Reaches vs ADP <b class="value">−1.4</b></span><span class="mgr-lean">7 picks</span></div>
+        <div class="mgr-foot"><span class="mgr-adp">Reaches vs ADP <span class="dir-mark dir-value" aria-hidden="true">▼</span> <b>−1.4</b> <span style="color:var(--ink-3)">value</span></span><span class="mgr-lean"><span class="mono">7</span> picks</span></div>
       </div>
 
       <div class="mgr" role="img" aria-label="Team 4 draft lean: balanced across positions. Slightly reaches, plus 0.6 versus ADP.">
-        <div class="mgr-h"><span class="mgr-name">Team 4</span><span class="mgr-lean">Balanced</span></div>
+        <div class="mgr-h"><span class="mgr-name">Team <span class="mono">4</span></span><span class="mgr-lean">Balanced</span></div>
         <div class="mgr-bar">
           <span class="mgr-seg" style="width:35%; background:var(--pos-wr)" title="WR 35%"></span>
           <span class="mgr-seg" style="width:30%; background:var(--pos-rb)" title="RB 30%"></span>
           <span class="mgr-seg" style="width:18%; background:var(--pos-qb)" title="QB 18%"></span>
           <span class="mgr-seg" style="width:17%; background:var(--pos-te)" title="TE 17%"></span>
         </div>
-        <div class="mgr-foot"><span class="mgr-adp">Reaches vs ADP <b class="reach">+0.6</b></span><span class="mgr-lean">6 picks</span></div>
+        <div class="mgr-foot"><span class="mgr-adp">Reaches vs ADP <span class="dir-mark dir-reach" aria-hidden="true">▲</span> <b>+0.6</b></span><span class="mgr-lean"><span class="mono">6</span> picks</span></div>
       </div>
 
       <div class="mgr pending">
-        <div class="mgr-h"><span class="mgr-name">Team 9</span><span class="mgr-lean">Insufficient data</span></div>
+        <div class="mgr-h"><span class="mgr-name">Team <span class="mono">9</span></span><span class="mgr-lean">Insufficient data</span></div>
         <div class="mgr-empty" aria-hidden="true"></div>
-        <div class="mgr-foot"><span class="mgr-adp">Model grows as picks accrue</span><span class="mgr-lean">1 pick</span></div>
+        <div class="mgr-foot"><span class="mgr-adp">Model grows as picks accrue</span><span class="mgr-lean"><span class="mono">1</span> pick</span></div>
       </div>
     </section>
   </aside>
@@ -957,7 +963,7 @@ svg text{ font-family:var(--font-ui); }
     <div class="panel pad">
       <div class="panel-h">
         <h3 class="panel-title">Scenario comparison — what happens if…</h3>
-        <span class="panel-note">Projected starting-lineup points vs a 1,350 baseline · playoff odds <span class="est">est</span></span>
+        <span class="panel-note">Projected starting-lineup points vs a <span class="mono">1,350</span> baseline · playoff odds <span class="est">est</span></span>
       </div>
       <div class="scen-grid">
 
@@ -1000,7 +1006,7 @@ svg text{ font-family:var(--font-ui); }
 <footer class="foot">
   <span>JAAFFL · The Draft Room — local-first draft assistant</span>
   <hr class="rule-brass" aria-hidden="true">
-  <span>Projections illustrative · 2027 figures estimated · Strategy: anchor / Hero-RB, WR breadth mid-rounds, defer QB/TE unless elite, stream DST R16 &amp; K R17.</span>
+  <span>Projections illustrative · <span class="mono">2027</span> figures estimated · Strategy: anchor / Hero-RB, WR breadth mid-rounds, defer QB/TE unless elite, stream DST R<span class="mono">16</span> &amp; K R<span class="mono">17</span>.</span>
 </footer>
 
 <script>
