@@ -8,7 +8,7 @@ version = "0.0.0"
 description = "CBS Fantasy Football Live Draft Assistant — Python backend (companion API, data warehouse, draft engine, assistant)."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Proprietary" }
+license = { text = "JAAFFL Personal, Non-Commercial License (see LICENSE.md)" }
 authors = [{ name = "JAAFFL project owner" }]
 
 # Base install stays light. Heavier capabilities are optional extras so the $0

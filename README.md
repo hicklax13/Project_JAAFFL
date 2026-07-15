@@ -105,5 +105,7 @@ feeds and must not depend on CBS scraping.
 
 ## License
 
-See [`LICENSE.md`](LICENSE.md). No open-source license is granted yet — the project owner
-should choose one deliberately given the personal-use / compliance considerations above.
+**Personal, non-commercial.** See [`LICENSE.md`](LICENSE.md) — the license mirrors the
+personal, non-commercial posture required by CBS and the data providers this project uses
+(see the compliance note above). Commercial use requires deliberate relicensing and licensed
+data feeds.

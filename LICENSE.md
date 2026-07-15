@@ -1,22 +1,54 @@
 # License
 
-**Copyright (c) 2026 the JAAFFL project owner. All rights reserved.**
+## JAAFFL Personal, Non-Commercial License
 
-No open-source license is granted at this time. In the absence of an explicit license,
-default copyright law applies and no permission is given to copy, distribute, or create
-derivative works.
+Copyright (c) 2026 the JAAFFL project owner. All rights reserved except as expressly
+granted below.
 
-## Why this is a deliberate placeholder
+This license is intentionally **non-commercial** to stay consistent with the terms of the
+upstream services and data this project relies on (CBS Fantasy and the data providers) — see
+[`docs/legal-and-compliance.md`](docs/legal-and-compliance.md). This document is not legal
+advice.
 
-This project integrates with CBS Fantasy under a **personal, user-authorized** posture and
-relies on data providers whose terms distinguish personal/non-commercial from commercial
-use (see [`docs/legal-and-compliance.md`](docs/legal-and-compliance.md)). Choosing a license
-has downstream implications for how the code and any bundled data adapters may be used and
-redistributed. The project owner should select a license intentionally — for example:
+### 1. Grant
 
-- A permissive OSS license (MIT/Apache-2.0) **only** if comfortable with commercial reuse,
-  and only after confirming no provider terms are violated by redistribution.
-- A source-available / non-commercial license if the intent is to keep the tool personal.
-- Remaining "all rights reserved" while the project is private.
+Permission is granted, free of charge, to any person obtaining a copy of this software (the
+"Software") to use, copy, and modify the Software for **personal, non-commercial purposes
+only**, subject to the conditions below.
 
-Until then, treat this repository as proprietary.
+### 2. Conditions
+
+- This copyright notice and license shall be included in all copies or substantial portions
+  of the Software.
+- Use of the Software must comply with the terms of every third-party service and data
+  source it accesses — including but not limited to CBS Sports / CBS Fantasy, FantasyPros,
+  and nflverse. In particular, CBS data may be accessed only from your own authenticated
+  session for personal, non-commercial use, and must not be scraped, mined, or otherwise
+  exploited in violation of CBS's terms.
+
+### 3. Commercial use
+
+Commercial use is **not** permitted under this license. "Commercial use" means any use
+primarily intended for or directed toward commercial advantage or monetary compensation.
+
+A commercial deployment would additionally require licensed commercial data feeds (for
+example FantasyPros Commercial, SportsDataIO, or Sportradar) and separate authorization
+from CBS. To pursue commercial use, relicense the project deliberately — the
+[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/)
+license is a recognized, well-drafted option if a formal standard text is preferred, and a
+commercial license would be a separate, deliberate step.
+
+### 4. No rights in third-party data, services, or marks
+
+This license covers only the Software's own source code. It grants no rights in any
+third-party service, API, trademark, name, or dataset (CBS, FantasyPros, nflverse, the NFL,
+etc.), all of which remain governed solely by their respective owners' terms.
+
+### 5. No warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR
+OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
