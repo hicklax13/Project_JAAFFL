@@ -342,10 +342,12 @@ body{ min-height:100vh; }
   border-top:1px solid var(--hairline); border-left:1px solid var(--hairline); border-radius:var(--r); overflow:hidden; }
 .bh, .bcell, .brd-lbl{ border-right:1px solid var(--hairline); border-bottom:1px solid var(--hairline); }
 .bh{ padding:.4em 0; text-align:center; font-size:var(--fs-xxs); font-weight:700; letter-spacing:.04em;
-  color:var(--ink-3); background:var(--surface); text-transform:uppercase; }
+  color:var(--ink-3); background:var(--surface); text-transform:uppercase;
+  font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
 .bh.you{ color:var(--brass); background:color-mix(in srgb,var(--brass-glow) 70%,var(--surface)); }
 .brd-lbl{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; background:var(--surface);
-  font-size:var(--fs-xxs); color:var(--ink-3); font-weight:700; }
+  font-size:var(--fs-xxs); color:var(--ink-3); font-weight:700;
+  font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
 .brd-lbl .dir{ font-family:var(--font-mono); font-size:9px; color:var(--ink-3); opacity:.8; }
 .bcell{ height:50px; padding:4px 6px; position:relative; display:flex; flex-direction:column; justify-content:space-between;
   background:var(--card); transition:background var(--t-fast) var(--ease); }
@@ -481,9 +483,9 @@ svg text{ font-family:var(--font-ui); }
     </div>
 
     <div class="identity" aria-label="League format">
-      <span class="chip">12-Team</span>
+      <span class="chip"><span class="mono">12</span>-Team</span>
       <span class="chip">Standard · Non-PPR</span>
-      <span class="chip">Snake · 17 RD</span>
+      <span class="chip">Snake · <span class="mono">17</span> RD</span>
     </div>
 
     <div class="controls">
