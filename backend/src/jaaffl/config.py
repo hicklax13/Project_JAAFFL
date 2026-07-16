@@ -89,6 +89,11 @@ class Settings(BaseSettings):
     jaaffl_allowed_origins: str = "chrome-extension://*,http://localhost:3000,http://127.0.0.1:3000"
     jaaffl_season: int = 2026
     jaaffl_engine_params_path: Path = Path("./config/engine.json")
+    # Stage-3 ID crosswalk (data/crosswalk.py) Stage-B fuzzy fallback acceptance threshold τ:
+    # a name-similarity score (0–1, rapidfuzz/100) at/above this — with exact position + team
+    # (team-agnostic for FAs) — is accepted as a 'fuzzy' match; below it stays unresolved for
+    # manual mapping. 0.90 per plan §2.7; lower to widen recall, raise to reduce false links.
+    jaaffl_crosswalk_fuzzy_threshold: float = 0.90
     # Record-mode capture sink (Phase 1): raw mock-draft frames land here for fixture
     # curation. Git-ignored — raw recordings may carry league names; only redacted
     # goldens are committed (plan §5.10).

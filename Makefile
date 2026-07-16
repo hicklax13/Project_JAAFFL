@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-backend setup-js backend-dev web-dev ext-dev lint fmt test clean
+.PHONY: help setup setup-backend setup-js backend-dev web-dev ext-dev lint fmt test warehouse clean
 
 ## help: list available targets
 help:
@@ -42,6 +42,11 @@ fmt:
 test:
 	cd backend && (uv run pytest || python -m pytest)
 	pnpm -r test
+
+## warehouse: rebuild the DISPOSABLE DuckDB analytics store from Parquet + SQLite (never touches app.sqlite)
+warehouse:
+	cd backend && (uv run python -c "from jaaffl.data.warehouse import rebuild_warehouse; rebuild_warehouse()" \
+		|| python -c "from jaaffl.data.warehouse import rebuild_warehouse; rebuild_warehouse()")
 
 ## clean: remove build/cache artifacts (keeps data/ contents)
 clean:

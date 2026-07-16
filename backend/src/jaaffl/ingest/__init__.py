@@ -8,7 +8,7 @@ work, so a crash after it loses only recompute work — never a pick.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import structlog
 
@@ -19,6 +19,9 @@ from jaaffl.ingest.cbs import (
     normalize_league_settings,
 )
 from jaaffl.ingest.log import DraftLog
+
+if TYPE_CHECKING:  # avoid importing the data layer (and its optional deps) at runtime
+    from jaaffl.data.warehouse import Warehouse
 
 log = structlog.get_logger(__name__)
 
@@ -53,11 +56,23 @@ def _dedup_pick_number(event: DraftEvent) -> int | None:
 
 
 def handle_event(
-    event: DraftEvent, draft_log: DraftLog, *, captured_at: str | None = None
+    event: DraftEvent,
+    draft_log: DraftLog,
+    *,
+    warehouse: Warehouse | None = None,
+    captured_at: str | None = None,
 ) -> IngestResult:
-    """Normalize, durably append, then fold. Raises pydantic.ValidationError on a
-    malformed per-type payload BEFORE anything is appended."""
+    """Normalize, snapshot raw settings, durably append, then fold (the §2.6 ordering
+    invariant). Raises pydantic.ValidationError on a malformed per-type payload BEFORE
+    anything is persisted.
+
+    When a ``warehouse`` is wired, a ``league_settings`` event is snapshotted to
+    ``league_snapshots`` (SQLite only — hot-path safe) BEFORE the durable log append, so the
+    raw CBS payload is owned locally for Stage-4 ``CbsOnPageProvider`` (never re-fetched)."""
     normalize_event_data(event)  # the validation gate — §2.3 "payload is validated"
+    if warehouse is not None and event.event_type == DraftEventType.LEAGUE_SETTINGS:
+        settings = normalize_league_settings({"league_id": event.league_id, **event.data})
+        warehouse.snapshot_league(settings)  # raw CBS → league_snapshots, before the append
     pick_number = _dedup_pick_number(event)
     seq = draft_log.append(
         event,
