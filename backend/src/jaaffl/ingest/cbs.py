@@ -38,6 +38,8 @@ def normalize_league_settings(raw: dict) -> LeagueSettings:
     stage-2 track deepens this normalizer.
     """
     settings = LeagueSettings.model_validate(raw)
+    if not settings.raw:  # preserve the observed CBS payload verbatim for the snapshot store
+        settings = settings.model_copy(update={"raw": raw})
     if settings.team_count != _IMMUTABLE_TEAM_COUNT:
         log.warning(
             "league_settings_conflict",

@@ -77,6 +77,73 @@ def test_handle_event_rejects_malformed_pick_before_append(log: DraftLog) -> Non
         log.state("L1")  # nothing was appended
 
 
+def _snapshot_count(db: Path, league_id: str) -> int:
+    import sqlite3
+
+    conn = sqlite3.connect(db)
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) FROM league_snapshots WHERE league_id = ?", (league_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def _settings_event(**data) -> DraftEvent:
+    return DraftEvent(
+        event_type="league_settings",
+        league_id="L1",
+        data={"team_count": 12, "draft_type": "snake", **data},
+    )
+
+
+def test_handle_event_snapshots_league_settings_before_append(tmp_path: Path) -> None:
+    """§2.6: a league_settings event persists a league_snapshots row AND still appends to
+    the log (the store Stage-4 CbsOnPageProvider reads, not the network)."""
+    from jaaffl.data.warehouse import Warehouse
+
+    wh = Warehouse(tmp_path)
+    log = DraftLog(tmp_path / "app.sqlite")
+    result = handle_event(_settings_event(), log, warehouse=wh)
+    assert result.seq is not None  # still appended
+    assert _snapshot_count(wh.app_sqlite, "L1") == 1
+
+
+def test_handle_event_snapshot_dedups_identical_settings(tmp_path: Path) -> None:
+    from jaaffl.data.warehouse import Warehouse
+
+    wh = Warehouse(tmp_path)
+    log = DraftLog(tmp_path / "app.sqlite")
+    handle_event(_settings_event(), log, warehouse=wh)
+    handle_event(_settings_event(), log, warehouse=wh)  # byte-identical re-push
+    assert _snapshot_count(wh.app_sqlite, "L1") == 1  # snapshot de-duped
+    assert len(log.events("L1")) == 2  # but each settings event is a legitimate log row
+
+
+def test_handle_event_without_warehouse_still_appends(log: DraftLog) -> None:
+    """Backward-compatible: no warehouse wired → no snapshot, ingest still works."""
+    result = handle_event(_settings_event(), log)
+    assert result.seq is not None
+
+
+def test_handle_event_snapshot_is_skipped_for_non_settings(tmp_path: Path) -> None:
+    from jaaffl.data.warehouse import Warehouse, open_app_db
+
+    wh = Warehouse(tmp_path)
+    open_app_db(wh.app_sqlite).close()  # app startup ensures the app-state schema exists
+    log = DraftLog(tmp_path / "app.sqlite")
+    handle_event(pick(1, pick_number=1), log, warehouse=wh)
+    assert _snapshot_count(wh.app_sqlite, "L1") == 0  # picks are not league snapshots
+
+
+def test_normalize_league_settings_preserves_raw_payload() -> None:
+    """The raw CBS payload round-trips into LeagueSettings.raw so the snapshot owns it
+    verbatim (Stage-4 CbsOnPageProvider reads league_snapshots, not the network)."""
+    raw = {"league_id": "L1", "team_count": 12, "draft_type": "snake", "cbs_extra": "keep-me"}
+    settings = normalize_league_settings(raw)
+    assert settings.raw == raw
+
+
 def test_normalize_league_settings_reports_as_read_never_corrects() -> None:
     """agent_usage_contract: conflicts with the immutable league are surfaced, never
     silently 'fixed' — a 10-team payload normalizes to team_count=10."""

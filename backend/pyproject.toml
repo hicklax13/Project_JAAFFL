@@ -29,6 +29,7 @@ data = [
   "pyarrow>=15",
   "polars>=1.0",
   "nflreadpy>=0.1",
+  "rapidfuzz>=3.0",  # Stage-3 crosswalk fuzzy fallback (name+team+pos, token_sort_ratio/WRatio).
 ]
 # Stage 5: simulation + constrained optimization + residual ML.
 # pandas serves XGBoost .to_pandas() (stretch); scikit-learn serves GaussianMixture tiers.

@@ -18,6 +18,7 @@ from jaaffl import __version__
 from jaaffl.api.origin import is_origin_allowed, parse_allowed_origins
 from jaaffl.api.recs import PROTOCOL_VERSION, SCHEMA_VERSION, RecsHub
 from jaaffl.config import Settings, get_settings
+from jaaffl.data.warehouse import Warehouse, open_app_db
 from jaaffl.domain import DraftEvent, LeagueSettings, Recommendation
 from jaaffl.ingest import DraftLog, handle_event
 
@@ -37,6 +38,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="JAAFFL companion service", version=__version__)
     app.state.recs_hub = RecsHub()
     app.state.draft_log = DraftLog(settings.jaaffl_data_dir / "app.sqlite")
+    app.state.warehouse = Warehouse(settings.jaaffl_data_dir)
+    # Ensure the SQLite app-state schema (league_snapshots, players, id_crosswalk, ...) exists
+    # from boot — stdlib sqlite only, no DuckDB import, so the base ($0) install still starts
+    # without the `data` extra. Full DuckDB/Parquet materialization is `make warehouse`.
+    open_app_db(app.state.warehouse.app_sqlite).close()
     allowed_origins = parse_allowed_origins(settings.jaaffl_allowed_origins)
 
     # Local-only service. CORS is scoped to the user's own extension + local dashboard;
@@ -67,7 +73,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         -> fold -> idempotent ack. Malformed per-type payloads 422 before any append."""
         require_allowed_origin(request)
         try:
-            result = handle_event(event, app.state.draft_log)
+            result = handle_event(event, app.state.draft_log, warehouse=app.state.warehouse)
         except ValidationError as exc:
             raise HTTPException(
                 status_code=422, detail=exc.errors(include_url=False, include_context=False)
@@ -110,7 +116,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 captured_at = frame.get("ts") if frame.get("type") == "event" else None
                 try:
                     event = DraftEvent.model_validate(payload)
-                    result = handle_event(event, app.state.draft_log, captured_at=captured_at)
+                    result = handle_event(
+                        event,
+                        app.state.draft_log,
+                        warehouse=app.state.warehouse,
+                        captured_at=captured_at,
+                    )
                 except ValidationError as exc:
                     await ws.send_json(
                         {
