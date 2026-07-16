@@ -4,10 +4,12 @@ from fastapi.testclient import TestClient
 
 from jaaffl import __version__
 from jaaffl.api import create_app
-from jaaffl.api.recs import recs_hub
+from jaaffl.api.recs import RecsHub
 from jaaffl.domain import Recommendation, RecommendedPick
 
-client = TestClient(create_app())
+app = create_app()
+client = TestClient(app)
+recs_hub: RecsHub = app.state.recs_hub
 
 
 def test_health() -> None:

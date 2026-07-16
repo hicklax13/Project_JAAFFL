@@ -15,11 +15,9 @@ from jaaffl.providers.nflverse import NflreadpyProvider
 from jaaffl.providers.registry import build_registry
 
 
-def fake_nflreadpy(monkeypatch: pytest.MonkeyPatch, **funcs) -> types.SimpleNamespace:
+def fake_nflreadpy(monkeypatch: pytest.MonkeyPatch, **funcs) -> None:
     """Install a stub nflreadpy module so no network I/O happens in tests."""
-    module = types.SimpleNamespace(**funcs)
-    monkeypatch.setitem(sys.modules, "nflreadpy", module)
-    return module
+    monkeypatch.setitem(sys.modules, "nflreadpy", types.SimpleNamespace(**funcs))
 
 
 def test_default_registry_is_free_tier_only() -> None:
@@ -52,31 +50,21 @@ def test_unsupported_capability_raises() -> None:
         NflreadpyProvider().projections(2026)
 
 
-def test_historical_stats_delegates_to_load_player_stats(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("method", "loader"),
+    [("historical_stats", "load_player_stats"), ("expected_points", "load_ff_opportunity")],
+)
+def test_polars_methods_delegate_to_nflreadpy(
+    monkeypatch: pytest.MonkeyPatch, method: str, loader: str
 ) -> None:
     calls: dict = {}
 
-    def load_player_stats(seasons):
+    def fake_loader(seasons):
         calls["seasons"] = seasons
         return "FRAME"
 
-    fake_nflreadpy(monkeypatch, load_player_stats=load_player_stats)
-    assert NflreadpyProvider().historical_stats(2025) == "FRAME"
-    assert calls["seasons"] == [2025]
-
-
-def test_expected_points_delegates_to_load_ff_opportunity(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: dict = {}
-
-    def load_ff_opportunity(seasons):
-        calls["seasons"] = seasons
-        return "XEP"
-
-    fake_nflreadpy(monkeypatch, load_ff_opportunity=load_ff_opportunity)
-    assert NflreadpyProvider().expected_points(2025) == "XEP"
+    fake_nflreadpy(monkeypatch, **{loader: fake_loader})
+    assert getattr(NflreadpyProvider(), method)(2025) == "FRAME"
     assert calls["seasons"] == [2025]
 
 
@@ -84,6 +72,22 @@ def test_rankings_scaffolded_until_stage_4() -> None:
     # Capability declared (id-crosswalk wiring lands in roadmap stage 4).
     with pytest.raises(NotImplementedError):
         NflreadpyProvider().rankings(2026)
+
+
+def test_installed_nflreadpy_exposes_the_planned_api() -> None:
+    """Pins the plan's [VERIFY] items against the real package when the data extra is
+    installed (always in CI): the loader fns SC2 delegates to, plus the stage-3/4
+    id-crosswalk functions (plan §4.3)."""
+    nflreadpy = pytest.importorskip("nflreadpy")
+    pytest.importorskip("polars")
+    for fn in (
+        "load_player_stats",
+        "load_ff_opportunity",
+        "load_ff_rankings",
+        "load_ff_playerids",
+        "load_players",
+    ):
+        assert callable(getattr(nflreadpy, fn, None)), f"nflreadpy.{fn} missing"
 
 
 def test_provider_boundary_is_polars_typed() -> None:

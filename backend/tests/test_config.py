@@ -6,6 +6,9 @@ part of the immutable config/league.json constitution.
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from jaaffl.config import EngineParams, Settings, get_engine_params, get_settings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -62,6 +65,13 @@ def test_committed_engine_json_has_every_required_key() -> None:
     assert params.vona_horizon_picks == 2
     assert params.board_survival_weight == 0.5
     assert params.situation_adjust["mu_cap_pct"] == 0.15
+
+
+def test_engine_params_rejects_unknown_keys() -> None:
+    """A typo'd or stale key in config/engine.json (the calibration-written file) must
+    fail loud, never silently fall back to defaults."""
+    with pytest.raises(ValidationError):
+        EngineParams.model_validate({"kapa": 0.7})
 
 
 def test_get_engine_params_loads_via_settings_path(monkeypatch) -> None:

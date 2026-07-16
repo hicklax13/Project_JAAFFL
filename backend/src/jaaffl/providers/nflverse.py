@@ -40,6 +40,8 @@ class NflreadpyProvider(FantasyDataProvider):
 
     @property
     def capabilities(self) -> frozenset[Capability]:
+        # RANKINGS (ECR via load_ff_rankings) keeps the inherited NotImplementedError body
+        # until the stage-4 id-crosswalk wiring lands.
         return frozenset(
             {Capability.HISTORICAL_STATS, Capability.RANKINGS, Capability.EXPECTED_POINTS}
         )
@@ -51,8 +53,3 @@ class NflreadpyProvider(FantasyDataProvider):
     def expected_points(self, season: int, week: int | None = None) -> pl.DataFrame:
         """Expected fantasy points (xEP) from nflverse ffopportunity."""
         return _import_nflreadpy().load_ff_opportunity(seasons=[season])
-
-    def rankings(self, season: int, week: int | None = None) -> dict[str, float]:
-        """ECR via nflreadpy load_ff_rankings — id-crosswalk wiring lands in stage 4."""
-        self._require(Capability.RANKINGS)
-        raise NotImplementedError("rankings crosswalk not yet implemented (roadmap stage 4)")

@@ -10,7 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,8 +18,11 @@ class EngineParams(BaseModel):
     """Versioned engine tunables (design §10.3), single source of truth: config/engine.json.
 
     Calibration scripts (E1/E2) write back to that file, bumping ``version``. Expressly NOT
-    part of the immutable config/league.json constitution.
+    part of the immutable config/league.json constitution. ``extra="forbid"`` so a typo'd
+    or stale key in the file fails loud instead of silently running on defaults.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     version: int = 1
     scoring_format: str = "standard"

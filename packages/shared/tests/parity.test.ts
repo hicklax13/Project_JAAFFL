@@ -45,6 +45,14 @@ function load(relative: string): unknown {
   return JSON.parse(readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf-8"));
 }
 
+function jsonStems(relativeDir: string): string[] {
+  const dir = fileURLToPath(new URL(relativeDir, import.meta.url));
+  return readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .map((f) => f.replace(/\.json$/, ""))
+    .sort();
+}
+
 describe("canonical fixtures parse under Zod (same files Pydantic validates)", () => {
   it.each(names)("%s fixture parses", (name) => {
     const fixture = load(`../fixtures/${name}.json`);
@@ -52,12 +60,7 @@ describe("canonical fixtures parse under Zod (same files Pydantic validates)", (
   });
 
   it("fixture set covers exactly the contract surface", () => {
-    const dir = fileURLToPath(new URL("../fixtures", import.meta.url));
-    const onDisk = readdirSync(dir)
-      .filter((f) => f.endsWith(".json"))
-      .map((f) => f.replace(/\.json$/, ""))
-      .sort();
-    expect(onDisk).toEqual([...names].sort());
+    expect(jsonStems("../fixtures")).toEqual([...names].sort());
   });
 });
 
@@ -72,11 +75,6 @@ describe("Pydantic JSON Schema ≡ Zod-derived schema (structural)", () => {
   });
 
   it("checked-in schema set covers exactly the contract surface", () => {
-    const dir = fileURLToPath(new URL("../schemas", import.meta.url));
-    const onDisk = readdirSync(dir)
-      .filter((f) => f.endsWith(".json"))
-      .map((f) => f.replace(/\.json$/, ""))
-      .sort();
-    expect(onDisk).toEqual([...names].sort());
+    expect(jsonStems("../schemas")).toEqual([...names].sort());
   });
 });

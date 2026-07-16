@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from jaaffl import __version__
-from jaaffl.api.recs import PROTOCOL_VERSION, SCHEMA_VERSION, recs_hub
+from jaaffl.api.recs import PROTOCOL_VERSION, SCHEMA_VERSION, RecsHub
 from jaaffl.config import get_settings
 from jaaffl.domain import DraftEvent, LeagueSettings, Recommendation
 from jaaffl.ingest import handle_event
@@ -22,6 +22,7 @@ log = structlog.get_logger(__name__)
 
 def create_app() -> FastAPI:
     app = FastAPI(title="JAAFFL companion service", version=__version__)
+    app.state.recs_hub = RecsHub()
 
     # Local-only service; callers are the user's extension (chrome-extension://) and
     # dashboard (http://localhost:3000). Allow all origins since we bind to 127.0.0.1.
@@ -40,7 +41,7 @@ def create_app() -> FastAPI:
     async def ingest_event(event: DraftEvent) -> dict:
         """Ingest a single normalized draft event from the extension."""
         # TODO(stage 1/5): append-only SQLite log -> fold_state -> engine.recompute()
-        # -> recs_hub.publish(rec), so every ingest path pushes a fresh rec on /recs/ws.
+        # -> app.state.recs_hub.publish(rec), so every ingest pushes a fresh /recs/ws rec.
         handle_event(event)
         return {"accepted": True}
 
@@ -73,7 +74,8 @@ def create_app() -> FastAPI:
         verbatim — no bespoke socket shape.
         """
         await ws.accept()
-        queue = recs_hub.subscribe()
+        hub: RecsHub = ws.app.state.recs_hub
+        queue = hub.subscribe()
         log.info("recs_ws_connected")
         try:
             await ws.send_json(
@@ -84,7 +86,7 @@ def create_app() -> FastAPI:
                     "schema_version": SCHEMA_VERSION,
                 }
             )
-            latest = recs_hub.latest
+            latest = hub.latest
             await ws.send_json(
                 {
                     "type": "snapshot",
@@ -93,14 +95,11 @@ def create_app() -> FastAPI:
                 }
             )
             while True:
-                rec = await queue.get()
-                await ws.send_json(
-                    {"type": "rec", "v": PROTOCOL_VERSION, "recommendation": rec.model_dump()}
-                )
+                await ws.send_text(await queue.get())  # frames pre-serialized by the hub
         except WebSocketDisconnect:
             log.info("recs_ws_disconnected")
         finally:
-            recs_hub.unsubscribe(queue)
+            hub.unsubscribe(queue)
 
     @app.get("/league/{league_id}", response_model=LeagueSettings)
     def league(league_id: str) -> LeagueSettings:

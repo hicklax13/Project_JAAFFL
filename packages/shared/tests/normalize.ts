@@ -41,10 +41,12 @@ export function normalizeSchema(root: Record<string, unknown>): Desc {
     const node = resolve(rawNode);
 
     // Pydantic wraps referenced sub-models in a single-element allOf when the field
-    // carries metadata; unwrap it.
+    // carries metadata; unwrap it. Anything wider is an encoding this normalizer does
+    // not understand — throw rather than degrade to "any" and pass vacuously.
     const allOf = node["allOf"] as unknown[] | undefined;
-    if (Array.isArray(allOf) && allOf.length === 1 && !node["properties"]) {
-      return normalize(allOf[0]);
+    if (Array.isArray(allOf)) {
+      if (allOf.length === 1 && !node["properties"]) return normalize(allOf[0]);
+      throw new Error(`unhandled allOf shape: ${JSON.stringify(node)}`);
     }
 
     const anyOf = (node["anyOf"] ?? node["oneOf"]) as unknown[] | undefined;
@@ -65,6 +67,10 @@ export function normalizeSchema(root: Record<string, unknown>): Desc {
     }
 
     let type = node["type"];
+    // JSON Schema allows omitting "type" when object keywords make it unambiguous.
+    if (type === undefined && (node["properties"] || node["additionalProperties"])) {
+      type = "object";
+    }
     // type: ["number","null"] — the array encoding of nullability.
     if (Array.isArray(type)) {
       const nonNull = type.filter((t) => t !== "null");
@@ -99,8 +105,16 @@ export function normalizeSchema(root: Record<string, unknown>): Desc {
         }
         return { kind: "record", values: { kind: "any" } };
       }
-      case undefined:
+      case undefined: {
+        // Bare {} means "any" (e.g. record values of z.unknown()). A typeless node that
+        // still carries structural keywords is an unhandled encoding — throw, don't pass.
+        const unhandled = ["items", "prefixItems", "patternProperties", "not", "contains"]
+          .filter((key) => node[key] !== undefined);
+        if (unhandled.length > 0) {
+          throw new Error(`typeless node with unhandled keywords: ${unhandled.join(", ")}`);
+        }
         return { kind: "any" };
+      }
       default:
         throw new Error(`unhandled schema node type: ${JSON.stringify(type)}`);
     }

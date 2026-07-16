@@ -7,35 +7,22 @@ The js side (packages/shared/tests/parity.test.ts) parses the SAME fixtures with
 structurally compares the schemas, so a change on one side without the other fails CI.
 """
 
-import importlib.util
 import json
-from pathlib import Path
 
 import pytest
 from pydantic import TypeAdapter
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from jaaffl.domain.export import CONTRACT_MODELS, REPO_ROOT, render_all
+
 FIXTURES = REPO_ROOT / "packages" / "shared" / "fixtures"
 SCHEMAS = REPO_ROOT / "packages" / "shared" / "schemas"
 
-
-def _load_export_module():
-    path = REPO_ROOT / "scripts" / "export_schemas.py"
-    spec = importlib.util.spec_from_file_location("export_schemas", path)
-    assert spec and spec.loader, f"cannot load {path}"
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+MODEL_NAMES = [model.__name__ for model in CONTRACT_MODELS]
 
 
-EXPORT = _load_export_module()
-MODEL_NAMES = [model.__name__ for model in EXPORT.CONTRACT_MODELS]
-
-
-@pytest.mark.parametrize("name", MODEL_NAMES)
-def test_pydantic_accepts_canonical_fixture(name: str) -> None:
-    model = next(m for m in EXPORT.CONTRACT_MODELS if m.__name__ == name)
-    payload = json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
+@pytest.mark.parametrize("model", CONTRACT_MODELS, ids=MODEL_NAMES)
+def test_pydantic_accepts_canonical_fixture(model) -> None:
+    payload = json.loads((FIXTURES / f"{model.__name__}.json").read_text(encoding="utf-8"))
     TypeAdapter(model).validate_python(payload)  # must not raise
 
 
@@ -68,7 +55,7 @@ def test_new_scaffold_fields_are_exercised_by_fixtures() -> None:
 
 
 def test_checked_in_schemas_match_fresh_export() -> None:
-    rendered = EXPORT.render_all()
+    rendered = render_all()
     for name, text in rendered.items():
         on_disk = SCHEMAS / f"{name}.json"
         assert on_disk.exists(), f"{on_disk} missing — run scripts/export_schemas.py"
