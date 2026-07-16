@@ -1,0 +1,306 @@
+{
+  "$defs": {
+    "Position": {
+      "enum": [
+        "QB",
+        "RB",
+        "WR",
+        "TE",
+        "K",
+        "DST",
+        "DL",
+        "LB",
+        "DB"
+      ],
+      "title": "Position",
+      "type": "string"
+    },
+    "RosterSlot": {
+      "description": "A startable (or bench/IR) slot with its position eligibility.\n\nFlex slots list multiple eligible positions (e.g. FLEX -> RB/WR/TE,\nSUPERFLEX -> QB/RB/WR/TE). Modeled generically to support CBS custom leagues.",
+      "properties": {
+        "count": {
+          "description": "Number of slots of this type.",
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "eligible_positions": {
+          "items": {
+            "$ref": "#/$defs/Position"
+          },
+          "title": "Eligible Positions",
+          "type": "array"
+        },
+        "slot": {
+          "description": "Slot label, e.g. 'QB', 'FLEX', 'SUPERFLEX', 'BENCH', 'IR'.",
+          "title": "Slot",
+          "type": "string"
+        },
+        "starting": {
+          "default": true,
+          "description": "False for BENCH/IR slots.",
+          "title": "Starting",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "slot",
+        "eligible_positions",
+        "count"
+      ],
+      "title": "RosterSlot",
+      "type": "object"
+    },
+    "ScoringBonus": {
+      "description": "A threshold bonus, e.g. K field goal of 50+ yards => +N points.",
+      "properties": {
+        "applies_to": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Position"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. [K].",
+          "title": "Applies To"
+        },
+        "points": {
+          "description": "Bonus points at/over the threshold.",
+          "title": "Points",
+          "type": "number"
+        },
+        "stat": {
+          "description": "e.g. 'field_goal_distance'.",
+          "title": "Stat",
+          "type": "string"
+        },
+        "threshold": {
+          "description": "Award when stat >= threshold (stat units).",
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "stat",
+        "threshold",
+        "points"
+      ],
+      "title": "ScoringBonus",
+      "type": "object"
+    },
+    "ScoringBracket": {
+      "description": "One inclusive-lower bracket of a tiered stat. Points awarded when lower <= stat < upper\n(upper=None => open-ended top bracket).",
+      "properties": {
+        "lower": {
+          "description": "Inclusive lower bound of the bracket, in stat units.",
+          "title": "Lower",
+          "type": "number"
+        },
+        "points": {
+          "description": "Points awarded when the stat falls in this bracket.",
+          "title": "Points",
+          "type": "number"
+        },
+        "upper": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exclusive upper bound; None = open-ended.",
+          "title": "Upper"
+        }
+      },
+      "required": [
+        "lower",
+        "points"
+      ],
+      "title": "ScoringBracket",
+      "type": "object"
+    },
+    "ScoringRule": {
+      "description": "Points awarded per unit of a stat, e.g. stat='reception', points_per_unit=1.0 (PPR).",
+      "properties": {
+        "applies_to": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Position"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Restrict to positions, or None for all.",
+          "title": "Applies To"
+        },
+        "points_per_unit": {
+          "title": "Points Per Unit",
+          "type": "number"
+        },
+        "stat": {
+          "title": "Stat",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stat",
+        "points_per_unit"
+      ],
+      "title": "ScoringRule",
+      "type": "object"
+    },
+    "ScoringTier": {
+      "description": "A bracketed (non-linear) scoring stat, e.g. CBS DST points-allowed / yards-allowed.",
+      "properties": {
+        "applies_to": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Position"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Restrict to positions, e.g. [DST].",
+          "title": "Applies To"
+        },
+        "brackets": {
+          "items": {
+            "$ref": "#/$defs/ScoringBracket"
+          },
+          "title": "Brackets",
+          "type": "array"
+        },
+        "stat": {
+          "description": "e.g. 'dst_points_allowed', 'dst_yards_allowed'.",
+          "title": "Stat",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stat"
+      ],
+      "title": "ScoringTier",
+      "type": "object"
+    }
+  },
+  "description": "Normalized league configuration parsed from CBS.",
+  "properties": {
+    "draft_order": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Team ids in overall pick order, if explicitly known.",
+      "title": "Draft Order"
+    },
+    "draft_type": {
+      "default": "snake",
+      "description": "'snake' | 'auction' | 'custom'.",
+      "title": "Draft Type",
+      "type": "string"
+    },
+    "dynasty": {
+      "default": false,
+      "title": "Dynasty",
+      "type": "boolean"
+    },
+    "keeper": {
+      "default": false,
+      "title": "Keeper",
+      "type": "boolean"
+    },
+    "league_id": {
+      "title": "League Id",
+      "type": "string"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "platform": {
+      "default": "cbs",
+      "title": "Platform",
+      "type": "string"
+    },
+    "raw": {
+      "additionalProperties": true,
+      "description": "Original CBS payload snapshot.",
+      "title": "Raw",
+      "type": "object"
+    },
+    "roster_slots": {
+      "items": {
+        "$ref": "#/$defs/RosterSlot"
+      },
+      "title": "Roster Slots",
+      "type": "array"
+    },
+    "scoring": {
+      "items": {
+        "$ref": "#/$defs/ScoringRule"
+      },
+      "title": "Scoring",
+      "type": "array"
+    },
+    "scoring_bonuses": {
+      "items": {
+        "$ref": "#/$defs/ScoringBonus"
+      },
+      "title": "Scoring Bonuses",
+      "type": "array"
+    },
+    "scoring_tiers": {
+      "items": {
+        "$ref": "#/$defs/ScoringTier"
+      },
+      "title": "Scoring Tiers",
+      "type": "array"
+    },
+    "team_count": {
+      "minimum": 2,
+      "title": "Team Count",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "league_id",
+    "team_count"
+  ],
+  "title": "LeagueSettings",
+  "type": "object"
+}

@@ -15,7 +15,11 @@ from jaaffl.domain.models import (
     Recommendation,
     RecommendedPick,
     RosterSlot,
+    ScoreComponents,
+    ScoringBonus,
+    ScoringBracket,
     ScoringRule,
+    ScoringTier,
     Team,
 )
 
@@ -30,6 +34,10 @@ __all__ = [
     "Recommendation",
     "RecommendedPick",
     "RosterSlot",
+    "ScoreComponents",
+    "ScoringBonus",
+    "ScoringBracket",
     "ScoringRule",
+    "ScoringTier",
     "Team",
 ]

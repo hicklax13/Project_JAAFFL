@@ -22,13 +22,17 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: python -m pip install -e '.[dev]'
+        run: python -m pip install -e '.[dev,data]'
       - name: Lint
-        run: ruff check .
+        run: ruff check . ../scripts
       - name: Format check
-        run: ruff format --check .
+        run: ruff format --check . ../scripts
       - name: Test
         run: pytest -q
+      - name: Schema parity (E5) — regenerate and diff
+        run: |
+          python ../scripts/export_schemas.py
+          git diff --exit-code ../packages/shared/schemas
 
   js:
     name: Web + Extension (TypeScript)

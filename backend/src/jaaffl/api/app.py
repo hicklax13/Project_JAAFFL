@@ -12,8 +12,9 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from jaaffl import __version__
+from jaaffl.api.recs import PROTOCOL_VERSION, SCHEMA_VERSION, RecsHub
 from jaaffl.config import get_settings
-from jaaffl.domain import DraftEvent, Recommendation
+from jaaffl.domain import DraftEvent, LeagueSettings, Recommendation
 from jaaffl.ingest import handle_event
 
 log = structlog.get_logger(__name__)
@@ -21,6 +22,7 @@ log = structlog.get_logger(__name__)
 
 def create_app() -> FastAPI:
     app = FastAPI(title="JAAFFL companion service", version=__version__)
+    app.state.recs_hub = RecsHub()
 
     # Local-only service; callers are the user's extension (chrome-extension://) and
     # dashboard (http://localhost:3000). Allow all origins since we bind to 127.0.0.1.
@@ -38,6 +40,8 @@ def create_app() -> FastAPI:
     @app.post("/draft/events")
     async def ingest_event(event: DraftEvent) -> dict:
         """Ingest a single normalized draft event from the extension."""
+        # TODO(stage 1/5): append-only SQLite log -> fold_state -> engine.recompute()
+        # -> app.state.recs_hub.publish(rec), so every ingest pushes a fresh /recs/ws rec.
         handle_event(event)
         return {"accepted": True}
 
@@ -59,6 +63,50 @@ def create_app() -> FastAPI:
         # TODO(stage 5): load current DraftState + LeagueSettings from the warehouse and
         # call jaaffl.engine.recommend(...).
         raise HTTPException(status_code=501, detail="engine not yet implemented (roadmap stage 5)")
+
+    @app.websocket("/recs/ws")
+    async def recs_ws(ws: WebSocket) -> None:
+        """PUSH channel: backend -> overlay/dashboard, read-only to the client (§8.5).
+
+        Sends `hello` then a `snapshot` of the latest Recommendation on connect (late
+        joiners resynchronize from state, never a replayed stream), then one `rec` frame
+        per published Recommendation. Frames reuse the shared Recommendation contract
+        verbatim — no bespoke socket shape.
+        """
+        await ws.accept()
+        hub: RecsHub = ws.app.state.recs_hub
+        queue = hub.subscribe()
+        log.info("recs_ws_connected")
+        try:
+            await ws.send_json(
+                {
+                    "type": "hello",
+                    "v": PROTOCOL_VERSION,
+                    "server_version": __version__,
+                    "schema_version": SCHEMA_VERSION,
+                }
+            )
+            latest = hub.latest
+            await ws.send_json(
+                {
+                    "type": "snapshot",
+                    "v": PROTOCOL_VERSION,
+                    "recommendation": latest.model_dump() if latest else None,
+                }
+            )
+            while True:
+                await ws.send_text(await queue.get())  # frames pre-serialized by the hub
+        except WebSocketDisconnect:
+            log.info("recs_ws_disconnected")
+        finally:
+            hub.unsubscribe(queue)
+
+    @app.get("/league/{league_id}", response_model=LeagueSettings)
+    def league(league_id: str) -> LeagueSettings:
+        # TODO(stage 2): serve the normalized settings ingested from the CBS league pages.
+        raise HTTPException(
+            status_code=404, detail="league settings not yet ingested (roadmap stage 2)"
+        )
 
     return app
 

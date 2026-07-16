@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "scoring_format": "standard",
+  "kappa": 0.65,
+  "alpha": 0.4,
+  "projection_blend": "simple_average",
+  "flex_split": { "RB": 8, "WR": 4 },
+  "lambda_schedule": [
+    { "rounds": [1, 2], "lambda": 0.3 },
+    { "rounds": [3, 6], "lambda": 0.2 },
+    { "rounds": [7, 9], "lambda": 0.0 },
+    { "rounds": [10, 13], "lambda": -0.3 },
+    { "rounds": [14, 17], "lambda": -0.4 }
+  ],
+  "lambda_slot_override": {
+    "last_startable_slot_floor": 0.4,
+    "surplus_stash_ceiling": -0.4
+  },
+  "replacement_blend": { "vols_weight": 0.5, "mangames_weight": 0.5 },
+  "caps": {
+    "modifier_abs_max": 5.0,
+    "mu_refinement_pct": 0.15,
+    "modifiers": { "bye_stack": 3.0, "handcuff_synergy": 5.0, "sos": 3.0 }
+  },
+  "candidate_cap": 180,
+  "mc_enabled": false,
+  "mc_rollouts": 2000,
+  "reliability_shrinkage": { "K": 0.4, "DST": 0.4 },
+  "punt_guard": { "enabled": true, "stream_round": { "K": 17, "DST": 16 } },
+  "vona_horizon_picks": 2,
+  "board_survival_weight": 0.5,
+  "situation_adjust": {
+    "enabled": true,
+    "mu_cap_pct": 0.15,
+    "vacated_regression": 0.5,
+    "rookie_capital_weight": 0.6,
+    "sigma_widen_on_change": 1.25
+  }
+}

@@ -11,13 +11,16 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "echo \"(no tests yet)\" && exit 0",
+    "test": "vitest run",
     "lint": "echo \"(lint: add eslint)\" && exit 0"
   },
   "dependencies": {
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "@types/node": "^22.20.1",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.10",
+    "zod-to-json-schema": "^3.25.2"
   }
 }

@@ -1,0 +1,5 @@
+{
+  "stat": "rushing_yards",
+  "points_per_unit": 0.1,
+  "applies_to": ["RB", "WR"]
+}

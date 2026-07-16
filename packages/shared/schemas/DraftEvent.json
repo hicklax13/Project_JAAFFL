@@ -1,0 +1,36 @@
+{
+  "$defs": {
+    "DraftEventType": {
+      "enum": [
+        "league_settings",
+        "draft_state",
+        "on_the_clock",
+        "pick_made",
+        "draft_complete"
+      ],
+      "title": "DraftEventType",
+      "type": "string"
+    }
+  },
+  "description": "A normalized event emitted by the extension and ingested by the backend.\n\n``data`` is validated by ``jaaffl.ingest`` into the concrete model for its type.",
+  "properties": {
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "event_type": {
+      "$ref": "#/$defs/DraftEventType"
+    },
+    "league_id": {
+      "title": "League Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_type",
+    "league_id"
+  ],
+  "title": "DraftEvent",
+  "type": "object"
+}

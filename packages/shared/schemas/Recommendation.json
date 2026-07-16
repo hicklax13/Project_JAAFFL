@@ -1,0 +1,251 @@
+{
+  "$defs": {
+    "RecommendedPick": {
+      "properties": {
+        "adp": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adp"
+        },
+        "components": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScoreComponents"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "next_turn_availability": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "P(player still available at your next pick).",
+          "title": "Next Turn Availability"
+        },
+        "player_id": {
+          "title": "Player Id",
+          "type": "string"
+        },
+        "projected_points": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Projected Points"
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rationale"
+        },
+        "score": {
+          "description": "Blended recommendation score (higher is better).",
+          "title": "Score",
+          "type": "number"
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tier"
+        },
+        "vorp": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Value over replacement, league-adjusted.",
+          "title": "Vorp"
+        }
+      },
+      "required": [
+        "player_id",
+        "score"
+      ],
+      "title": "RecommendedPick",
+      "type": "object"
+    },
+    "ScoreComponents": {
+      "description": "Auditable decomposition of Score(p) (design \u00a710.3) \u2014 never a black box.\n\nReconstruction (kappa/alpha and caps from EngineParams):\n    score ~= mlv + kappa*max(0.0, vona) - risk_penalty + cliff_bonus + sum(modifiers.values())\nConvention: ``vona`` is RAW (pre-kappa, may be negative \u2014 the overlay shows urgency even\nwhen gated to 0); ``risk_penalty`` and ``cliff_bonus`` are the APPLIED signed contributions;\n``sigma``/``floor``/``ceiling``/``replacement_baseline`` are descriptive, not summed.",
+      "properties": {
+        "best_available_next": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "E[best MLV still available at pos(p) by your H-th pick N_H*] (\u00a73.10 R2).",
+          "title": "Best Available Next"
+        },
+        "ceiling": {
+          "description": "Upside (~p90) projection, league points.",
+          "title": "Ceiling",
+          "type": "number"
+        },
+        "cliff_bonus": {
+          "description": "Applied tier-cliff term alpha*CliffBonus_p (points).",
+          "title": "Cliff Bonus",
+          "type": "number"
+        },
+        "floor": {
+          "description": "Downside (~p10) projection, league points.",
+          "title": "Floor",
+          "type": "number"
+        },
+        "mlv": {
+          "description": "Flex-aware Marginal Lineup Value (Hungarian, 9 slots). Weight 1.",
+          "title": "Mlv",
+          "type": "number"
+        },
+        "modifiers": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Named capped modifiers already in points, e.g. {'bye_stack': -1.5, 'handcuff_synergy': 2.0, 'sos': 0.5}; each within EngineParams caps.",
+          "title": "Modifiers",
+          "type": "object"
+        },
+        "reliability": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "r_pos reliability shrinkage applied to mu (\u00a73.10 R1).",
+          "title": "Reliability"
+        },
+        "replacement_baseline": {
+          "description": "Positional replacement baseline (league points) for MLV fill.",
+          "title": "Replacement Baseline",
+          "type": "number"
+        },
+        "risk_penalty": {
+          "description": "Applied signed risk term lambda(phase,slot)*sigma; Score SUBTRACTS it.",
+          "title": "Risk Penalty",
+          "type": "number"
+        },
+        "sigma": {
+          "description": "Projection stdev sigma_p used for the risk term.",
+          "minimum": 0.0,
+          "title": "Sigma",
+          "type": "number"
+        },
+        "vona": {
+          "description": "Raw Value Over Next Available (pre-kappa, pre-max-gate). May be < 0.",
+          "title": "Vona",
+          "type": "number"
+        },
+        "vona_horizon": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upcoming picks VONA looked ahead, H (\u00a73.10 R2).",
+          "title": "Vona Horizon"
+        }
+      },
+      "required": [
+        "mlv",
+        "vona",
+        "risk_penalty",
+        "cliff_bonus",
+        "sigma",
+        "floor",
+        "ceiling",
+        "replacement_baseline"
+      ],
+      "title": "ScoreComponents",
+      "type": "object"
+    }
+  },
+  "description": "The engine's answer for the current pick.",
+  "properties": {
+    "as_of_overall_pick": {
+      "title": "As Of Overall Pick",
+      "type": "integer"
+    },
+    "league_id": {
+      "title": "League Id",
+      "type": "string"
+    },
+    "ranked": {
+      "items": {
+        "$ref": "#/$defs/RecommendedPick"
+      },
+      "title": "Ranked",
+      "type": "array"
+    },
+    "reasoning": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reasoning"
+    }
+  },
+  "required": [
+    "league_id",
+    "as_of_overall_pick"
+  ],
+  "title": "Recommendation",
+  "type": "object"
+}

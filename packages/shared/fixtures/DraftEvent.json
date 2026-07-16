@@ -1,0 +1,11 @@
+{
+  "event_type": "pick_made",
+  "league_id": "cbs-jaaffl",
+  "data": {
+    "overall": 13,
+    "round": 2,
+    "pick_in_round": 1,
+    "team_id": "T12",
+    "player_id": "p-0001"
+  }
+}

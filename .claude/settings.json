@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm -r typecheck)",
+      "Bash(pnpm -r test)",
+      "Bash(pnpm -r lint)",
+      "Bash(ruff check .)",
+      "Bash(ruff format --check .)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/dev/session_start.sh",
+            "shell": "bash",
+            "timeout": 300,
+            "statusMessage": "JAAFFL bootstrap: installing deps + running lint/tests"
+          }
+        ]
+      }
+    ]
+  }
+}

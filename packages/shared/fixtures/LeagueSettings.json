@@ -1,0 +1,70 @@
+{
+  "league_id": "cbs-jaaffl",
+  "platform": "cbs",
+  "name": "JAAFFL",
+  "team_count": 12,
+  "roster_slots": [
+    { "slot": "QB", "eligible_positions": ["QB"], "count": 1, "starting": true },
+    { "slot": "RB", "eligible_positions": ["RB"], "count": 1, "starting": true },
+    { "slot": "WR", "eligible_positions": ["WR"], "count": 3, "starting": true },
+    { "slot": "WR/RB", "eligible_positions": ["WR", "RB"], "count": 1, "starting": true },
+    { "slot": "TE", "eligible_positions": ["TE"], "count": 1, "starting": true },
+    { "slot": "K", "eligible_positions": ["K"], "count": 1, "starting": true },
+    { "slot": "DST", "eligible_positions": ["DST"], "count": 1, "starting": true },
+    {
+      "slot": "BENCH",
+      "eligible_positions": ["QB", "RB", "WR", "TE", "K", "DST"],
+      "count": 8,
+      "starting": false
+    }
+  ],
+  "scoring": [
+    { "stat": "passing_yards", "points_per_unit": 0.04, "applies_to": null },
+    { "stat": "passing_td", "points_per_unit": 4.0, "applies_to": null },
+    { "stat": "interception", "points_per_unit": -2.0, "applies_to": null },
+    { "stat": "rushing_yards", "points_per_unit": 0.1, "applies_to": null },
+    { "stat": "rushing_td", "points_per_unit": 6.0, "applies_to": null },
+    { "stat": "receiving_yards", "points_per_unit": 0.1, "applies_to": null },
+    { "stat": "receiving_td", "points_per_unit": 6.0, "applies_to": null },
+    { "stat": "fumble_lost", "points_per_unit": -2.0, "applies_to": null }
+  ],
+  "scoring_tiers": [
+    {
+      "stat": "dst_points_allowed",
+      "applies_to": ["DST"],
+      "brackets": [
+        { "lower": 0, "upper": 1, "points": 10 },
+        { "lower": 1, "upper": 7, "points": 7 },
+        { "lower": 7, "upper": 14, "points": 4 },
+        { "lower": 14, "upper": 21, "points": 1 },
+        { "lower": 21, "upper": 28, "points": 0 },
+        { "lower": 28, "upper": 35, "points": -1 },
+        { "lower": 35, "upper": null, "points": -4 }
+      ]
+    },
+    {
+      "stat": "dst_yards_allowed",
+      "applies_to": ["DST"],
+      "brackets": [
+        { "lower": 0, "upper": 100, "points": 5 },
+        { "lower": 100, "upper": 200, "points": 3 },
+        { "lower": 200, "upper": 300, "points": 2 },
+        { "lower": 300, "upper": 400, "points": 0 },
+        { "lower": 400, "upper": null, "points": -3 }
+      ]
+    }
+  ],
+  "scoring_bonuses": [
+    {
+      "stat": "field_goal_distance",
+      "threshold": 50,
+      "points": 2,
+      "applies_to": ["K"]
+    }
+  ],
+  "draft_type": "snake",
+  "draft_order": ["T01", "T02", "T03", "T04", "T05", "T06", "T07", "T08", "T09", "T10", "T11", "T12"],
+  "keeper": false,
+  "dynasty": false,
+  "raw": {}
+}

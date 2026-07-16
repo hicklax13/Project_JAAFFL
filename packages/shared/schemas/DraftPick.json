@@ -1,0 +1,43 @@
+{
+  "properties": {
+    "overall": {
+      "minimum": 1,
+      "title": "Overall",
+      "type": "integer"
+    },
+    "pick_in_round": {
+      "minimum": 1,
+      "title": "Pick In Round",
+      "type": "integer"
+    },
+    "player_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Player Id"
+    },
+    "round": {
+      "minimum": 1,
+      "title": "Round",
+      "type": "integer"
+    },
+    "team_id": {
+      "title": "Team Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "overall",
+    "round",
+    "pick_in_round",
+    "team_id"
+  ],
+  "title": "DraftPick",
+  "type": "object"
+}

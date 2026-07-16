@@ -13,7 +13,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import pandas as pd
+    import polars as pl
 
     from jaaffl.domain import Player
 
@@ -22,7 +22,8 @@ class Capability(StrEnum):
     HISTORICAL_STATS = "historical_stats"
     PROJECTIONS = "projections"
     ADP = "adp"
-    RANKINGS = "rankings"
+    RANKINGS = "rankings"  # ECR (nflreadpy load_ff_rankings)
+    EXPECTED_POINTS = "expected_points"  # xEP (nflreadpy load_ff_opportunity)
     INJURIES = "injuries"
     NEWS = "news"
 
@@ -65,8 +66,13 @@ class FantasyDataProvider(abc.ABC):
         self._require(Capability.HISTORICAL_STATS)
         raise NotImplementedError
 
-    def historical_stats(self, season: int) -> pd.DataFrame:
+    def historical_stats(self, season: int) -> pl.DataFrame:
         self._require(Capability.HISTORICAL_STATS)
+        raise NotImplementedError
+
+    def expected_points(self, season: int, week: int | None = None) -> pl.DataFrame:
+        """Expected fantasy points (xEP), e.g. nflverse ffopportunity."""
+        self._require(Capability.EXPECTED_POINTS)
         raise NotImplementedError
 
     def projections(self, season: int, week: int | None = None) -> dict[str, dict[str, float]]:
