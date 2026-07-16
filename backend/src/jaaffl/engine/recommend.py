@@ -8,9 +8,37 @@ playoff odds. 2027 outputs, when added, are labeled ESTIMATED (ADR 0003).
 from __future__ import annotations
 
 from collections.abc import Sequence
+from enum import StrEnum
 
+from jaaffl.config import EngineParams
 from jaaffl.domain import DraftState, LeagueSettings, Recommendation
 from jaaffl.providers import FantasyDataProvider
+
+
+class SlotState(StrEnum):
+    """Where a candidate sits relative to your startable need at its position (§3.5)."""
+
+    LAST_OPEN_STARTABLE = "last_open_startable"  # p fills your final open startable slot at its pos
+    SURPLUS = "surplus"  # depth/stash beyond startable need
+    NORMAL = "normal"
+
+
+def lambda_weight(round_no: int, slot_state: SlotState, params: EngineParams) -> float:
+    """Risk λ for the risk term ``−λ·σ̂`` (design §6.C.5).
+
+    The phase default comes from ``params.lambda_schedule`` (floor-tilt λ>0 early, ceiling-tilt
+    λ<0 late); the **slot override dominates** — filling your last open startable slot forces the
+    floor tilt, a surplus/stash forces the ceiling tilt (``params.lambda_slot_override``).
+    """
+    if slot_state is SlotState.LAST_OPEN_STARTABLE:
+        return float(params.lambda_slot_override["last_startable_slot_floor"])
+    if slot_state is SlotState.SURPLUS:
+        return float(params.lambda_slot_override["surplus_stash_ceiling"])
+    for entry in params.lambda_schedule:
+        low, high = entry["rounds"]
+        if low <= round_no <= high:
+            return float(entry["lambda"])
+    return 0.0  # out-of-schedule round → neutral (never a crash)
 
 
 def recommend(
