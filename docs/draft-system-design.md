@@ -1668,6 +1668,31 @@ simulator stretch. The strategy it will produce for your league is anchor-RB + W
 QB/TE + streamed K/DST — the correct, evidence-backed response to Standard scoring and a WR-heavy,
 one-mandatory-RB roster.
 
+### 10.8 Addendum — round-aware valuation & opportunity refinements (implementation-plan v1.1)
+
+Post-synthesis, the build plan added four **valuation refinements** (see
+[`implementation-plan.md` §3.10](implementation-plan.md)) that sharpen — without changing — the §6.C
+objective for *live* use. All are v1 (closed-form, calibrated); the fuller Monte-Carlo / ML versions
+remain the §6.C.4 / §10.5 stretch:
+
+- **R1 — Position-reliability shrinkage + punt guard.** Shrink low-R² (K/DST) projections toward
+  replacement so MLV reflects *predictable* edge, not projection noise (realized K1−K13 ≈ 1.5 pts/week),
+  and never surface K/DST as the #1 pick before their stream round. Prevents the "kicker ranked too
+  early" failure that raw VOR on unregressed projections invites.
+- **R2 — Turn-aware VONA.** Extend the §6.C.4 opportunity cost from your *next* pick to your next
+  **1–2 picks** (the snake turn); full remaining-draft Monte-Carlo VONA stays the stretch generalization.
+- **R3 — Board-conditioned survival.** Fold the positional-run detector *into* the survival model
+  (effective ADP shifts under observed run pressure) instead of a separate additive bonus.
+- **R4 — Opportunity & situation model.** Make §6.B.2 / §6.B.3 explicit: project stable *opportunity
+  share* (snap/carry/target share, WOPR, xEP) in the player's **current** situation — team change,
+  vacated volume (a *regressed* prior, not 1:1), rookie/committee competition, QB environment, age,
+  injury — translated into the exact non-PPR scoring, moving μ (capped ±10–15%) and σ, never adding a
+  score term (§6.A). Values *this year's* opportunity, not last year's box score.
+
+All weights follow the §6.A two-layer rule (μ/σ inputs vs the Greek score-terms), are Optuna-calibrated
+against the E6 tournament, and are versioned in `config/engine.json` — there is no proven-optimal set,
+and every weight is surfaced in `ScoreComponents`. The immutable league settings (§2) are unchanged.
+
 ---
 
 *End of document. Persistent memory: [`../config/league.json`](../config/league.json) · project

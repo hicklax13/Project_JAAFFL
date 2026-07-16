@@ -83,8 +83,11 @@ Score(p) =  MLV_p                        # flex-aware Marginal Lineup Value (Hun
 - **MLV** — gain to the optimal 9-starter lineup from adding *p*, via `scipy.optimize.linear_sum_assignment`
   (Hungarian) over the 9 slots with a WR/RB flex mask, replacement-filled. Empty roster ⇒ MLV = μ − baseline
   = classic VOR.
-- **VONA** — `MLV_p − E[best surviving MLV at pos(p) by your next pick]`; survival is analytic Gaussian
-  `S_j(N) = 1 − Φ((N − m_j)/s_j)` from FFC ADP mean `m_j` + stdev `s_j`. Monte-Carlo VONA is a stretch refinement.
+- **VONA** — `MLV_p − E[best surviving MLV at pos(p) by your next 1–2 picks]` (**turn-aware**, §3.10 R2);
+  survival is analytic Gaussian `S_j(N) = 1 − Φ((N − m_j^eff)/s_j)` from FFC ADP mean `m_j` + stdev `s_j`,
+  **board-conditioned** so a live positional run lowers survival and raises urgency (§3.10 R3). Full
+  remaining-draft Monte-Carlo VONA is a stretch refinement. Low-reliability positions (K/DST) have their
+  projections shrunk toward replacement first, so projection noise cannot inflate their value (§3.10 R1).
 - **λ schedule** (floor-tilt λ>0, ceiling-tilt λ<0): R1–2 **+0.2…+0.4**; R3–6 **+0.1…+0.3**; R7–9 **≈0**;
   R10–13 **−0.2…−0.4**; R14–17 **−0.3…−0.5**. **Slot override dominates phase:** last open startable slot →
   floor; surplus/stash → ceiling.
@@ -700,6 +703,11 @@ for the tunables below; `config.py` gains only the *path* + provider/runtime env
 | `candidate_cap` | `180` | ≈180 | Top-K candidate bound on the hot path |
 | `mc_enabled` | `false` | analytic default | Toggle MC-VONA refinement |
 | `mc_rollouts` | `2000` | ≈2000 | MC rollouts when `mc_enabled` |
+| `reliability_shrinkage` | `{K:0.4, DST:0.4}` (others 1.0) | K/DST ≈0.35–0.5 | Shrink μ toward replacement for low-R² positions (§3.10 R1) — the kicker/DST fix |
+| `punt_guard` | `{enabled:true, stream_round:{K:17, DST:16}}` | — | Never surface K/DST as the #1 rec before their stream round unless the roster is full (§3.10 R1) |
+| `vona_horizon_picks` | `2` | 1=one-step, 2=turn-aware | How many upcoming picks VONA looks ahead (§3.10 R2) |
+| `board_survival_weight` (β) | `0.5` | 0=static ADP | Weight of observed run pressure on effective ADP / survival (§3.10 R3) |
+| `situation_adjust` | `{enabled:true, mu_cap_pct:0.15, vacated_regression:0.5, rookie_capital_weight:0.6, sigma_widen_on_change:1.25}` | caps ±10–15% | Opportunity/situation μ/σ adjustment for team change, vacated volume, rookie competition (§3.10 R4) |
 
 **Loader (`backend/src/jaaffl/config.py` — additive; `Path` and `lru_cache` are already imported):**
 
@@ -724,6 +732,14 @@ class EngineParams(BaseModel):
     candidate_cap: int = 180
     mc_enabled: bool = False
     mc_rollouts: int = 2000
+    # §3.10 v1.1 round-aware refinements
+    reliability_shrinkage: dict[str, float] = Field(default_factory=lambda: {"K": 0.4, "DST": 0.4})  # others → 1.0
+    punt_guard: dict = Field(default_factory=lambda: {"enabled": True, "stream_round": {"K": 17, "DST": 16}})
+    vona_horizon_picks: int = 2         # 1 = one-step (legacy); 2 = turn-aware v1 default
+    board_survival_weight: float = 0.5  # β; 0 = pure static ADP
+    situation_adjust: dict = Field(default_factory=lambda: {  # §3.10 R4 opportunity/situation layer
+        "enabled": True, "mu_cap_pct": 0.15, "vacated_regression": 0.5,
+        "rookie_capital_weight": 0.6, "sigma_widen_on_change": 1.25})
 
 class Settings(BaseSettings):
     # ... existing fields ...
@@ -1240,6 +1256,10 @@ class ScoreComponents(BaseModel):
     ceiling: float                              # μ_p + z_hi·σ_p
     replacement_baseline: float                 # baseline league pts at pos(p) used for MLV
     modifiers: dict[str, float] = Field(default_factory=dict)   # named, each already capped
+    # §3.10 v1.1 additive/optional — round-aware explainability (default None; safe for the Phase-0 scaffold)
+    reliability: float | None = None            # r_pos applied to μ (§3.10 R1)
+    vona_horizon: int | None = None             # picks VONA looked ahead (§3.10 R2)
+    best_available_next: float | None = None    # E[best MLV still available at pos by N_H*] (§3.10 R2)
 ```
 
 `RecommendedPick` gains `components: ScoreComponents | None = None`. Field convention for the
@@ -1831,7 +1851,242 @@ forward-year (2027) projection surfaced by the engine is labeled **ESTIMATED**.
 
 ---
 
-### 3.10 Section 3 — Definition of done
+### 3.10 Round-aware valuation & draft-state guarantees (v1.1 refinements)
+
+This subsection makes the per-pick `Score(p)` robustly **round-aware** and pins down exactly how the
+live draft state enters the value. Refinements **R1–R3 are v1** (cheap, closed-form, on the hot path);
+the full remaining-draft Monte-Carlo generalization stays stretch (§3.9). They close two gaps the base
+spec left implicit: (a) low-reliability positions (K/DST) could accrue value from *projection noise*,
+and (b) one-step VONA is myopic across the snake turn.
+
+**3.10.1 Design guarantees — how each draft input enters the value.** The engine is **Markovian over
+`DraftState`**: the optimal pick depends only on the current state, never on regret about players you
+passed. Concretely:
+
+| Draft input | Where it enters | Effect |
+|---|---|---|
+| Players **you** rostered | `my_roster` → the MLV baseline lineup `B(R)` (§3.3) | every candidate is priced *relative to what you already have*; positional "need" is automatic (a 2nd QB ≈ `μ_QB2 − μ_QB1`) |
+| Players **anyone** drafted (yours + others') | masked from `available` (§3.7 step 1) **and** deplete `dynamic_replacement_values` (§3.2) | a run *raises that position's baseline* and re-prices every survivor |
+| Players **still available** | the candidate pool (top-`candidate_cap` by MLV) | only real options are scored |
+| Players **you passed on** | re-priced from scratch each pick — no sunk-cost, no anchoring | if a passed player is still the best `Score(p)` now, he's recommended now; if taken, he's simply masked |
+| **Cross-position** comparability | MLV is one unit — marginal starting-lineup points vs *each position's own* replacement | a QB/RB/WR/TE/K/DST are directly comparable; "take the scarce one now?" is answered by `κ·VONA`, and the **WR/RB flex** trade-off is resolved *inside* the Hungarian assignment (a scarcer RB can beat a higher-raw WR when VONA says the WR survives — §3.3–§3.4) |
+
+**3.10.2 R1 — Position-reliability shrinkage + punt guard (fixes "a kicker is ranked/recommended too
+early").** MLV trusts `μ_p`, but K/DST projections carry a wide *nominal* spread that is almost all
+noise: the realized K1−K13 gap is ~1.5 pts/week (~24 pts/season) and no DST finishes #1 in
+back-to-back years ([SI: when to draft K/DST](https://www.si.com/onsi/fantasy/nfl/fantasy-football-strategy-guide-when-draft-kicker-defense);
+design §6.D). Without regressing low-reliability projections, MLV can hand a kicker a mid-round-sized
+value. **Fix** (Stage 0, `projections.py`): shrink each projection toward its own replacement baseline
+by a per-position reliability factor `r_pos ∈ (0,1]`:
+
+```text
+μ*_p = baseline(pos) + r_pos · ( μ_p − baseline(pos) )      # used everywhere downstream as μ
+r_pos ≈ 1.0  for RB/WR/QB/TE  (predictable, rank R² ≈ 0.80)
+r_pos ≈ 0.35–0.5  for K/DST   (rank R² ≈ 0.50 — mostly noise)
+```
+
+This collapses K/DST MLV toward ~0 so they can never out-rank a real starter from noise, while leaving
+skill positions essentially unchanged. **Guard** (belt-and-suspenders, `recommend.py`): a hard
+`punt_guard` never surfaces K or DST as the **#1** recommendation before its `stream_round` (K:17,
+DST:16) *unless every other startable slot is already filled* — it only demotes, never forces. New
+`EngineParams`: `reliability_shrinkage` (default `{K:0.4, DST:0.4}`, others `1.0`) and
+`punt_guard` (`{enabled:true, stream_round:{K:17, DST:16}}`), both calibrated/validated in E2.
+
+**3.10.3 R2 — Turn-aware (multi-pick) VONA horizon (v1); full-draft Monte-Carlo (stretch).** One-step
+VONA (to your *very next* pick `N₁*`) is myopic: in a snake you pick twice around the turn and then wait
+a long gap, so a scarce player can survive `N₁*` yet be gone before you can actually use a pick on the
+position. **Fix** (§3.4): evaluate the opportunity cost at the horizon of your **H-th** upcoming pick,
+not just the next one:
+
+```text
+VONA_p = MLV_p − E[ best MLV still available at pos(p) by your H-th upcoming pick N_H* ]
+H = params.vona_horizon_picks   (1 = legacy one-step; 2 = turn-aware v1 default)
+survival S_j(N_H*) = 1 − Φ((N_H* − m_j)/s_j),  N_H* from the ACTUAL entered snake order
+```
+
+Looking to `N_H*` (the *further* reachable pick) lowers the survival baseline for genuinely scarce
+positions → higher VONA → the engine says "move now" on the QB/RB that truly won't last, and stays
+patient on the deep WR that will. This is precisely the "value you can still get by round" the base
+spec under-modeled. The exact multi-pick *allocation* across your remaining turns is what the
+**remaining-draft Monte-Carlo VONA** solves (opponent draws from ADP+board over *all* your future
+picks); it stays the stretch refinement (§3.9, `mc_enabled`) that this closed form approximates. New
+`EngineParams`: `vona_horizon_picks: int = 2`. (Practitioner basis: round-by-round VONA and MC
+pick-odds — [Stanford Stevens](https://stanfordstevens.com/value_of_vona.html),
+[Jensen, *Simulating the Snake*](https://bcjense6.medium.com/simulating-the-snake-an-ai-assisted-fantasy-football-draft-strategy-4064c98940f7).)
+
+**3.10.4 R3 — Board-conditioned survival (use what *this* room is doing, not just static ADP).**
+Survival off static FFC ADP ignores how *your* room is actually drafting; a separate additive "run"
+modifier is weaker than conditioning survival itself. **Fix** (§3.4): pull a position's effective ADP
+earlier under observed run pressure, folding the old run detector *into* the survival model (no
+double-count):
+
+```text
+run_pressure(pos) = (picks at pos since your last turn) − (ADP-expected picks at pos over that span)
+m_j^eff = m_j − β · run_pressure(pos(j)) ,   β = params.board_survival_weight   (0 = pure static ADP)
+S_j(N) = 1 − Φ((N − m_j^eff)/s_j)
+```
+
+A position going faster than ADP gets *lower* survival → higher VONA → an earlier nudge. Per-manager
+tendency priors (from `manager_tendencies`, accrued across drafts — §2) remain the **stretch** upgrade.
+New `EngineParams`: `board_survival_weight: float = 0.5`.
+
+**3.10.5 Explainability.** `ScoreComponents` gains three **additive, optional** fields (default
+`None`, so the Phase-0/Stage-3 scaffold is unaffected) so the overlay/assistant can *show* the
+round-value reasoning: `reliability` (the `r_pos` applied), `vona_horizon` (picks looked ahead), and
+`best_available_next` (the `E[best available]` the VONA subtracted — lets the overlay say "if you wait,
+the best RB you'll likely get is ≈X"). Surfaced in §6 (overlay "value-by-round" line + dashboard
+survival-by-round curve).
+
+**Acceptance (also folded into the §3.11 DoD and §9 E2/E6):**
+- R1: on the projection fixture, best-K and best-DST post-shrinkage MLV ≤ ~2 pts; the punt guard keeps
+  K/DST out of the #1 slot before their stream round unless the roster is otherwise full.
+- R2: `vona_horizon_picks=1` reproduces the one-step §3.4 worked example exactly; with `=2`, a
+  turn-pick fixture raises urgency for a scarce position that would survive `N₁*` but not `N₂*`.
+- R3: `board_survival_weight=0` reproduces static-ADP survival exactly; a simulated positional run with
+  `β>0` measurably lowers that position's survival and raises its VONA.
+- All three are tuned by Optuna in E2 across all 12 slots and must **not reduce** the E6 tournament
+  margin vs the VBD-only / ADP-only baselines.
+
+**3.10.6 R4 — Opportunity & situation model: value *this year's* points, not last year's box score.**
+The most common projection error is extrapolating a prior-season stat line into a *changed* situation.
+The engine must value a player's **opportunity to score in his current role** — new team, new
+competition, new depth chart — translated into the exact CBS (non-PPR) scoring. This makes the design
+§6.B.2 / §6.B.3 feature set an explicit Stage-0 layer. Per design §6.A, usage/situation **never gets
+its own additive score term** — it moves `μ_p` (capped) and `σ_p`, and the value pipeline (§3.1–§3.7)
+prices the adjusted projection.
+
+*Two failure cases this fixes (your examples):*
+- **Team change** (a long-time alpha WR joins a new team): his old target share / WOPR does **not**
+  carry over — reproject his share against the **new** target competition, QB, and pass volume; widen σ
+  for scheme/rapport uncertainty.
+- **New backfield competition** (a breakout RB, then a high-capital rookie drafted over him): last
+  year's carry share is stale — lower the incumbent's projected carry/snap share by the rookie's
+  expected encroachment (draft capital is the prior), flag "committee" (ceiling down), widen σ.
+
+*Stable backbone — project share, then translate to points.* Opportunity **share** is far more stable
+year-over-year than fantasy points, so project it and convert to points rather than projecting points
+directly (target/air-yard share and **WOPR** = `1.5·target_share + 0.7·air_yard_share` are among the
+most stable fantasy inputs; opportunity is the backbone of expected fantasy points). From nflreadpy
+(all $0, design §6.B.2): snap share, carry share (+ **goal-line / inside-5**), target share, air
+yards / aDOT / WOPR, route %, team pace / PROE, and the `load_ff_opportunity` expected-points (xEP)
+prior. **Non-PPR weighting is the point:** weight carries, goal-line carries, air yards, deep/red-zone
+targets and TD equity **up**, and raw reception *count* **down** (a catch is 0 pts) — "opportunity to
+score" measured in *this* league's currency.
+
+*Situation-change layer — what to adjust, and by how much* (change signals from nflreadpy rosters +
+depth charts + draft picks + recent snap/route trends; each applies a **capped** μ nudge via the
+existing `caps.mu_refinement_pct` (±10–15%) plus σ-widening + a surfaced flag):
+
+| Signal | μ effect (capped) | σ / flag |
+|---|---|---|
+| **Team change** (roster diff) | reproject target/carry share in the new offense vs new competition | σ↑; "new team — role unconfirmed" |
+| **Vacated volume** (departed players' targets/carries) | redistribute to remaining + incoming by role / depth rank / draft capital — a **regressed prior, not 1:1** (vacated volume is descriptive, not predictive — [FTN](https://ftnfantasy.com/nfl/vacated-opportunities-in-fantasy-football-before-2026-free-agency)) | σ↑ until confirmed |
+| **New competition / rookie** (draft capital, depth chart) | lower incumbent carry/snap/target share by expected encroachment; split committees ([FantasyPros rookie RBs](https://www.fantasypros.com/2026/06/12-impact-rookie-running-backs-2026-fantasy-football/)) | σ↑; "committee / rookie threat" |
+| **QB / pass environment** (team pass eff, PROE, QB proj) | cap a pass-catcher's ceiling by QB quality + team pass volume | σ per environment |
+| **Age / role change / injury** (design §6.B.3) | RB age-cliff (~28) μ haircut; Q/D/O availability haircut | σ↑; injury flag (CBS on-page) |
+
+*Honesty at $0.* The **primary anchor is current-season vendor projections** — CBS on-page + ECR
+(`load_ff_rankings`) already re-price team changes, rookies and depth charts (experts have reprojected
+the moved WR and the new backfield). The situation layer therefore (a) makes the reasoning
+**transparent** (the overlay shows *why* a projection moved), (b) **catches source disagreement/lag**
+and nudges μ within the cap, and (c) **sets σ**, so the risk term (§3.5) down-weights uncertain,
+newly-changed situations for your must-start core and lets them ride as ceiling bench swings. A full ML
+opportunity model (Predicted-Targets / PWOPR, XGBoost on the change features) is **stretch** (§3.9);
+the v1 layer is stable shares + a rules-based, capped adjustment.
+
+*Data + interfaces.* Adds opportunity columns to the `projections` warehouse table (§2) —
+`snap_share, carry_share, gl_carries, target_share, air_yards_share, wopr, rz_touches, route_pct,
+team_proe, xep` — and a `situation` blob (`team_change, vacated_share, competition_delta,
+draft_capital_rank, qb_env, age, injury_status`); `NflreadpyProvider` gains the `EXPECTED_POINTS`
+capability (§4). `build_projections` (§3.1) consumes these to produce `μ*` (post-reliability-shrinkage,
+§3.10.2) and `σ`. New `EngineParams`: `situation_adjust: {enabled:true, mu_cap_pct:0.15,
+vacated_regression:0.5, rookie_capital_weight:0.6, sigma_widen_on_change:1.25}`.
+
+*Acceptance (E3, §9).* (a) On 2021–2024 holdouts, an opportunity-share→points projection beats naive
+prior-year points extrapolation on MAE/Spearman **for players who changed team or role**; (b) the
+team-change and rookie-competition fixtures fire the correct flags and move μ within the cap with σ up;
+(c) receptions carry **0** μ weight (non-PPR check); (d) no situation μ-nudge exceeds `mu_cap_pct`.
+
+**3.10.7 Weighting & calibration — how all the factors combine (and how their weights are set).**
+The single most important rule (design §6.A): factors are weighted in **two different places, never on
+one flat scale.**
+
+- **Layer A — projection inputs (μ, σ).** Opportunity / usage / situation (snap-carry-target share,
+  WOPR, vacated volume, team change, rookie competition, QB env, age, injury — §3.10.6) and the
+  multi-source blend **do not get additive score weights**; they set `μ_p` and `σ_p`. The μ blend is a
+  **simple average** across sources (empirically ≥ any hand-weighting — wisdom of crowds); opportunity
+  features are weighted by **year-over-year stability** (shares / WOPR high, raw counts low — non-PPR
+  down-weights receptions); every situation nudge is **capped to ±`caps.mu_refinement_pct` (10–15%)**
+  and widens σ; low-reliability positions are shrunk (K/DST `r≈0.4`, §3.10.2).
+- **Layer B — objective terms (the Greek weights), combined in points-space:**
+
+```text
+Score(p) = MLV_p             # value core — implicit weight 1.0 (the currency everything else is measured against)
+         + κ·max(0,VONA_p)   # κ = 0.5–0.8 (default 0.65)                     scarcity / urgency
+         − λ(phase,slot)·σ̂_p # λ schedule +0.2…+0.4 → −0.3…−0.5, slot ±0.40   risk tilt (floor early, ceiling late)
+         + α·CliffBonus_p    # α = 0.3–0.5 (default 0.40)                      tier-cliff urgency
+         + Σ capped modifiers # each ≤ ~3–5 pts (bye −, handcuff +, SOS ±)     bounded tie-breakers
+```
+
+**Deliberate magnitude hierarchy** — so the transparent value core always leads and no heuristic can
+dominate: `MLV` is tens of points → `κ·VONA` ~5–10 in scarce spots → `λ·σ̂` and `α·Cliff` a few points
+→ modifiers hard-capped ≤3–5 → Layer-A situation moves bounded to ±10–15% of μ. A soft heuristic can
+break a tie or nudge a ranking; it can never flip the value order.
+
+**The weights are calibrated, not hand-picked.** The defaults are literature / first-principles
+**priors**; the correct values for this league come from the calibration pipeline (§9) and are
+versioned in `config/engine.json`:
+- **E1** measures `flex_split` from live ADP (top-60) — it sets the RB/WR baselines (most sensitive knob).
+- **E3** validates the μ blend + situation caps + `reliability_shrinkage` vs 2021–2024 realized points
+  (MAE / Spearman; σ by interval coverage).
+- **E2** runs **Optuna** over `(κ, λ-table, α, modifier caps, board β, vona_horizon,
+  reliability_shrinkage, situation_adjust)` to maximize mean starting-lineup points / playoff odds
+  **across all 12 draft slots**, evaluated against several opponent models (ADP, VBD-only, need-based)
+  so the weights don't overfit one style.
+- **E6** (efficacy gate) confirms the tuned set beats the ADP-only and VBD-only baselines.
+
+Honest bound: there is **no proven-optimal weight set** for a live snake draft — these are tuned to
+*our* offline tournament, re-tunable via `config/engine.json` without code changes, and every weight is
+surfaced in `ScoreComponents` so a recommendation stays auditable.
+
+**3.10.8 Research-backed weighting — recommended priors and the combination method.** "Optimal" weights
+are set in **two stages**: each *sub-component* has an evidence-backed **form/prior**, and the
+*combined* score weights are found by **Bayesian optimization** over backtests — there is no published
+closed-form optimum for the full live-draft objective (the honest bound of §3.9), so the magnitudes are
+league-calibrated, not asserted.
+
+| Factor | Recommended form / starting prior | Evidence basis | Tuned by |
+|---|---|---|---|
+| **VBD baseline** (replacement) | **0.5·VOLS + 0.5·man-games (BEER+)** — balances elite starters vs bench de-risking (VOLS alone rewards elite QBs; VORP alone over-favors the bench) | [Subvertadown VBD baselines](https://subvertadown.com/article/guide-to-understanding-the-different-baselines-in-value-based-drafting-vbd-vols-vs-vorp-vs-man-games-and-beer-); [FantasyPros VBD](https://www.fantasypros.com/2025/06/fantasy-football-draft-strategy-value-based-drafting-vorp-vols-vona/) | `replacement_blend` (E2) |
+| **Projection blend** (μ) | **simple average** of sources — consensus ≥ weighted (wisdom of crowds); optionally weight WR by prior-season MAE (FFA-Weighted led WR at 4.94 MAE) | [FFA — which projections are most accurate](https://fantasyfootballanalytics.net/2024/12/which-fantasy-football-projections-are-most-accurate.html) | `projection_blend` (E3) |
+| **Risk λ** | **utility = μ − λ·σ**; λ = "points of mean traded per 1σ"; phase/slot schedule +0.2…+0.4 → −0.3…−0.5 (mean-variance nets ~3–5 starting pts/wk) | [Jensen — mean-variance snake sim](https://bcjense6.medium.com/simulating-the-snake-an-ai-assisted-fantasy-football-draft-strategy-4064c98940f7); [FFA risk levels](https://fantasyfootballanalytics.net/2013/04/calculate-fantasy-players-risk-levels.html) | `lambda_schedule` (E2) |
+| **κ (VONA)** | **0.5–0.8** — scarcity/opportunity-cost urgency; **no literature optimum** | practitioner (Draft Wizard / VONA) | Optuna (E2) |
+| **α (tier cliff)** | **0.3–0.5** — guard-rail weight; **no literature optimum** | Boris-Chen tiers | Optuna (E2) |
+| **Opportunity → μ** | **WOPR = 1.5·target_share + 0.7·air_yard_share**; weight shares by year-over-year **stability** (shares/WOPR high, raw counts low); non-PPR up-weights carries/air-yards/TDs | established WOPR; PFF/4for4 stability (§3.10.6) | `situation_adjust` caps (E3) |
+| **Modifiers** (bye/handcuff/SOS) | **hard-capped ≤ 3–5 pts each** — tie-breakers only | design §6.C.7 | `caps` (E2) |
+
+**Combining them (the "all together" answer).** Treat the full weight vector — `replacement_blend, κ,
+λ-table, α, caps, β, vona_horizon, reliability_shrinkage, situation_adjust` — as hyperparameters and
+optimize **jointly**; do **not** hand-tune one at a time, because they interact (κ trades off against
+the baseline depth; λ against σ). The method (§9 E2, `scripts/tune_engine_params.py`):
+1. **Bayesian optimization (Optuna / TPE)** — the right tool in this ~10–15-dimensional space: it
+   "learns from past results to decide where to search next," far more sample-efficient than grid or
+   random search in high dimensions ([grid vs random vs Bayesian](https://medium.com/@pacosun/the-tuners-toolbox-grid-search-random-search-and-bayesian-optimization-unpacked-648abd7a8ff6)).
+2. **Objective** = mean starting-lineup points (stretch: simulated-season wins, à la the Becker–Sun
+   draft+lineup MIP — [JQAS 2016](https://ideas.repec.org/a/bpj/jqsprt/v12y2016i1p17-30n1.html))
+   **averaged across all 12 draft slots**, evaluated against **multiple opponent models** (ADP-noise,
+   VBD-only, need-based) with **held-out seasons**, so the weights don't overfit one opponent style.
+3. **Coarse discrete knobs** (e.g., `vona_horizon_picks ∈ {1,2,3}`) can nest a small **grid search**
+   inside the study.
+4. **Gate:** the tuned vector must beat the ADP-only and VBD-only baselines in the offline tournament
+   (E6) — the only efficacy proof, since no peer-reviewed optimum exists.
+
+So the *forms* above are fixed from evidence; the *magnitudes* are league-calibrated, versioned in
+`config/engine.json`, and re-tunable without code changes.
+
+---
+
+### 3.11 Section 3 — Definition of done
 
 - [ ] `domain/models.py`: `ScoreComponents` + `RecommendedPick.components`; `ScoringBracket` /
   `ScoringTier` / `ScoringBonus` + `LeagueSettings.scoring_tiers` / `scoring_bonuses`;
@@ -1859,6 +2114,22 @@ forward-year (2027) projection surfaced by the engine is labeled **ESTIMATED**.
   and defaults to analytic VONA (MC opt-in).
 - [ ] E7 perf gate green: p95 `recompute()` < 2 s, analytic < 200 ms; crash-safe log-replay
   verified.
+- [ ] **R1** (§3.10.2): `reliability_shrinkage` applied in Stage 0 + `punt_guard` in `recommend`;
+  best-K/best-DST post-shrinkage MLV ≤ ~2 pts and K/DST are never the #1 rec before their stream round
+  unless the roster is otherwise full — tested.
+- [ ] **R2** (§3.10.3): turn-aware VONA (`vona_horizon_picks=2`) with the `=1` one-step reduction
+  test; **R3** (§3.10.4): board-conditioned survival (`board_survival_weight β`) folding the run
+  detector into survival, with the `β=0` static-ADP reduction test.
+- [ ] `ScoreComponents` additive fields `reliability` / `vona_horizon` / `best_available_next`
+  populated and mirrored in Zod (optional, default null; schema-parity green).
+- [ ] **R4** (§3.10.6): opportunity/situation layer feeds `μ*`/σ from nflreadpy shares + change
+  signals (team-change, vacated-volume regressed, rookie/committee, QB env, age/injury), non-PPR-weighted
+  (receptions = 0), every nudge capped by `caps.mu_refinement_pct`; team-change + rookie fixtures fire
+  the right flags (E3). `situation_adjust` in `EngineParams`.
+- [ ] **Weighting** (§3.10.7–3.10.8): the two-layer split (μ/σ vs score-terms) holds; the sub-component
+  forms match the research-backed priors (BEER+ baseline, simple-average blend, μ−λ·σ risk, WOPR
+  1.5/0.7); the full weight vector is **jointly** Optuna-tuned (not hand-tuned); every weight/cap is read
+  from `config/engine.json` (no hard-coded magic numbers).
 - [ ] Stretch items (CP-SAT season sim, MC VONA, XGBoost, RL) remain stubs; the "personal-use /
   text-only / no proven solver / efficacy via own E6 tournament / 2027 = ESTIMATED" caveat is stated
   in the module docstrings.
@@ -4136,8 +4407,8 @@ Each E-job calibrates one part of this expression: **E1** measures the flex spli
 | ID | What it calibrates / tests | Script / test path | Gate kind | v1 / stretch | Design ref |
 |----|-----------------------------|--------------------|-----------|--------------|------------|
 | E1 | Flex RB/WR split → baselines | `scripts/calibrate_flex_split.py` · `backend/tests/test_flex_split.py` | Fixture unit + invariant | v1 | §6.C.2, §6.E, §10.3 |
-| E2 | κ, λ-table, α, caps | `scripts/tune_engine_params.py` · `backend/tests/test_engine_params.py` | Offline study + artifact validation | v1 (str: season-wins objective) | §7.E2, §6.C.5–7 |
-| E3 | Projection blend + σ calibration | `scripts/validate_projections.py` · `backend/tests/test_projections.py` | Fixture metric thresholds | v1 (str: XGBoost residual) | §6.C.1, §7.E3 |
+| E2 | κ, λ-table, α, caps, β, vona_horizon, reliability, situation (§3.10) | `scripts/tune_engine_params.py` · `backend/tests/test_engine_params.py` | Offline study + artifact validation | v1 (str: season-wins objective) | §7.E2, §6.C.5–7, §3.10 |
+| E3 | Projection blend + σ + reliability-shrinkage + situation caps (§3.10) | `scripts/validate_projections.py` · `backend/tests/test_projections.py` | Fixture metric thresholds; opportunity-μ beats prior-year extrapolation on team/role changes | v1 (str: XGBoost/PWOPR) | §6.C.1, §7.E3, §3.10 |
 | E4 | Capture, ingest, replay & `/recs/ws` push | `apps/extension/tests/**` · `backend/tests/test_ingest_replay.py` | Golden-fixture regression + e2e | v1 | §5.B, §7.C, §7.E4, §7.F St.1/6 |
 | E5 | Pydantic ⇄ Zod schema parity | `scripts/export_schemas.py` · `backend/tests/test_schema_parity.py` · `packages/shared/tests/parity.test.ts` | Round-trip divergence | v1 | §7.B, §7.E5, §10.5 |
 | E6 | Efficacy vs ADP-only + VBD-only | `scripts/run_tournament.py` · `backend/tests/test_tournament.py` | Significance across 12 slots | v1 core (str: MC odds) | §4.C, §7.E6, §10.6 |
@@ -5368,6 +5639,7 @@ Extends design §7.G with an explicit **Likelihood** and an **Owner** (the track
 | **`nflreadpy` ID-crosswalk fn name [VERIFY]** — `load_ff_playerids` vs `load_players` unconfirmed (design §7.C, §7.G, §10.6 #4) | Low | Med | **Confirm the exact name** from the nflreadpy load-functions reference in Track C; the fuzzy fallback covers CBS/FFC regardless of which resolves. Residual: Low. | PROV / DATA |
 | **Latency blowup** — per-pick recompute misses the <2 s budget (design §7.D, §7.G) | Med | Low-Med | **Precompute → in-memory `DraftContext`**; stateless vectorized `recompute()` (mask → survival → top-K → Hungarian MLV → analytic VONA); **CI perf gate (E7)** asserts p95 < 2 s (analytic < 200 ms); MC is opt-in within budget. Residual: Low. | ENG / QA |
 | **Overselling efficacy** — no peer-reviewed optimal live snake solver exists; vendor/practitioner claims are UNVERIFIED (design §4, §10.7) | Med | Med | Efficacy is proven **only** by the project's own **offline simulated-league tournament (E6)** vs VBD-only and ADP-only baselines; be explicit in docs/UI that outcomes are **estimated, not guaranteed**. Residual: Med. | CAL / GATE |
+| **Engine myopia / noisy-K / stale-situation valuation** — one-step VONA is myopic across the snake turn; K/DST projection *noise* can inflate MLV; prior-year stats mislead after a team/role change (§3.10) | Med | Med | **R1** position-reliability μ-shrinkage (K/DST) + punt guard; **R2** turn-aware (2-pick) VONA (full MC = stretch); **R3** board-conditioned survival; **R4** opportunity/situation μ/σ layer (team change, vacated volume *regressed*, rookie competition, QB env, age/injury) — all **capped** and **Optuna-calibrated (E2/E3)**. PWOPR/XGBoost opportunity model = stretch. Residual: Med. | ENG / CAL |
 
 ### 12.2 Sequenced task backlog
 
@@ -5505,6 +5777,7 @@ Ordered from design §10.6 — the shortest path to a draft-ready engine. Each m
 5. **[v1]** **Capture-layer golden fixtures** once real CBS frames are observed (E4 / Track K); keep the **manual-paste fallback** for the UNVERIFIED transport.
 6. **[v1]** **Injury freshness:** wire CBS on-page injury designations (Track C); optionally enable the $5.99 FantasyPros feed behind its flag.
 7. **[stretch]** **Prove efficacy offline** (E6 / Track L) vs VBD-only and ADP-only baselines — the project's own validation gate, since none exists in the literature.
+8. **[v1]** **Calibrate the round-aware refinements** (§3.10 / E2–E3 / Track J): `reliability_shrinkage` (K/DST noise), `vona_horizon_picks` (turn-aware), `board_survival_weight` (β), and `situation_adjust` caps — co-tuned with κ/λ/α across all 12 slots; validate that K/DST never rank #1 before their stream round and that opportunity-based μ beats prior-year extrapolation for team/role changes.
 
 ### 12.4 Acceptance criteria
 
