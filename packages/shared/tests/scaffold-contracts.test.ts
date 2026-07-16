@@ -41,6 +41,9 @@ const fullComponents = {
   ceiling: 180.0,
   replacement_baseline: 95.0,
   modifiers: { bye_stack: -1.5, handcuff_synergy: 2.0, sos: 0.5 },
+  reliability: 1.0,
+  vona_horizon: 2,
+  best_available_next: 38.7,
 };
 
 describe("LeagueSettings scoring_tiers + scoring_bonuses (SC1)", () => {
@@ -84,6 +87,21 @@ describe("RecommendedPick.components (SC3)", () => {
     });
     expect(parsed.components?.modifiers).toEqual(fullComponents.modifiers);
     expect(parsed.components?.vona).toBeLessThan(0);
+    expect(parsed.components?.vona_horizon).toBe(2);
+    expect(parsed.components?.best_available_next).toBe(38.7);
+  });
+
+  it("keeps the §3.10.5 round-aware fields additive + optional (pre-v1.1 payloads validate)", () => {
+    const {
+      reliability: _r,
+      vona_horizon: _h,
+      best_available_next: _b,
+      ...preV11
+    } = fullComponents;
+    const parsed = ScoreComponentsSchema.parse(preV11);
+    expect(parsed.reliability ?? null).toBeNull();
+    expect(parsed.vona_horizon ?? null).toBeNull();
+    expect(parsed.best_available_next ?? null).toBeNull();
   });
 
   it("keeps components optional for pre-engine payloads", () => {

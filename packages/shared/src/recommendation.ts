@@ -18,6 +18,11 @@ export const ScoreComponentsSchema = z.object({
   ceiling: z.number(),
   replacement_baseline: z.number(),
   modifiers: z.record(z.number()).default({}),
+  // §3.10 v1.1 additive/optional — round-aware explainability (safe for pre-v1.1 payloads):
+  // r_pos reliability shrinkage, VONA look-ahead horizon H, and E[best MLV at pos by N_H*].
+  reliability: z.number().nullable().optional(),
+  vona_horizon: z.number().int().nullable().optional(),
+  best_available_next: z.number().nullable().optional(),
 });
 export type ScoreComponents = z.infer<typeof ScoreComponentsSchema>;
 

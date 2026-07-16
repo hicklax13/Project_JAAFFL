@@ -109,6 +109,19 @@
     "ScoreComponents": {
       "description": "Auditable decomposition of Score(p) (design \u00a710.3) \u2014 never a black box.\n\nReconstruction (kappa/alpha and caps from EngineParams):\n    score ~= mlv + kappa*max(0.0, vona) - risk_penalty + cliff_bonus + sum(modifiers.values())\nConvention: ``vona`` is RAW (pre-kappa, may be negative \u2014 the overlay shows urgency even\nwhen gated to 0); ``risk_penalty`` and ``cliff_bonus`` are the APPLIED signed contributions;\n``sigma``/``floor``/``ceiling``/``replacement_baseline`` are descriptive, not summed.",
       "properties": {
+        "best_available_next": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "E[best MLV still available at pos(p) by your H-th pick N_H*] (\u00a73.10 R2).",
+          "title": "Best Available Next"
+        },
         "ceiling": {
           "description": "Upside (~p90) projection, league points.",
           "title": "Ceiling",
@@ -137,6 +150,19 @@
           "title": "Modifiers",
           "type": "object"
         },
+        "reliability": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "r_pos reliability shrinkage applied to mu (\u00a73.10 R1).",
+          "title": "Reliability"
+        },
         "replacement_baseline": {
           "description": "Positional replacement baseline (league points) for MLV fill.",
           "title": "Replacement Baseline",
@@ -157,6 +183,19 @@
           "description": "Raw Value Over Next Available (pre-kappa, pre-max-gate). May be < 0.",
           "title": "Vona",
           "type": "number"
+        },
+        "vona_horizon": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upcoming picks VONA looked ahead, H (\u00a73.10 R2).",
+          "title": "Vona Horizon"
         }
       },
       "required": [

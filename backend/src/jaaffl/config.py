@@ -46,6 +46,24 @@ class EngineParams(BaseModel):
     candidate_cap: int = 180
     mc_enabled: bool = False
     mc_rollouts: int = 2000
+    # §3.10 v1.1 round-aware refinements (R1-R4), tuned in E2.
+    reliability_shrinkage: dict[str, float] = Field(
+        default_factory=lambda: {"K": 0.4, "DST": 0.4}  # unlisted positions default to 1.0
+    )
+    punt_guard: dict = Field(
+        default_factory=lambda: {"enabled": True, "stream_round": {"K": 17, "DST": 16}}
+    )
+    vona_horizon_picks: int = 2  # 1 = one-step (legacy); 2 = turn-aware v1 default
+    board_survival_weight: float = 0.5  # beta; 0 = pure static ADP
+    situation_adjust: dict = Field(
+        default_factory=lambda: {  # §3.10 R4 opportunity/situation mu/sigma layer
+            "enabled": True,
+            "mu_cap_pct": 0.15,
+            "vacated_regression": 0.5,
+            "rookie_capital_weight": 0.6,
+            "sigma_widen_on_change": 1.25,
+        }
+    )
 
 
 class Settings(BaseSettings):

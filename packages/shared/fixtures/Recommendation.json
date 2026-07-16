@@ -20,7 +20,14 @@
         "floor": 131.0,
         "ceiling": 189.0,
         "replacement_baseline": 95.0,
-        "modifiers": { "bye_stack": -1.5, "handcuff_synergy": 2.0, "sos": 0.5 }
+        "modifiers": {
+          "bye_stack": -1.5,
+          "handcuff_synergy": 2.0,
+          "sos": 0.5
+        },
+        "reliability": 1.0,
+        "vona_horizon": 2,
+        "best_available_next": 38.7
       }
     }
   ],

@@ -60,6 +60,10 @@ def test_new_scaffold_fields_are_exercised_by_fixtures() -> None:
         "ceiling",
         "replacement_baseline",
         "modifiers",
+        # §3.10.5 v1.1 additive round-aware fields — exercised, not just declared.
+        "reliability",
+        "vona_horizon",
+        "best_available_next",
     }
 
 

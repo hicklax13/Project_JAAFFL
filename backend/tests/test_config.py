@@ -24,6 +24,22 @@ def test_engine_params_defaults_match_design_10_3() -> None:
     assert params.replacement_blend == {"vols_weight": 0.5, "mangames_weight": 0.5}
 
 
+def test_engine_params_v11_round_aware_defaults() -> None:
+    """§3.10 R1-R4 knobs (amended §1.5): present with the documented priors, tuned in E2."""
+    params = EngineParams()
+    assert params.reliability_shrinkage == {"K": 0.4, "DST": 0.4}  # others default to 1.0
+    assert params.punt_guard == {"enabled": True, "stream_round": {"K": 17, "DST": 16}}
+    assert params.vona_horizon_picks == 2  # 1 = one-step legacy; 2 = turn-aware v1
+    assert params.board_survival_weight == 0.5  # beta; 0 = pure static ADP
+    assert params.situation_adjust == {
+        "enabled": True,
+        "mu_cap_pct": 0.15,
+        "vacated_regression": 0.5,
+        "rookie_capital_weight": 0.6,
+        "sigma_widen_on_change": 1.25,
+    }
+
+
 def test_committed_engine_json_has_every_required_key() -> None:
     params = EngineParams.model_validate_json(ENGINE_JSON.read_text(encoding="utf-8"))
     assert params.version == 1
@@ -40,6 +56,12 @@ def test_committed_engine_json_has_every_required_key() -> None:
     assert params.caps["modifier_abs_max"] == 5.0
     assert params.caps["mu_refinement_pct"] == 0.15
     assert set(params.caps["modifiers"]) == {"bye_stack", "handcuff_synergy", "sos"}
+    # §3.10 v1.1 keys are versioned in the committed file, not just model defaults.
+    assert params.reliability_shrinkage == {"K": 0.4, "DST": 0.4}
+    assert params.punt_guard["stream_round"] == {"K": 17, "DST": 16}
+    assert params.vona_horizon_picks == 2
+    assert params.board_survival_weight == 0.5
+    assert params.situation_adjust["mu_cap_pct"] == 0.15
 
 
 def test_get_engine_params_loads_via_settings_path(monkeypatch) -> None:

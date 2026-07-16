@@ -192,6 +192,18 @@ class ScoreComponents(BaseModel):
         description="Named capped modifiers already in points, e.g. "
         "{'bye_stack': -1.5, 'handcuff_synergy': 2.0, 'sos': 0.5}; each within EngineParams caps.",
     )
+    # §3.10 v1.1 additive/optional — round-aware explainability (default None; safe for the
+    # Phase-0/Stage-3 scaffold and for pre-v1.1 payloads).
+    reliability: float | None = Field(
+        default=None, description="r_pos reliability shrinkage applied to mu (§3.10 R1)."
+    )
+    vona_horizon: int | None = Field(
+        default=None, description="Upcoming picks VONA looked ahead, H (§3.10 R2)."
+    )
+    best_available_next: float | None = Field(
+        default=None,
+        description="E[best MLV still available at pos(p) by your H-th pick N_H*] (§3.10 R2).",
+    )
 
 
 class RecommendedPick(BaseModel):

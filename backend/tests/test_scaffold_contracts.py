@@ -56,7 +56,28 @@ def full_components() -> ScoreComponents:
         ceiling=180.0,
         replacement_baseline=95.0,
         modifiers={"bye_stack": -1.5, "handcuff_synergy": 2.0, "sos": 0.5},
+        reliability=1.0,
+        vona_horizon=2,
+        best_available_next=38.7,
     )
+
+
+def test_score_components_v11_round_aware_fields_default_none() -> None:
+    """§3.10.5: reliability / vona_horizon / best_available_next are additive + optional so
+    pre-v1.1 payloads (and the Stage 1-4 scaffold) validate unchanged."""
+    minimal = ScoreComponents(
+        mlv=0.0,
+        vona=0.0,
+        risk_penalty=0.0,
+        cliff_bonus=0.0,
+        sigma=0.0,
+        floor=0.0,
+        ceiling=0.0,
+        replacement_baseline=0.0,
+    )
+    assert minimal.reliability is None
+    assert minimal.vona_horizon is None
+    assert minimal.best_available_next is None
 
 
 def test_league_settings_new_scoring_fields_default_empty() -> None:
