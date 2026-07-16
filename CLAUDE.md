@@ -35,6 +35,8 @@ read the real order from the CBS room.
   strategy + system design + build plan (research, reasoning, architecture, recommendations).
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`ROADMAP.md`](ROADMAP.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md)
 - [`docs/legal-and-compliance.md`](docs/legal-and-compliance.md) — CBS/provider guardrails.
+- [`docs/owner-manual-todo.md`](docs/owner-manual-todo.md) — owner-only tasks (CBS record-mode
+  capture, opt-in keys) deferred to the end of each phase.
 - [`docs/research/cbs-fantasy-football-draft-tool.md`](docs/research/cbs-fantasy-football-draft-tool.md)
   — original feasibility research.
 

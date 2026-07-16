@@ -4,13 +4,16 @@ Polars-native: ``nfl_data_py`` is archived (read-only since 2025-09-25); ``nflre
 maintained successor and scans zero-copy into DuckDB. The class is ``NflreadpyProvider`` but the
 stable ``name`` key stays ``"nflverse"`` so existing config/log references hold.
 
-Note: nflverse's injury source lapsed after the 2024 season, so injuries are NOT offered
-here — use CBS on-page data or an opt-in paid provider for current injuries.
+Injuries are deliberately NOT offered here. Ground truth (nflreadpy 0.1.5, 2026-07-16):
+``load_injuries`` covers seasons 2009–2025 only and RAISES ``ValueError`` for 2026 — so it gives
+zero draft-time injuries for the active 2026 draft. Fresh injuries come from CBS on-page (§4.5).
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
+import structlog
 
 from jaaffl.providers.base import Capability, FantasyDataProvider, ProviderError
 
@@ -18,6 +21,16 @@ if TYPE_CHECKING:
     import polars as pl
 
     from jaaffl.data import Crosswalk
+
+log = structlog.get_logger(__name__)
+
+# FantasyPros ECR board to serve. Ground truth (nflreadpy 0.1.5): load_ff_rankings() is ONE live
+# scrape with no season/week axis and 9 ``ecr_type`` codes where d*=dynasty, r*=redraft,
+# b*=best-ball. ``page_type == 'redraft-overall'`` is the non-IDP in-season draft board (491 rows:
+# {QB,RB,WR,TE,K,DST}). It is PPR-sourced (ppr-cheatsheets.php) — the free feed has NO explicit
+# non-PPR board — so ECR here is a board-ordering / deep-round-ADP-fallback signal; the
+# authoritative non-PPR draft signal is FFC ADP (Standard) + CBS on-page.
+_ECR_PAGE_TYPE = "redraft-overall"
 
 
 def _import_nflreadpy():
@@ -40,8 +53,6 @@ class NflreadpyProvider(FantasyDataProvider):
 
     @property
     def capabilities(self) -> frozenset[Capability]:
-        # RANKINGS (ECR via load_ff_rankings) keeps the inherited NotImplementedError body
-        # until the stage-4 id-crosswalk wiring lands.
         return frozenset(
             {Capability.HISTORICAL_STATS, Capability.RANKINGS, Capability.EXPECTED_POINTS}
         )
@@ -53,3 +64,52 @@ class NflreadpyProvider(FantasyDataProvider):
     def expected_points(self, season: int, week: int | None = None) -> pl.DataFrame:
         """Expected fantasy points (xEP) from nflverse ffopportunity."""
         return _import_nflreadpy().load_ff_opportunity(seasons=[season])
+
+    def rankings(self, season: int, week: int | None = None) -> dict[str, float]:
+        """Expert consensus rank (ECR) keyed by canonical ``player_id``.
+
+        ``season``/``week`` are accepted for protocol compatibility but do NOT filter this
+        source — ``load_ff_rankings()`` is a single live FantasyPros scrape (provenance =
+        ``scrape_date``), not a season-partitioned table. Selects the ``redraft-overall`` board,
+        joins each row to canonical via the FantasyPros ``id`` (``resolve('fantasypros', id)``)
+        with a name+team+pos fuzzy fallback, and SKIPS (logs, never raises) anything unresolved.
+        """
+        import polars as pl
+
+        frame = _import_nflreadpy().load_ff_rankings()
+        board = frame.filter(pl.col("page_type") == _ECR_PAGE_TYPE)
+        cx = self._resolve_crosswalk()
+        out: dict[str, float] = {}
+        skipped = 0
+        for row in board.select(["player", "id", "pos", "team", "ecr"]).iter_rows(named=True):
+            canonical = self._resolve_rank_row(cx, row)
+            if canonical is None:
+                skipped += 1
+                continue
+            out[canonical] = float(row["ecr"])
+        if skipped:
+            log.info("nflverse_rankings_unresolved_skipped", skipped=skipped, kept=len(out))
+        return out
+
+    def seed_crosswalk(self) -> int:
+        """Stage-A seed: pull the nflverse ``ff_playerids`` crosswalk (the DynastyProcess table
+        carrying ``cbs_id``/``fantasypros_id``/… alongside ``gsis_id``) and register deterministic
+        source→canonical links. Returns the number of players seeded. Run once per draft-prep."""
+        df = _import_nflreadpy().load_ff_playerids()
+        return self._resolve_crosswalk().seed_from_playerids(df.iter_rows(named=True))
+
+    @staticmethod
+    def _resolve_rank_row(cx: Crosswalk, row: dict) -> str | None:
+        fp_id = row.get("id")
+        if fp_id is not None:
+            hit = cx.resolve("fantasypros", str(fp_id))
+            if hit is not None:
+                return hit
+        return cx.resolve_name(row["player"], row.get("team"), row["pos"])
+
+    def _resolve_crosswalk(self) -> Crosswalk:
+        if self._crosswalk is None:
+            from jaaffl.data import Crosswalk
+
+            self._crosswalk = Crosswalk()
+        return self._crosswalk

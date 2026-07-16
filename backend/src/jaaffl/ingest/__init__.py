@@ -90,6 +90,26 @@ def handle_event(
         seq=seq,
         deduped=seq is None,
     )
+    if (
+        warehouse is not None
+        and seq is not None
+        and event.event_type == DraftEventType.DRAFT_COMPLETE
+        and _is_first_complete(draft_log, event.league_id)
+    ):
+        # §2.8 offline backtest corpus: export final_state.json + events.parquet exactly once at
+        # draft end. draft_complete has no pick_number so it never dedups and the 3-probe capture
+        # can send several — the first-complete guard keeps the export idempotent.
+        warehouse.snapshot_draft_state(state, captured_at=captured_at)
+        # TODO(stage5): also export recommendations.jsonl once engine.recommend emits Recs.
     # TODO(stage 5): on state-advancing, non-deduped events call engine.recompute() and
     # publish the fresh Recommendation on app.state.recs_hub (/recs/ws).
     return IngestResult(seq=seq, deduped=seq is None, pick_number=pick_number, state=state)
+
+
+def _is_first_complete(draft_log: DraftLog, league_id: str) -> bool:
+    """True when exactly one draft_complete event exists for the league (the one just appended),
+    so the terminal export fires once despite multi-probe / re-sent draft_complete events."""
+    return (
+        sum(1 for e in draft_log.events(league_id) if e.event_type == DraftEventType.DRAFT_COMPLETE)
+        == 1
+    )

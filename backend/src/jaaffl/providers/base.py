@@ -12,6 +12,8 @@ import abc
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel, ConfigDict
+
 if TYPE_CHECKING:
     import polars as pl
 
@@ -26,6 +28,24 @@ class Capability(StrEnum):
     EXPECTED_POINTS = "expected_points"  # xEP (nflreadpy load_ff_opportunity)
     INJURIES = "injuries"
     NEWS = "news"
+
+
+class AdpRecord(BaseModel):
+    """One provider's ADP row for a canonical player (plan §4.1). Frozen; ``stdev`` is what
+    the survival model ``S_j(N)=1-Phi((N-m_j)/s_j)`` needs — an ADP *mean* alone is
+    insufficient, so the protocol carries the spread and range too.
+
+    Backend-internal: never serialized to the TS contracts (there is no Zod mirror).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    adp: float  # mean draft position m_j
+    stdev: float | None = None  # s_j (None -> engine falls back to ECR spread)
+    high: float | None = None  # earliest observed pick
+    low: float | None = None  # latest observed pick
+    times_drafted: int | None = None
+    bye: int | None = None
 
 
 class ProviderError(RuntimeError):
@@ -80,8 +100,8 @@ class FantasyDataProvider(abc.ABC):
         self._require(Capability.PROJECTIONS)
         raise NotImplementedError
 
-    def adp(self, season: int) -> dict[str, float]:
-        """canonical player_id -> average draft position."""
+    def adp(self, season: int) -> dict[str, AdpRecord]:
+        """canonical player_id -> ADP record (mean + stdev + range)."""
         self._require(Capability.ADP)
         raise NotImplementedError
 

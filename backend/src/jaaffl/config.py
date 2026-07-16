@@ -99,11 +99,13 @@ class Settings(BaseSettings):
     # goldens are committed (plan §5.10).
     jaaffl_recordings_dir: Path = Path("./apps/extension/fixtures/cbs")
 
-    # FantasyFootballCalculator ADP ($0 tier; stage 4). Teams mirrors the fixed 12-team
-    # league setting (config/league.json) but never overrides it.
+    # FantasyFootballCalculator ADP ($0 tier; stage 4). scoring/teams MIRROR the immutable
+    # config/league.json ("Standard"/12) — surfaced (never silently changed) if they diverge.
     jaaffl_enable_ffc: bool = True
-    jaaffl_ffc_scoring: str = "standard"
-    jaaffl_ffc_teams: int = 12
+    jaaffl_ffc_scoring: str = "standard"  # path segment; mirrors league.json Scoring Format
+    jaaffl_ffc_teams: int = 12  # query param; mirrors league.json Teams
+    jaaffl_ffc_cache_ttl_hours: int = 24  # DAILY cache (FFC etiquette); do not lower below 24
+    jaaffl_ffc_base_url: str = "https://fantasyfootballcalculator.com/api/v1"
 
     # Providers — $0 default is nflverse (free) + CBS on-page data. Everything below opt-in.
     fantasypros_api_key: str | None = None

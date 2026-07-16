@@ -12,7 +12,10 @@ import pytest
 from jaaffl.config import Settings
 from jaaffl.providers.base import Capability, CapabilityNotSupported
 from jaaffl.providers.nflverse import NflreadpyProvider
-from jaaffl.providers.registry import build_registry
+from jaaffl.providers.registry import build_registry, providers_supporting
+
+# The $0 default tier, in preference order (registry order IS preference order).
+FREE_TIER = ["nflverse", "ffc", "cbs_onpage"]
 
 
 def fake_nflreadpy(monkeypatch: pytest.MonkeyPatch, **funcs) -> None:
@@ -20,15 +23,74 @@ def fake_nflreadpy(monkeypatch: pytest.MonkeyPatch, **funcs) -> None:
     monkeypatch.setitem(sys.modules, "nflreadpy", types.SimpleNamespace(**funcs))
 
 
-def test_default_registry_is_free_tier_only() -> None:
+def test_default_registry_is_the_free_tier() -> None:
     settings = Settings(jaaffl_enable_fantasypros=False)
-    assert [p.name for p in build_registry(settings)] == ["nflverse"]
+    assert [p.name for p in build_registry(settings)] == FREE_TIER
 
 
-def test_fantasypros_requires_flag_and_key() -> None:
-    # Flag on but no key -> still disabled -> not in registry.
-    settings = Settings(jaaffl_enable_fantasypros=True, fantasypros_api_key=None)
-    assert [p.name for p in build_registry(settings)] == ["nflverse"]
+def test_gated_provider_requires_flag_and_key() -> None:
+    # Flag on but no key -> still disabled -> only the free tier.
+    assert [p.name for p in build_registry(Settings(jaaffl_enable_fantasypros=True))] == FREE_TIER
+    assert [p.name for p in build_registry(Settings(jaaffl_enable_sportsdataio=True))] == FREE_TIER
+
+
+def test_ffc_kill_switch_removes_it_from_the_free_tier() -> None:
+    # jaaffl_enable_ffc=false must actually disable FFC (drop it from the registry + ADP support).
+    off = Settings(jaaffl_enable_ffc=False)
+    assert [p.name for p in build_registry(off)] == ["nflverse", "cbs_onpage"]
+    assert providers_supporting(Capability.ADP, off) == []
+
+
+def test_enabled_gated_provider_appends_after_free_tier() -> None:
+    settings = Settings(jaaffl_enable_fantasypros=True, fantasypros_api_key="k")
+    assert [p.name for p in build_registry(settings)] == [*FREE_TIER, "fantasypros"]
+
+
+def test_multiple_gated_providers_append_in_declared_order() -> None:
+    settings = Settings(
+        jaaffl_enable_sportsdataio=True,
+        sportsdataio_api_key="k",
+        jaaffl_enable_sportradar=True,
+        sportradar_api_key="k",
+    )
+    assert [p.name for p in build_registry(settings)] == [*FREE_TIER, "sportsdataio", "sportradar"]
+
+
+def test_providers_supporting_free_tier_preference_order() -> None:
+    free = Settings(jaaffl_enable_fantasypros=False)
+    assert [p.name for p in providers_supporting(Capability.ADP, free)] == ["ffc"]
+    assert [p.name for p in providers_supporting(Capability.RANKINGS, free)] == [
+        "nflverse",
+        "cbs_onpage",
+    ]
+    assert [p.name for p in providers_supporting(Capability.PROJECTIONS, free)] == ["cbs_onpage"]
+    assert [p.name for p in providers_supporting(Capability.INJURIES, free)] == ["cbs_onpage"]
+    assert [p.name for p in providers_supporting(Capability.HISTORICAL_STATS, free)] == ["nflverse"]
+    assert [p.name for p in providers_supporting(Capability.EXPECTED_POINTS, free)] == ["nflverse"]
+
+
+def test_enabled_fantasypros_appends_as_lower_preference_supplier() -> None:
+    settings = Settings(jaaffl_enable_fantasypros=True, fantasypros_api_key="k")
+    assert [p.name for p in providers_supporting(Capability.ADP, settings)] == [
+        "ffc",
+        "fantasypros",
+    ]
+    assert [p.name for p in providers_supporting(Capability.INJURIES, settings)] == [
+        "cbs_onpage",
+        "fantasypros",
+    ]
+
+
+def test_build_registry_accepts_injected_warehouse_and_crosswalk(tmp_path) -> None:
+    from jaaffl.data import Crosswalk, Warehouse
+
+    Warehouse(tmp_path).init()
+    reg = build_registry(
+        Settings(jaaffl_data_dir=tmp_path),
+        warehouse=Warehouse(tmp_path),
+        crosswalk=Crosswalk(tmp_path / "app.sqlite"),
+    )
+    assert [p.name for p in reg] == FREE_TIER
 
 
 def test_nflreadpy_provider_keeps_stable_name_key() -> None:
@@ -66,12 +128,6 @@ def test_polars_methods_delegate_to_nflreadpy(
     fake_nflreadpy(monkeypatch, **{loader: fake_loader})
     assert getattr(NflreadpyProvider(), method)(2025) == "FRAME"
     assert calls["seasons"] == [2025]
-
-
-def test_rankings_scaffolded_until_stage_4() -> None:
-    # Capability declared (id-crosswalk wiring lands in roadmap stage 4).
-    with pytest.raises(NotImplementedError):
-        NflreadpyProvider().rankings(2026)
 
 
 def test_installed_nflreadpy_exposes_the_planned_api() -> None:

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from jaaffl.data.crosswalk import Crosswalk, name_norm
+from jaaffl.data.crosswalk import Crosswalk, name_norm, team_norm
 from jaaffl.data.warehouse import Warehouse
 from jaaffl.domain import Player
 
@@ -72,6 +72,27 @@ def test_name_norm_strips_suffix_and_punctuation() -> None:
     assert name_norm("Michael Pittman Jr.") == "michael pittman"
     assert name_norm("D'Andre Swift") == "dandre swift"
     assert name_norm("Patrick Mahomes II") == "patrick mahomes"
+
+
+# --- team_norm: reconcile divergent source team codes --------------------------------
+
+
+def test_team_norm_canonicalizes_divergent_source_codes() -> None:
+    # load_ff_playerids (DynastyProcess) uses 3-letter codes; FFC/nflverse use standard.
+    assert team_norm("SFO") == team_norm("SF") == "SF"
+    assert team_norm("GBP") == "GB"
+    assert team_norm("JAC") == "JAX"
+    assert team_norm("KCC") == "KC"
+    assert team_norm("LVR") == team_norm("OAK") == "LV"
+    assert team_norm("STL") == team_norm("RAM") == "LAR"
+    assert team_norm("SDC") == "LAC"
+    assert team_norm("PHI") == "PHI"  # already-standard codes pass through
+
+
+def test_team_norm_treats_free_agent_and_blank_as_none() -> None:
+    assert team_norm(None) is None
+    assert team_norm("FA") is None
+    assert team_norm("") is None
 
 
 # --- resolve / upsert (Stage A surface) ----------------------------------------------
@@ -223,3 +244,89 @@ def test_fuzzy_never_downgrades_deterministic(cx: Crosswalk) -> None:
     linked = cx.link("cbs", "77", "gsis:B", method="fuzzy", confidence=0.99)
     assert linked is False
     assert cx.resolve("cbs", "77") == "gsis:A"
+
+
+# --- resolve_name: name-keyed fuzzy surface for FFC/CBS (plan §4.4) -------------------
+
+
+def _name_row(db: Path, name_norm_value: str, team: str, pos: str) -> tuple:
+    conn = sqlite3.connect(db)
+    try:
+        return conn.execute(
+            "SELECT canonical_id, confidence FROM name_resolutions"
+            " WHERE name_norm=? AND nfl_team=? AND position=?",
+            (name_norm_value, team, pos),
+        ).fetchone()
+    finally:
+        conn.close()
+
+
+def test_resolve_name_matches_by_name_team_pos(cx: Crosswalk) -> None:
+    """FFC rows carry no stable id, so they resolve by name+team+pos (≥ τ, misspelling ok)."""
+    cx.upsert(player("gsis:mahomes", "Patrick Mahomes", pos="QB", team="KC"))
+    assert cx.resolve_name("Patrick Mahommes", "KC", "QB") == "gsis:mahomes"
+
+
+def test_resolve_name_unresolved_returns_none_not_raise(cx: Crosswalk) -> None:
+    cx.upsert(player("gsis:mahomes", "Patrick Mahomes", pos="QB", team="KC"))
+    assert cx.resolve_name("Totally Different Guy", "KC", "QB") is None
+
+
+def test_resolve_name_persists_for_o1_relookup(cx: Crosswalk) -> None:
+    cx.upsert(player("gsis:mahomes", "Patrick Mahomes", pos="QB", team="KC"))
+    assert cx.resolve_name("Patrick Mahommes", "KC", "QB") == "gsis:mahomes"
+    row = _name_row(cx.db_path, name_norm("Patrick Mahommes", "QB"), "KC", "QB")
+    assert row is not None
+    assert row[0] == "gsis:mahomes"
+    assert 0.90 <= row[1] <= 1.0
+
+
+def test_resolve_name_cached_hit_survives_player_deletion(cx: Crosswalk) -> None:
+    """A persisted resolution is served O(1) from cache — proven by deleting the underlying
+    player row and confirming the cached canonical still returns."""
+    cx.upsert(player("gsis:mahomes", "Patrick Mahomes", pos="QB", team="KC"))
+    assert cx.resolve_name("Patrick Mahomes", "KC", "QB") == "gsis:mahomes"
+    conn = sqlite3.connect(cx.db_path)
+    try:
+        conn.execute("PRAGMA foreign_keys=OFF")  # keep the cache row; drop only the player
+        conn.execute("DELETE FROM players WHERE player_id='gsis:mahomes'")
+        conn.commit()
+    finally:
+        conn.close()
+    assert cx.resolve_name("Patrick Mahomes", "KC", "QB") == "gsis:mahomes"
+
+
+def test_resolve_name_team_agnostic_when_team_none(cx: Crosswalk) -> None:
+    cx.upsert(player("gsis:kicker", "Justin Tucker", pos="K", team="BAL"))
+    assert cx.resolve_name("Justin Tucker", None, "K") == "gsis:kicker"
+
+
+def test_resolve_name_requires_exact_position(cx: Crosswalk) -> None:
+    cx.upsert(player("gsis:aj", "AJ Brown", pos="WR", team="PHI"))
+    assert cx.resolve_name("AJ Brown", "PHI", "RB") is None
+
+
+def test_resolve_name_matches_across_divergent_team_code_schemes(cx: Crosswalk) -> None:
+    """The seed stores DynastyProcess 'SFO'/'TBB'; FFC/CBS send standard 'SF'/'TB'. Exact-string
+    team matching would drop top players (CMC, Mike Evans) — team_norm reconciles both sides."""
+    cx.upsert(player("gsis:cmc", "Christian McCaffrey", pos="RB", team="SFO"))
+    cx.upsert(player("gsis:evans", "Mike Evans", pos="WR", team="TBB"))
+    assert cx.resolve_name("Christian McCaffrey", "SF", "RB") == "gsis:cmc"
+    assert cx.resolve_name("Mike Evans", "TB", "WR") == "gsis:evans"
+
+
+def test_resolve_or_link_matches_across_divergent_team_code_schemes(cx: Crosswalk) -> None:
+    # The CBS fuzzy fallback (resolve_or_link -> _best_fuzzy_match) benefits from the same fix.
+    cx.upsert(player("gsis:jacobs", "Josh Jacobs", pos="RB", team="GBP"))
+    assert (
+        cx.resolve_or_link("cbs", "c-jj", name="Josh Jacobs", position="RB", nfl_team="GB")
+        == "gsis:jacobs"
+    )
+
+
+def test_resolve_name_resolves_dst_by_nickname_token(cx: Crosswalk) -> None:
+    """DST names normalize to the nickname token, so '<Nickname> Defense' aligns with the
+    canonical '<City> <Nickname>'. (FFC's '<City> Defense' form is a known lower-coverage
+    case handled by skip-if-unresolved in the FFC adapter.)"""
+    cx.upsert(player("gsis:sea", "Seattle Seahawks", pos="DST", team="SEA"))
+    assert cx.resolve_name("Seahawks Defense", "SEA", "DST") == "gsis:sea"

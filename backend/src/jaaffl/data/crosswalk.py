@@ -54,6 +54,39 @@ _RANK = {"fuzzy": 1, "deterministic": 2, "manual": 3}
 # Name suffixes stripped before fuzzy comparison (generational + numeric).
 _SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
+# Source team-code reconciliation. load_ff_playerids (DynastyProcess) uses 3-letter codes
+# (SFO/NEP/GBP/…) while FFC and nflverse use standard 2–3 letter codes (SF/NE/GB/…). Without
+# this, name+team fuzzy resolution exact-matches the raw strings and silently drops every player
+# on a divergently-coded team (verified: CMC 'SFO'≠'SF', Mike Evans 'TBB'≠'TB'). Legacy
+# relocations (OAK→LV, STL/RAM→LAR, SDC→LAC) fold to the current code.
+_TEAM_ALIASES = {
+    "GBP": "GB",
+    "JAC": "JAX",
+    "KCC": "KC",
+    "LVR": "LV",
+    "OAK": "LV",
+    "NEP": "NE",
+    "NOS": "NO",
+    "SFO": "SF",
+    "TBB": "TB",
+    "SDC": "LAC",
+    "STL": "LAR",
+    "RAM": "LAR",
+}
+_FREE_AGENT_CODES = {"FA", "FA*", "NA", "NONE"}
+
+
+def team_norm(team: str | None) -> str | None:
+    """Canonicalize an NFL team code so divergent source schemes compare equal (DynastyProcess
+    ``SFO`` vs FFC ``SF``). Free-agent / blank codes normalize to ``None`` (team-agnostic)."""
+    if not team:
+        return None
+    code = team.strip().upper()
+    if not code or code in _FREE_AGENT_CODES:
+        return None
+    return _TEAM_ALIASES.get(code, code)
+
+
 # id_crosswalk.source ← ff_playerids column, for Stage-A deterministic seeding. Keys are the
 # CHECK-constrained sources; values are the verified load_ff_playerids column names.
 _SEED_SOURCES = {
@@ -140,6 +173,66 @@ class Crosswalk:
         )
         return canonical
 
+    def resolve_name(self, name: str, team: str | None, pos: str) -> str | None:
+        """Resolve a NAME-keyed source row (FFC ADP; CBS fuzzy fallback) to a canonical
+        ``player_id`` via name+team+pos, persisting the hit so re-lookups are O(1).
+
+        ``pos`` must already be a *canonical* position — callers map source codes first (the
+        FFC adapter maps ``DEF``→``DST`` and ``PK``→``K``, else kickers/defenses would never
+        match). ``team`` is the NFL team abbrev (upper-cased here) or ``None`` for team-agnostic
+        (FA / unknown). Returns ``None`` when nothing matches at/above τ — the row is logged and
+        SKIPPED by the caller, never raised. Only Stage-B *fuzzy* results land in the
+        ``name_resolutions`` cache; a manual correction goes through the source-id path
+        (:meth:`set_manual`), preserving manual > deterministic > fuzzy precedence overall."""
+        key_norm = name_norm(name, pos)
+        team_key = (team or "").upper()
+        cached = self._resolve_name_cached(key_norm, team_key, pos)
+        if cached is not None:
+            return cached
+        canonical, features = self._best_fuzzy_match(name, pos, team_key or None)
+        if canonical is None:
+            return None
+        self._cache_name_resolution(key_norm, team_key, pos, canonical, features)
+        return canonical
+
+    def _resolve_name_cached(self, name_norm_value: str, team_key: str, pos: str) -> str | None:
+        conn = open_app_db(self.db_path)
+        try:
+            row = conn.execute(
+                "SELECT canonical_id FROM name_resolutions"
+                " WHERE name_norm = ? AND nfl_team = ? AND position = ?",
+                (name_norm_value, team_key, pos),
+            ).fetchone()
+        finally:
+            conn.close()
+        return row[0] if row else None
+
+    def _cache_name_resolution(
+        self, name_norm_value: str, team_key: str, pos: str, canonical_id: str, features: dict
+    ) -> None:
+        conn = open_app_db(self.db_path)
+        try:
+            conn.execute(
+                "INSERT INTO name_resolutions"
+                " (name_norm, nfl_team, position, canonical_id, confidence, match_features)"
+                " VALUES (?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT(name_norm, nfl_team, position) DO UPDATE SET"
+                "   canonical_id=excluded.canonical_id, confidence=excluded.confidence,"
+                "   match_features=excluded.match_features,"
+                "   resolved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')",
+                (
+                    name_norm_value,
+                    team_key,
+                    pos,
+                    canonical_id,
+                    features["name_score"],
+                    json.dumps(features, sort_keys=True),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
     def _best_fuzzy_match(
         self, name: str, position: str, nfl_team: str | None
     ) -> tuple[str | None, dict]:
@@ -149,16 +242,19 @@ class Crosswalk:
         from rapidfuzz import fuzz
 
         norm = name_norm(name, position)
+        target_team = team_norm(nfl_team)  # None => team-agnostic (FA / unknown)
         conn = open_app_db(self.db_path)
         try:
-            sql = "SELECT player_id, name_norm, nfl_team FROM players WHERE position = ?"
-            params: list = [str(position)]
-            if nfl_team is not None:  # team-agnostic for FAs (nfl_team is None)
-                sql += " AND nfl_team = ?"
-                params.append(nfl_team)
-            candidates = conn.execute(sql, params).fetchall()
+            # Filter by team in Python (via team_norm), not SQL, so divergent source code schemes
+            # (DynastyProcess 'SFO' vs FFC 'SF') still match — an exact SQL compare would not.
+            candidates = conn.execute(
+                "SELECT player_id, name_norm, nfl_team FROM players WHERE position = ?",
+                [str(position)],
+            ).fetchall()
         finally:
             conn.close()
+        if target_team is not None:
+            candidates = [c for c in candidates if team_norm(c[2]) == target_team]
         scored = sorted(
             (
                 (fuzz.token_sort_ratio(norm, cand_norm) / 100.0, pid)
@@ -172,7 +268,7 @@ class Crosswalk:
         features = {
             "name_score": round(best_score, 4),
             "pos_match": True,
-            "team_match": nfl_team is not None,
+            "team_match": target_team is not None,
             "runners_up": [{"player_id": pid, "score": round(s, 4)} for s, pid in scored[1:4]],
         }
         return best_id, features
