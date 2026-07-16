@@ -15,6 +15,11 @@ from typing import Any
 
 from jaaffl.config import EngineParams
 from jaaffl.domain import DraftPick, DraftState, LeagueSettings, Player, Position, RosterSlot
+from jaaffl.engine.context import DraftContext
+from jaaffl.engine.optimize import expand_starting_slots, marginal_lineup_value
+from jaaffl.engine.projections import Z_SCORE, PlayerProjection
+from jaaffl.engine.tiers import assign_tiers, cliff_bonuses
+from jaaffl.league.replacement import replacement_values
 
 # The λ schedule from config/engine.json (EngineParams defaults it to [] since it is calibrated).
 _LAMBDA_SCHEDULE = [
@@ -88,4 +93,68 @@ def draft_state(
         current_overall_pick=current_overall_pick,
         my_team_id=my_team_id,
         picks=picks or [],
+    )
+
+
+def make_context(
+    specs: list[dict[str, Any]],
+    *,
+    params: EngineParams | None = None,
+    settings: LeagueSettings | None = None,
+) -> DraftContext:
+    """Build a DraftContext directly from ``{pid, pos, mu, sigma?, adp?, sd?, ecr?}`` specs — no
+    providers/network — so the orchestrator can be exercised in isolation (uses the real
+    baseline/tier/cliff/MLV code paths)."""
+    params = params or engine_params()
+    settings = settings or jaaffl_settings(draft_order=teams(12))
+
+    players: dict[str, Player] = {}
+    mu: dict[str, float] = {}
+    position: dict[str, Position] = {}
+    projections: dict[str, PlayerProjection] = {}
+    adp_mean: dict[str, float] = {}
+    adp_sd: dict[str, float] = {}
+    ecr: dict[str, float] = {}
+    for spec in specs:
+        pid, pos, m = spec["pid"], spec["pos"], spec["mu"]
+        sigma = spec.get("sigma", 20.0)
+        players[pid] = Player(player_id=pid, name=pid, position=pos)
+        mu[pid], position[pid] = m, pos
+        projections[pid] = PlayerProjection(
+            player_id=pid,
+            position=pos,
+            mu=m,
+            sigma=sigma,
+            floor=m - Z_SCORE * sigma,
+            ceiling=m + Z_SCORE * sigma,
+            reliability=1.0,
+        )
+        if spec.get("adp") is not None:
+            adp_mean[pid] = spec["adp"]
+            adp_sd[pid] = spec.get("sd", 8.0)
+        if spec.get("ecr") is not None:
+            ecr[pid] = spec["ecr"]
+
+    flex = (int(params.flex_split["RB"]), int(params.flex_split["WR"]))
+    baselines = replacement_values(settings, mu, players, flex_split=flex)
+    slots = expand_starting_slots(settings)
+    static_mlv = {pid: marginal_lineup_value(pid, [], mu, position, baselines, slots) for pid in mu}
+    tiers = assign_tiers(ecr, position) if ecr else dict.fromkeys(mu, 1)
+    cliff = cliff_bonuses(tiers, static_mlv, position)
+    return DraftContext(
+        settings=settings,
+        params=params,
+        projections=projections,
+        mu=mu,
+        position=position,
+        baselines=baselines,
+        flex_split=flex,
+        tiers=tiers,
+        cliff_bonus=cliff,
+        adp_mean=adp_mean,
+        adp_sd=adp_sd,
+        ecr=ecr,
+        starting_slots=slots,
+        players=players,
+        sigma={pid: projections[pid].sigma for pid in mu},
     )
