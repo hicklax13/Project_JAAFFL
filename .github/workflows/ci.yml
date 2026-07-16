@@ -52,3 +52,24 @@ jobs:
         run: pnpm -r typecheck
       - name: Test
         run: pnpm -r test
+      - name: Extension build (manifest emit sanity)
+        run: pnpm --filter @jaaffl/extension build
+
+  e4-playwright:
+    name: E4 DOM-probe (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --filter @jaaffl/extension exec playwright install --with-deps chromium
+      - name: E4 DOM-probe spec
+        run: pnpm --filter @jaaffl/extension test:e2e

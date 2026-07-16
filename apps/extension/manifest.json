@@ -3,13 +3,22 @@
   "name": "JAAFFL — CBS Draft Assistant",
   "version": "0.0.0",
   "description": "Reads your live CBS fantasy draft in your own session and shows league-specific pick guidance.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "scripting"],
   "host_permissions": ["https://*.cbssports.com/*", "http://127.0.0.1:8787/*"],
   "background": {
     "service_worker": "src/background/service-worker.ts",
     "type": "module"
   },
   "content_scripts": [
+    {
+      "matches": [
+        "https://*.cbssports.com/fantasy/draft/*",
+        "https://*.football.cbssports.com/*draft*"
+      ],
+      "js": ["src/inject/cbs-main.inject.ts"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
     {
       "matches": ["https://*.cbssports.com/fantasy/*", "https://*.football.cbssports.com/*"],
       "js": ["src/content/cbs-league.content.ts"],
@@ -20,9 +29,10 @@
         "https://*.cbssports.com/fantasy/draft/*",
         "https://*.football.cbssports.com/*draft*"
       ],
-      "js": ["src/content/cbs-draft.content.ts", "src/overlay/overlay.ts"],
-      "run_at": "document_idle"
+      "js": ["src/content/cbs-draft.content.ts"],
+      "world": "ISOLATED",
+      "run_at": "document_start"
     }
   ],
-  "action": { "default_title": "JAAFFL" }
+  "action": { "default_title": "JAAFFL (click to toggle record mode)" }
 }

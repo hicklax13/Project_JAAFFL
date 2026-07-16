@@ -82,8 +82,17 @@ class Settings(BaseSettings):
     jaaffl_api_port: int = 8787
     jaaffl_log_level: str = "INFO"
     jaaffl_data_dir: Path = Path("./data")
+    # Cross-origin allowlist for the localhost service. A WebSocket handshake is NOT gated
+    # by CORS, so the app checks Origin itself: only the user's own extension
+    # (chrome-extension://) and the local dashboard may write. "*" opens it to any web page
+    # in another tab — set only for debugging.
+    jaaffl_allowed_origins: str = "chrome-extension://*,http://localhost:3000,http://127.0.0.1:3000"
     jaaffl_season: int = 2026
     jaaffl_engine_params_path: Path = Path("./config/engine.json")
+    # Record-mode capture sink (Phase 1): raw mock-draft frames land here for fixture
+    # curation. Git-ignored — raw recordings may carry league names; only redacted
+    # goldens are committed (plan §5.10).
+    jaaffl_recordings_dir: Path = Path("./apps/extension/fixtures/cbs")
 
     # FantasyFootballCalculator ADP ($0 tier; stage 4). Teams mirrors the fixed 12-team
     # league setting (config/league.json) but never overrides it.

@@ -12,5 +12,6 @@
       "player_id": "p-0001"
     }
   ],
-  "available_player_ids": null
+  "available_player_ids": null,
+  "complete": false
 }

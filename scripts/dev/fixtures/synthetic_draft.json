@@ -1,0 +1,103 @@
+[
+  {
+    "event_type": "league_settings",
+    "league_id": "cbs-jaaffl",
+    "source": "paste",
+    "data": {
+      "league_id": "cbs-jaaffl",
+      "team_count": 12,
+      "draft_order": ["T7", "T3", "T12", "T5", "T9", "T1", "T11", "T4", "T8", "T2", "T10", "T6"]
+    }
+  },
+  {
+    "event_type": "on_the_clock",
+    "league_id": "cbs-jaaffl",
+    "pick_number": 1,
+    "source": "ws",
+    "data": { "current_overall_pick": 1, "team_id": "T7" }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "cbs-jaaffl",
+    "pick_number": 1,
+    "source": "ws",
+    "data": {
+      "overall": 1, "round": 1, "pick_in_round": 1, "team_id": "T7",
+      "player_id": "cbs:4429795", "cbs_player_id": "4429795",
+      "player_name": "Bijan Robinson", "player_team": "ATL", "position": "RB"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "cbs-jaaffl",
+    "pick_number": 2,
+    "source": "framework",
+    "data": {
+      "overall": 2, "round": 1, "pick_in_round": 2, "team_id": "T3",
+      "player_id": "cbs:4241389", "cbs_player_id": "4241389",
+      "player_name": "CeeDee Lamb", "player_team": "DAL", "position": "WR"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "cbs-jaaffl",
+    "pick_number": 2,
+    "source": "dom",
+    "data": {
+      "overall": 2, "round": 1, "pick_in_round": 2, "team_id": "T3",
+      "player_id": "cbs:4241389", "cbs_player_id": "4241389",
+      "player_name": "CeeDee Lamb", "player_team": "DAL", "position": "WR"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "cbs-jaaffl",
+    "pick_number": 3,
+    "source": "ws",
+    "data": {
+      "overall": 3, "round": 1, "pick_in_round": 3, "team_id": "T12",
+      "player_id": "cbs:2543743", "cbs_player_id": "2543743",
+      "player_name": "Saquon Barkley", "player_team": "PHI", "position": "RB"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "cbs-jaaffl",
+    "pick_number": 4,
+    "source": "ws",
+    "data": {
+      "overall": 4, "round": 1, "pick_in_round": 4, "team_id": "T5",
+      "player_id": "cbs:3117251", "cbs_player_id": "3117251",
+      "player_name": "Christian McCaffrey", "player_team": "SF", "position": "RB"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "cbs-jaaffl",
+    "pick_number": 5,
+    "source": "dom",
+    "data": {
+      "overall": 5, "round": 1, "pick_in_round": 5, "team_id": "T9",
+      "player_id": "cbs:4360438", "cbs_player_id": "4360438",
+      "player_name": "Ja'Marr Chase", "player_team": "CIN", "position": "WR"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "cbs-jaaffl",
+    "pick_number": 6,
+    "source": "ws",
+    "data": {
+      "overall": 6, "round": 1, "pick_in_round": 6, "team_id": "T1",
+      "player_id": "cbs:4262921", "cbs_player_id": "4262921",
+      "player_name": "Justin Jefferson", "player_team": "MIN", "position": "WR"
+    }
+  },
+  {
+    "event_type": "on_the_clock",
+    "league_id": "cbs-jaaffl",
+    "pick_number": 7,
+    "source": "ws",
+    "data": { "current_overall_pick": 7, "team_id": "T11" }
+  }
+]

@@ -1,0 +1,79 @@
+<!doctype html>
+<!-- Synthetic CBS draft-room board fixture. TODO(capture): replace the markup vocabulary
+     (data-jaaffl-independent classes + data-* attributes) with redacted real CBS DOM once
+     the record-mode mock-draft session lands. The draft ORDER below is deliberately NOT a
+     snake pattern derivable from team count — it is "read from the board". -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Mock Draft Room</title>
+  </head>
+  <body>
+    <div id="draftBoard" class="draft-board" data-league-id="cbs-jaaffl">
+      <ol class="draft-order">
+        <li data-team-id="T7">Team Seven</li>
+        <li data-team-id="T3">Team Three</li>
+        <li data-team-id="T12">Team Twelve</li>
+        <li data-team-id="T5">Team Five</li>
+        <li data-team-id="T9">Team Nine</li>
+        <li data-team-id="T1">Team One</li>
+        <li data-team-id="T11">Team Eleven</li>
+        <li data-team-id="T4">Team Four</li>
+        <li data-team-id="T8">Team Eight</li>
+        <li data-team-id="T2">Team Two</li>
+        <li data-team-id="T10">Team Ten</li>
+        <li data-team-id="T6">Team Six</li>
+      </ol>
+      <table class="picks">
+        <tbody>
+          <tr
+            class="pick-row"
+            data-overall="1"
+            data-round="1"
+            data-pick="1"
+            data-team-id="T7"
+            data-player-id="4429795"
+            data-player-name="Bijan Robinson"
+            data-player-team="ATL"
+            data-position="RB"
+          >
+            <td>1.01</td>
+            <td>Team Seven</td>
+            <td>Bijan Robinson, RB, ATL</td>
+          </tr>
+          <tr
+            class="pick-row"
+            data-overall="2"
+            data-round="1"
+            data-pick="2"
+            data-team-id="T3"
+            data-player-id="4241389"
+            data-player-name="CeeDee Lamb"
+            data-player-team="DAL"
+            data-position="WR"
+          >
+            <td>1.02</td>
+            <td>Team Three</td>
+            <td>CeeDee Lamb, WR, DAL</td>
+          </tr>
+          <tr
+            class="pick-row"
+            data-overall="3"
+            data-round="1"
+            data-pick="3"
+            data-team-id="T12"
+            data-player-id="2543743"
+            data-player-name="Saquon Barkley"
+            data-player-team="PHI"
+            data-position="RB"
+          >
+            <td>1.03</td>
+            <td>Team Twelve</td>
+            <td>Saquon Barkley, RB, PHI</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pick-ticker">With pick 3, Team Twelve selects Saquon Barkley (RB, PHI)</div>
+    </div>
+  </body>
+</html>

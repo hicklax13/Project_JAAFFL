@@ -5,17 +5,24 @@
   "type": "module",
   "description": "Manifest V3 CBS sync layer + in-draft overlay.",
   "scripts": {
-    "dev": "tsc --noEmit --watch",
-    "build": "tsc --noEmit",
+    "dev": "vite",
+    "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"(no tests yet)\" && exit 0",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
     "lint": "echo \"(lint: add eslint)\" && exit 0"
   },
   "dependencies": {
     "@jaaffl/shared": "workspace:*"
   },
   "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0",
+    "@playwright/test": "^1.61.1",
     "@types/chrome": "0.0.x",
-    "typescript": "^5.7.2"
+    "esbuild": "^0.25.0",
+    "happy-dom": "^19.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0",
+    "vitest": "^4.1.10"
   }
 }

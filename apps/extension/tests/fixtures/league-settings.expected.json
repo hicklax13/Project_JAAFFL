@@ -1,0 +1,70 @@
+{
+  "league_id": "cbs-jaaffl",
+  "platform": "cbs",
+  "name": "JAAFFL",
+  "team_count": 12,
+  "roster_slots": [
+    { "slot": "QB", "eligible_positions": ["QB"], "count": 1, "starting": true },
+    { "slot": "RB", "eligible_positions": ["RB"], "count": 1, "starting": true },
+    { "slot": "WR", "eligible_positions": ["WR"], "count": 3, "starting": true },
+    { "slot": "WR/RB", "eligible_positions": ["WR", "RB"], "count": 1, "starting": true },
+    { "slot": "TE", "eligible_positions": ["TE"], "count": 1, "starting": true },
+    { "slot": "K", "eligible_positions": ["K"], "count": 1, "starting": true },
+    { "slot": "DST", "eligible_positions": ["DST"], "count": 1, "starting": true },
+    {
+      "slot": "BENCH",
+      "eligible_positions": ["QB", "RB", "WR", "TE", "K", "DST"],
+      "count": 8,
+      "starting": false
+    }
+  ],
+  "scoring": [
+    { "stat": "pass_yd", "points_per_unit": 0.04 },
+    { "stat": "pass_td", "points_per_unit": 6 },
+    { "stat": "pass_int", "points_per_unit": -2 },
+    { "stat": "rush_yd", "points_per_unit": 0.1 },
+    { "stat": "rush_td", "points_per_unit": 6 },
+    { "stat": "rec_yd", "points_per_unit": 0.1 },
+    { "stat": "rec_td", "points_per_unit": 6 },
+    { "stat": "reception", "points_per_unit": 0 },
+    { "stat": "fumble_lost", "points_per_unit": -2 },
+    { "stat": "two_pt", "points_per_unit": 2 },
+    { "stat": "fg", "points_per_unit": 3 },
+    { "stat": "pat", "points_per_unit": 1 },
+    { "stat": "dst_td", "points_per_unit": 6 },
+    { "stat": "dst_sack", "points_per_unit": 1 },
+    { "stat": "dst_int", "points_per_unit": 2 },
+    { "stat": "dst_fr", "points_per_unit": 2 },
+    { "stat": "dst_safety", "points_per_unit": 2 }
+  ],
+  "scoring_tiers": [
+    {
+      "stat": "dst_points_allowed",
+      "applies_to": ["DST"],
+      "brackets": [
+        { "lower": 0, "upper": 6, "points": 8 },
+        { "lower": 7, "upper": 13, "points": 6 },
+        { "lower": 14, "upper": 20, "points": 4 },
+        { "lower": 21, "upper": 27, "points": 2 },
+        { "lower": 28, "upper": 34, "points": 0 },
+        { "lower": 35, "upper": null, "points": -2 }
+      ]
+    },
+    {
+      "stat": "dst_yards_allowed",
+      "applies_to": ["DST"],
+      "brackets": [
+        { "lower": 0, "upper": 99, "points": 5 },
+        { "lower": 100, "upper": 199, "points": 3 },
+        { "lower": 200, "upper": 299, "points": 2 },
+        { "lower": 300, "upper": 399, "points": 0 },
+        { "lower": 400, "upper": null, "points": -3 }
+      ]
+    }
+  ],
+  "scoring_bonuses": [
+    { "stat": "fg_distance", "threshold": 50, "points": 2, "applies_to": ["K"] }
+  ],
+  "draft_type": "snake",
+  "draft_order": ["T7", "T3", "T12", "T5", "T9", "T1", "T11", "T4", "T8", "T2", "T10", "T6"]
+}

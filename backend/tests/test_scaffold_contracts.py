@@ -8,6 +8,9 @@ import pytest
 from pydantic import ValidationError
 
 from jaaffl.domain import (
+    DraftEvent,
+    DraftEventSource,
+    DraftState,
     LeagueSettings,
     Position,
     RecommendedPick,
@@ -117,6 +120,40 @@ def test_score_components_embed_on_recommended_pick() -> None:
 def test_recommended_pick_components_optional_default_none() -> None:
     pick = RecommendedPick(player_id="p1", score=1.0)
     assert pick.components is None
+
+
+def test_draft_event_carries_pick_number_and_source() -> None:
+    """§5.8: pick_number is the cross-probe de-dup key (required-when-present for
+    pick_made); source records the winning probe (ws|framework|dom|paste)."""
+    event = DraftEvent(
+        event_type="pick_made",
+        league_id="L1",
+        pick_number=25,
+        source=DraftEventSource.WS,
+        data={"overall": 25, "round": 3, "pick_in_round": 1, "team_id": "T1"},
+    )
+    rebuilt = DraftEvent.model_validate(event.model_dump())
+    assert rebuilt.pick_number == 25
+    assert rebuilt.source == "ws"
+
+
+def test_draft_event_new_fields_are_additive_optional() -> None:
+    event = DraftEvent(event_type="league_settings", league_id="L1")
+    assert event.pick_number is None
+    assert event.source is None
+
+
+def test_draft_event_rejects_unknown_source_and_nonpositive_pick() -> None:
+    with pytest.raises(ValidationError):
+        DraftEvent(event_type="pick_made", league_id="L1", source="manual")  # wire says 'paste'
+    with pytest.raises(ValidationError):
+        DraftEvent(event_type="pick_made", league_id="L1", pick_number=0)
+
+
+def test_draft_state_complete_flag_defaults_false() -> None:
+    """§2.6 reducer: draft_complete 'marks terminal' — carried as an additive flag."""
+    state = DraftState(league_id="L1", current_overall_pick=1)
+    assert state.complete is False
 
 
 def test_score_components_sigma_must_be_nonnegative() -> None:

@@ -1,0 +1,60 @@
+{
+  "type": "league_settings",
+  "leagueId": "cbs-jaaffl",
+  "name": "JAAFFL",
+  "teams": 12,
+  "draftType": "snake",
+  "rosterSlots": [
+    { "label": "QB", "eligible": ["QB"], "count": 1, "starting": true },
+    { "label": "RB", "eligible": ["RB"], "count": 1, "starting": true },
+    { "label": "WR", "eligible": ["WR"], "count": 3, "starting": true },
+    { "label": "WR/RB", "eligible": ["WR", "RB"], "count": 1, "starting": true },
+    { "label": "TE", "eligible": ["TE"], "count": 1, "starting": true },
+    { "label": "K", "eligible": ["K"], "count": 1, "starting": true },
+    { "label": "DST", "eligible": ["DST"], "count": 1, "starting": true },
+    {
+      "label": "BENCH",
+      "eligible": ["QB", "RB", "WR", "TE", "K", "DST"],
+      "count": 8,
+      "starting": false
+    }
+  ],
+  "scoring": {
+    "rules": [
+      { "abbr": "pass_yd", "points": 0.04 },
+      { "abbr": "pass_td", "points": 6 },
+      { "abbr": "pass_int", "points": -2 },
+      { "abbr": "rush_yd", "points": 0.1 },
+      { "abbr": "rush_td", "points": 6 },
+      { "abbr": "rec_yd", "points": 0.1 },
+      { "abbr": "rec_td", "points": 6 },
+      { "abbr": "reception", "points": 0 },
+      { "abbr": "fumble_lost", "points": -2 },
+      { "abbr": "two_pt", "points": 2 },
+      { "abbr": "fg", "points": 3 },
+      { "abbr": "pat", "points": 1 },
+      { "abbr": "dst_td", "points": 6 },
+      { "abbr": "dst_sack", "points": 1 },
+      { "abbr": "dst_int", "points": 2 },
+      { "abbr": "dst_fr", "points": 2 },
+      { "abbr": "dst_safety", "points": 2 }
+    ],
+    "dstPointsAllowed": [
+      { "from": 0, "to": 6, "points": 8 },
+      { "from": 7, "to": 13, "points": 6 },
+      { "from": 14, "to": 20, "points": 4 },
+      { "from": 21, "to": 27, "points": 2 },
+      { "from": 28, "to": 34, "points": 0 },
+      { "from": 35, "to": null, "points": -2 }
+    ],
+    "dstYardsAllowed": [
+      { "from": 0, "to": 99, "points": 5 },
+      { "from": 100, "to": 199, "points": 3 },
+      { "from": 200, "to": 299, "points": 2 },
+      { "from": 300, "to": 399, "points": 0 },
+      { "from": 400, "to": null, "points": -3 }
+    ],
+    "bonuses": [{ "stat": "fg_distance", "threshold": 50, "points": 2 }]
+  },
+  "draftOrder": ["T7", "T3", "T12", "T5", "T9", "T1", "T11", "T4", "T8", "T2", "T10", "T6"]
+}

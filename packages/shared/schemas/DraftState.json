@@ -61,6 +61,11 @@
       "default": null,
       "title": "Available Player Ids"
     },
+    "complete": {
+      "default": false,
+      "title": "Complete",
+      "type": "boolean"
+    },
     "current_overall_pick": {
       "minimum": 1,
       "title": "Current Overall Pick",
