@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "Position": {
+      "enum": [
+        "QB",
+        "RB",
+        "WR",
+        "TE",
+        "K",
+        "DST",
+        "DL",
+        "LB",
+        "DB"
+      ],
+      "title": "Position",
+      "type": "string"
+    }
+  },
+  "description": "Points awarded per unit of a stat, e.g. stat='reception', points_per_unit=1.0 (PPR).",
+  "properties": {
+    "applies_to": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Position"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Restrict to positions, or None for all.",
+      "title": "Applies To"
+    },
+    "points_per_unit": {
+      "title": "Points Per Unit",
+      "type": "number"
+    },
+    "stat": {
+      "title": "Stat",
+      "type": "string"
+    }
+  },
+  "required": [
+    "stat",
+    "points_per_unit"
+  ],
+  "title": "ScoringRule",
+  "type": "object"
+}

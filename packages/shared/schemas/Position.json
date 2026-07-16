@@ -1,0 +1,15 @@
+{
+  "enum": [
+    "QB",
+    "RB",
+    "WR",
+    "TE",
+    "K",
+    "DST",
+    "DL",
+    "LB",
+    "DB"
+  ],
+  "title": "Position",
+  "type": "string"
+}

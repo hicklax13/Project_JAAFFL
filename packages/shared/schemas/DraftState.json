@@ -1,0 +1,111 @@
+{
+  "$defs": {
+    "DraftPick": {
+      "properties": {
+        "overall": {
+          "minimum": 1,
+          "title": "Overall",
+          "type": "integer"
+        },
+        "pick_in_round": {
+          "minimum": 1,
+          "title": "Pick In Round",
+          "type": "integer"
+        },
+        "player_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Player Id"
+        },
+        "round": {
+          "minimum": 1,
+          "title": "Round",
+          "type": "integer"
+        },
+        "team_id": {
+          "title": "Team Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "overall",
+        "round",
+        "pick_in_round",
+        "team_id"
+      ],
+      "title": "DraftPick",
+      "type": "object"
+    }
+  },
+  "description": "A snapshot of the live draft at a point in time.",
+  "properties": {
+    "available_player_ids": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Available Player Ids"
+    },
+    "current_overall_pick": {
+      "minimum": 1,
+      "title": "Current Overall Pick",
+      "type": "integer"
+    },
+    "league_id": {
+      "title": "League Id",
+      "type": "string"
+    },
+    "my_team_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "My Team Id"
+    },
+    "on_the_clock_team_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "On The Clock Team Id"
+    },
+    "picks": {
+      "items": {
+        "$ref": "#/$defs/DraftPick"
+      },
+      "title": "Picks",
+      "type": "array"
+    }
+  },
+  "required": [
+    "league_id",
+    "current_overall_pick"
+  ],
+  "title": "DraftState",
+  "type": "object"
+}

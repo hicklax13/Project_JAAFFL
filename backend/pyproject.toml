@@ -23,20 +23,23 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Stage 3–4: local warehouse + free historical data.
+# Stage 3–4: local warehouse + free historical data (Polars-native; nfl_data_py is archived).
 data = [
   "duckdb>=0.10",
   "pyarrow>=15",
-  "pandas>=2.2",
-  "nfl_data_py>=0.3.2",
+  "polars>=1.0",
+  "nflreadpy>=0.1",
 ]
 # Stage 5: simulation + constrained optimization + residual ML.
+# pandas serves XGBoost .to_pandas() (stretch); scikit-learn serves GaussianMixture tiers.
 engine = [
   "numpy>=1.26",
   "scipy>=1.12",
   "ortools>=9.9",
   "xgboost>=2.0",
   "optuna>=3.6",
+  "pandas>=2.2",
+  "scikit-learn>=1.4",
 ]
 # Stage 7: text-only AI assistant (OpenAI Responses API). No voice/Realtime.
 assistant = [

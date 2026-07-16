@@ -11,12 +11,12 @@ from __future__ import annotations
 from jaaffl.config import Settings, get_settings
 from jaaffl.providers.base import Capability, FantasyDataProvider
 from jaaffl.providers.fantasypros import FantasyProsProvider
-from jaaffl.providers.nflverse import NflverseProvider
+from jaaffl.providers.nflverse import NflreadpyProvider
 
 
 def build_registry(settings: Settings | None = None) -> list[FantasyDataProvider]:
     settings = settings or get_settings()
-    providers: list[FantasyDataProvider] = [NflverseProvider()]
+    providers: list[FantasyDataProvider] = [NflreadpyProvider()]
 
     fantasypros = FantasyProsProvider(settings)
     if fantasypros.enabled:

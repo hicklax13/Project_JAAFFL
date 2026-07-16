@@ -48,6 +48,36 @@ class ScoringRule(BaseModel):
     )
 
 
+class ScoringBracket(BaseModel):
+    """One inclusive-lower bracket of a tiered stat. Points awarded when lower <= stat < upper
+    (upper=None => open-ended top bracket)."""
+
+    lower: float = Field(description="Inclusive lower bound of the bracket, in stat units.")
+    upper: float | None = Field(
+        default=None, description="Exclusive upper bound; None = open-ended."
+    )
+    points: float = Field(description="Points awarded when the stat falls in this bracket.")
+
+
+class ScoringTier(BaseModel):
+    """A bracketed (non-linear) scoring stat, e.g. CBS DST points-allowed / yards-allowed."""
+
+    stat: str = Field(description="e.g. 'dst_points_allowed', 'dst_yards_allowed'.")
+    applies_to: list[Position] | None = Field(
+        default=None, description="Restrict to positions, e.g. [DST]."
+    )
+    brackets: list[ScoringBracket] = Field(default_factory=list)
+
+
+class ScoringBonus(BaseModel):
+    """A threshold bonus, e.g. K field goal of 50+ yards => +N points."""
+
+    stat: str = Field(description="e.g. 'field_goal_distance'.")
+    threshold: float = Field(description="Award when stat >= threshold (stat units).")
+    points: float = Field(description="Bonus points at/over the threshold.")
+    applies_to: list[Position] | None = Field(default=None, description="e.g. [K].")
+
+
 class Team(BaseModel):
     team_id: str
     name: str | None = None
@@ -77,6 +107,10 @@ class LeagueSettings(BaseModel):
     team_count: int = Field(ge=2)
     roster_slots: list[RosterSlot] = Field(default_factory=list)
     scoring: list[ScoringRule] = Field(default_factory=list)
+    # CBS "Standard" scores DST on BOTH points-allowed AND yards-allowed brackets, and
+    # awards threshold bonuses (e.g. K 50+ yd FG) that flat linear rules cannot express.
+    scoring_tiers: list[ScoringTier] = Field(default_factory=list)
+    scoring_bonuses: list[ScoringBonus] = Field(default_factory=list)
     draft_type: str = Field(default="snake", description="'snake' | 'auction' | 'custom'.")
     # Never inferred from team_count alone — read from the live room when available.
     draft_order: list[str] | None = Field(
@@ -127,6 +161,39 @@ class DraftEvent(BaseModel):
     data: dict = Field(default_factory=dict)
 
 
+class ScoreComponents(BaseModel):
+    """Auditable decomposition of Score(p) (design §10.3) — never a black box.
+
+    Reconstruction (kappa/alpha and caps from EngineParams):
+        score ~= mlv + kappa*max(0.0, vona) - risk_penalty + cliff_bonus + sum(modifiers.values())
+    Convention: ``vona`` is RAW (pre-kappa, may be negative — the overlay shows urgency even
+    when gated to 0); ``risk_penalty`` and ``cliff_bonus`` are the APPLIED signed contributions;
+    ``sigma``/``floor``/``ceiling``/``replacement_baseline`` are descriptive, not summed.
+    """
+
+    mlv: float = Field(
+        description="Flex-aware Marginal Lineup Value (Hungarian, 9 slots). Weight 1."
+    )
+    vona: float = Field(
+        description="Raw Value Over Next Available (pre-kappa, pre-max-gate). May be < 0."
+    )
+    risk_penalty: float = Field(
+        description="Applied signed risk term lambda(phase,slot)*sigma; Score SUBTRACTS it."
+    )
+    cliff_bonus: float = Field(description="Applied tier-cliff term alpha*CliffBonus_p (points).")
+    sigma: float = Field(ge=0.0, description="Projection stdev sigma_p used for the risk term.")
+    floor: float = Field(description="Downside (~p10) projection, league points.")
+    ceiling: float = Field(description="Upside (~p90) projection, league points.")
+    replacement_baseline: float = Field(
+        description="Positional replacement baseline (league points) for MLV fill."
+    )
+    modifiers: dict[str, float] = Field(
+        default_factory=dict,
+        description="Named capped modifiers already in points, e.g. "
+        "{'bye_stack': -1.5, 'handcuff_synergy': 2.0, 'sos': 0.5}; each within EngineParams caps.",
+    )
+
+
 class RecommendedPick(BaseModel):
     player_id: str
     score: float = Field(description="Blended recommendation score (higher is better).")
@@ -138,6 +205,9 @@ class RecommendedPick(BaseModel):
     )
     tier: int | None = None
     rationale: str | None = None
+    # Populated by engine.recommend for every v1 rec (Stage 5); optional so that
+    # pre-engine (Stage 1-4) payloads still validate.
+    components: ScoreComponents | None = None
 
 
 class Recommendation(BaseModel):

@@ -1,0 +1,53 @@
+{
+  "$defs": {
+    "Position": {
+      "enum": [
+        "QB",
+        "RB",
+        "WR",
+        "TE",
+        "K",
+        "DST",
+        "DL",
+        "LB",
+        "DB"
+      ],
+      "title": "Position",
+      "type": "string"
+    }
+  },
+  "description": "A startable (or bench/IR) slot with its position eligibility.\n\nFlex slots list multiple eligible positions (e.g. FLEX -> RB/WR/TE,\nSUPERFLEX -> QB/RB/WR/TE). Modeled generically to support CBS custom leagues.",
+  "properties": {
+    "count": {
+      "description": "Number of slots of this type.",
+      "minimum": 0,
+      "title": "Count",
+      "type": "integer"
+    },
+    "eligible_positions": {
+      "items": {
+        "$ref": "#/$defs/Position"
+      },
+      "title": "Eligible Positions",
+      "type": "array"
+    },
+    "slot": {
+      "description": "Slot label, e.g. 'QB', 'FLEX', 'SUPERFLEX', 'BENCH', 'IR'.",
+      "title": "Slot",
+      "type": "string"
+    },
+    "starting": {
+      "default": true,
+      "description": "False for BENCH/IR slots.",
+      "title": "Starting",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "slot",
+    "eligible_positions",
+    "count"
+  ],
+  "title": "RosterSlot",
+  "type": "object"
+}

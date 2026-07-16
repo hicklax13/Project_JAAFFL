@@ -1,6 +1,9 @@
-"""nflverse / nfl_data_py provider — the free historical base of the $0 prototype tier.
+"""nflverse provider (nflreadpy-backed) — the free historical base of the $0 prototype tier.
 
-Provides play-by-play-derived weekly/seasonal stats, rosters, schedules, and draft picks.
+Polars-native: ``nfl_data_py`` is archived (read-only since 2025-09-25); ``nflreadpy`` is the
+maintained successor and scans zero-copy into DuckDB. The class is ``NflreadpyProvider`` but the
+stable ``name`` key stays ``"nflverse"`` so existing config/log references hold.
+
 Note: nflverse's injury source lapsed after the 2024 season, so injuries are NOT offered
 here — use CBS on-page data or an opt-in paid provider for current injuries.
 """
@@ -12,32 +15,44 @@ from typing import TYPE_CHECKING
 from jaaffl.providers.base import Capability, FantasyDataProvider, ProviderError
 
 if TYPE_CHECKING:
-    import pandas as pd
+    import polars as pl
+
+    from jaaffl.data import Crosswalk
 
 
-def _import_nfl_data_py():
+def _import_nflreadpy():
     try:
-        import nfl_data_py  # noqa: PLC0415
+        import nflreadpy  # noqa: PLC0415
     except ImportError as exc:  # pragma: no cover - depends on optional extra
         raise ProviderError(
             "nflverse provider needs the 'data' extra: pip install -e '.[data]'"
         ) from exc
-    return nfl_data_py
+    return nflreadpy
 
 
-class NflverseProvider(FantasyDataProvider):
+class NflreadpyProvider(FantasyDataProvider):
+    def __init__(self, crosswalk: Crosswalk | None = None) -> None:
+        self._crosswalk = crosswalk
+
     @property
     def name(self) -> str:
         return "nflverse"
 
     @property
     def capabilities(self) -> frozenset[Capability]:
-        return frozenset({Capability.HISTORICAL_STATS})
+        return frozenset(
+            {Capability.HISTORICAL_STATS, Capability.RANKINGS, Capability.EXPECTED_POINTS}
+        )
 
-    def historical_stats(self, season: int) -> pd.DataFrame:
-        """Weekly player stats for a season (thin delegate to nfl_data_py)."""
-        nfl = _import_nfl_data_py()
-        return nfl.import_weekly_data([season])
+    def historical_stats(self, season: int) -> pl.DataFrame:
+        """Weekly player stats for a season (thin delegate to nflreadpy)."""
+        return _import_nflreadpy().load_player_stats(seasons=[season])
 
-    # TODO(stage 3–4): map nfl_data_py rosters/ids into Player + external_ids for the
-    # crosswalk, and expose seasonal/draft-pick pulls used by the projection ensemble.
+    def expected_points(self, season: int, week: int | None = None) -> pl.DataFrame:
+        """Expected fantasy points (xEP) from nflverse ffopportunity."""
+        return _import_nflreadpy().load_ff_opportunity(seasons=[season])
+
+    def rankings(self, season: int, week: int | None = None) -> dict[str, float]:
+        """ECR via nflreadpy load_ff_rankings — id-crosswalk wiring lands in stage 4."""
+        self._require(Capability.RANKINGS)
+        raise NotImplementedError("rankings crosswalk not yet implemented (roadmap stage 4)")
