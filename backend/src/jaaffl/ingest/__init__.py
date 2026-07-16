@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import structlog
 
-from jaaffl.domain import DraftEvent, DraftEventType, DraftState
+from jaaffl.domain import DraftEvent, DraftEventType, DraftState, Recommendation
 from jaaffl.ingest.cbs import (
     normalize_draft_state,
     normalize_event_data,
@@ -61,6 +61,7 @@ def handle_event(
     *,
     warehouse: Warehouse | None = None,
     captured_at: str | None = None,
+    recommendations: list[Recommendation] | None = None,
 ) -> IngestResult:
     """Normalize, snapshot raw settings, durably append, then fold (the §2.6 ordering
     invariant). Raises pydantic.ValidationError on a malformed per-type payload BEFORE
@@ -68,7 +69,10 @@ def handle_event(
 
     When a ``warehouse`` is wired, a ``league_settings`` event is snapshotted to
     ``league_snapshots`` (SQLite only — hot-path safe) BEFORE the durable log append, so the
-    raw CBS payload is owned locally for Stage-4 ``CbsOnPageProvider`` (never re-fetched)."""
+    raw CBS payload is owned locally for Stage-4 ``CbsOnPageProvider`` (never re-fetched). At
+    ``draft_complete`` any ``recommendations`` the engine emitted are written alongside the
+    terminal export as ``recommendations.jsonl`` (the app layer accumulates them; ingest stays
+    engine-free — it only forwards the list)."""
     normalize_event_data(event)  # the validation gate — §2.3 "payload is validated"
     if warehouse is not None and event.event_type == DraftEventType.LEAGUE_SETTINGS:
         settings = normalize_league_settings({"league_id": event.league_id, **event.data})
@@ -96,13 +100,15 @@ def handle_event(
         and event.event_type == DraftEventType.DRAFT_COMPLETE
         and _is_first_complete(draft_log, event.league_id)
     ):
-        # §2.8 offline backtest corpus: export final_state.json + events.parquet exactly once at
-        # draft end. draft_complete has no pick_number so it never dedups and the 3-probe capture
-        # can send several — the first-complete guard keeps the export idempotent.
-        warehouse.snapshot_draft_state(state, captured_at=captured_at)
-        # TODO(stage5): also export recommendations.jsonl once engine.recommend emits Recs.
-    # TODO(stage 5): on state-advancing, non-deduped events call engine.recompute() and
-    # publish the fresh Recommendation on app.state.recs_hub (/recs/ws).
+        # §2.8 offline backtest corpus: export final_state.json + events.parquet (+ the engine's
+        # recommendations.jsonl, when the app passes them) exactly once at draft end. draft_complete
+        # has no pick_number so it never dedups and the 3-probe capture can send several — the
+        # first-complete guard keeps the export idempotent.
+        warehouse.snapshot_draft_state(
+            state, recommendations=recommendations, captured_at=captured_at
+        )
+    # The recompute + /recs/ws publish for a state-advancing, non-deduped event is orchestrated by
+    # the API layer (jaaffl.api.app) after this returns, so ingest stays engine-free (§4.7).
     return IngestResult(seq=seq, deduped=seq is None, pick_number=pick_number, state=state)
 
 

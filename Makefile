@@ -8,9 +8,9 @@ help:
 ## setup: install backend + JS workspace dependencies
 setup: setup-backend setup-js
 
-## setup-backend: install the Python backend (editable, with dev + data extras — matches CI)
+## setup-backend: install the Python backend (editable, with dev + data + engine extras — matches CI)
 setup-backend:
-	cd backend && (uv pip install -e '.[dev,data]' || python -m pip install -e '.[dev,data]')
+	cd backend && (uv pip install -e '.[dev,data,engine]' || python -m pip install -e '.[dev,data,engine]')
 
 ## setup-js: install the pnpm workspace
 setup-js:

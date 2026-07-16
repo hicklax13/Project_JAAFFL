@@ -7,9 +7,21 @@ of each build phase on purpose — nothing here blocks the automated build unles
 ## 1. CBS record-mode capture session  `[PARTIAL BLOCKER — CBS field mapping only]`
 
 The one real-frame session. It unblocks the **real** CBS field shapes that the code currently
-mocks behind `TODO(capture)`: the settings-page parse (Stage 2) and — new in Phase 3 —
-`CbsOnPageProvider`'s real projections/injuries/rankings mapping and the `CbsPageSnapshot` schema
-(`backend/src/jaaffl/domain/models.py`, `backend/src/jaaffl/providers/cbs_onpage.py`).
+mocks behind `TODO(capture)`: the settings-page parse (Stage 2), `CbsOnPageProvider`'s real
+projections/injuries/rankings mapping and the `CbsPageSnapshot` schema
+(`backend/src/jaaffl/domain/models.py`, `backend/src/jaaffl/providers/cbs_onpage.py`), and — new
+in **Phase 4 (Stage 5 engine)** — two more things:
+
+- **The real CBS scoring VALUES.** The engine scores every projection under
+  `backend/src/jaaffl/league/defaults.py::cbs_standard_scoring()` — CBS's *published* Standard
+  defaults (verified/cited: passing TD = 6, DST dual points+yards brackets, K 50+ = 5). Your live
+  room may be commissioner-customized, so those values stay behind `TODO(capture)` until the
+  capture confirms them; the real map then arrives via `CbsOnPageProvider.league_settings()`
+  (config/league.json stays immutable).
+- **Calibration against real drafts (E1/E2/E3).** The tunables in `config/engine.json` (flex split
+  8RB/4WR, κ, λ-table, α, reliability shrinkage, situation caps) are literature/first-principles
+  priors. E1 measures the flex split from live FFC ADP (top-60); E2/E3 tune the weight vector and
+  validate μ/σ against real boards. All optional — the engine ships and runs on the priors.
 
 Steps:
 1. Open a CBS mock draft with the extension loaded.
@@ -17,9 +29,10 @@ Steps:
 3. Run the mock draft to completion (frames land git-ignored under
    `apps/extension/fixtures/cbs/` via `POST /dev/recordings`).
 4. Tell Claude "capture done" — Claude finalizes `parse.ts` field mappings, fills the real
-   `CbsPageSnapshot` fields, and promotes redacted golden fixtures.
+   `CbsPageSnapshot` fields, reconciles the scoring map, and promotes redacted golden fixtures.
 
-Not a build blocker: nflverse + FFC providers are fully built and tested without it. Manual-paste
+Not a build blocker: the engine, nflverse + FFC providers, and the `/recommendation` + `/recs/ws`
+surfaces are fully built and tested against CBS-Standard defaults + synthetic fixtures. Manual-paste
 stays the guaranteed draft-day fallback regardless.
 
 ## 2. Paid data providers  `[WHEN YOU WANT IT — off by default]`

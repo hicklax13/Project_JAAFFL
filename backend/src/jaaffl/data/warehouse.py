@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from jaaffl.config import get_settings
-from jaaffl.domain import CbsPageSnapshot, DraftState, LeagueSettings
+from jaaffl.domain import CbsPageSnapshot, DraftState, LeagueSettings, Recommendation
 from jaaffl.ingest.log import open_log, read_events
 
 if TYPE_CHECKING:
@@ -238,6 +238,7 @@ class Warehouse:
             self.data_dir,
             self.parquet_dir / "nflverse",
             self.parquet_dir / "ffc",
+            self.parquet_dir / "projections",
             self.snapshots_dir,
         ):
             d.mkdir(parents=True, exist_ok=True)
@@ -247,32 +248,80 @@ class Warehouse:
     def materialize(self) -> None:
         """(Re)create the DISPOSABLE DuckDB analytics schema from Parquet + SQLite. Pure
         function of the inputs — no network, no wall-clock in the shape it produces (``adp``'s
-        ``captured_at`` comes from the Parquet, stamped at refresh time). ``projections`` stays
-        empty until Stage 5."""
+        ``captured_at`` comes from the Parquet, stamped at refresh time). Both ``adp`` and
+        ``projections`` are loaded from their Parquet snapshots (empty tables when none exist),
+        so a rebuild reproduces identical rows for fixed inputs."""
         con = self._duckdb_connect()
         try:
             for ddl in _DUCKDB_TABLES:
                 con.execute(ddl)
             self._materialize_adp(con)
+            self._materialize_projections(con)
         finally:
             con.close()
 
     def _materialize_adp(self, con: duckdb.DuckDBPyConnection) -> None:
-        """Load the ``adp`` table from the FFC ADP Parquet snapshots (canonical player_id already
-        resolved at refresh time). Idempotent: clears then reloads, so repeated ``materialize`` /
-        rebuild calls reproduce the same rows for fixed Parquet inputs."""
-        con.execute("DELETE FROM adp")
-        files = sorted((self.parquet_dir / "ffc").glob("adp_*.parquet"))
-        if not files:
+        """Load ``adp`` from the FFC ADP Parquet snapshots (canonical player_id resolved at refresh
+        time), reproducibly for fixed inputs."""
+        self._reload_from_parquet(
+            con,
+            "adp",
+            "ffc",
+            "adp_",
+            (
+                "player_id",
+                "season",
+                "scoring",
+                "teams",
+                "adp",
+                "stdev",
+                "high",
+                "low",
+                "times_drafted",
+                "bye",
+                "captured_at",
+            ),
+        )
+
+    def _materialize_projections(self, con: duckdb.DuckDBPyConnection) -> None:
+        """Load ``projections`` (μ/σ/floor/ceiling under the CBS map) from the Parquet snapshots
+        ``jaaffl.materialize.refresh_projections`` writes (app.sqlite is never touched)."""
+        self._reload_from_parquet(
+            con,
+            "projections",
+            "projections",
+            "proj_",
+            (
+                "player_id",
+                "season",
+                "source",
+                "scoring_version",
+                "stat_line",
+                "mu",
+                "sigma",
+                "floor",
+                "ceiling",
+            ),
+        )
+
+    def _reload_from_parquet(
+        self,
+        con: duckdb.DuckDBPyConnection,
+        table: str,
+        subdir: str,
+        prefix: str,
+        columns: tuple[str, ...],
+    ) -> None:
+        """Clear-then-reload a DuckDB analytics table from its ``parquet/{subdir}/{prefix}*``
+        snapshots — idempotent, so a rebuild reproduces identical rows for fixed inputs. ``table``
+        and ``columns`` are trusted code constants (never user input); the glob is a bound param."""
+        con.execute(f"DELETE FROM {table}")
+        if not sorted((self.parquet_dir / subdir).glob(f"{prefix}*.parquet")):
             return
-        glob = str(self.parquet_dir / "ffc" / "adp_*.parquet").replace("\\", "/")
+        glob = str(self.parquet_dir / subdir / f"{prefix}*.parquet").replace("\\", "/")
+        cols = ", ".join(columns)
         con.execute(
-            "INSERT OR IGNORE INTO adp"
-            " (player_id, season, scoring, teams, adp, stdev, high, low, times_drafted, bye,"
-            "  captured_at)"
-            " SELECT player_id, season, scoring, teams, adp, stdev, high, low, times_drafted,"
-            "  bye, captured_at FROM read_parquet(?)",
-            [glob],
+            f"INSERT OR IGNORE INTO {table} ({cols}) SELECT {cols} FROM read_parquet(?)", [glob]
         )
 
     # --- SQLite app state ------------------------------------------------------------
@@ -346,12 +395,14 @@ class Warehouse:
         state: DraftState,
         *,
         settings: LeagueSettings | None = None,
+        recommendations: list[Recommendation] | None = None,
         captured_at: str | None = None,
     ) -> Path:
         """Write a per-draft export ``snapshots/draft_{league_id}_{ts}/`` (the offline
         backtest corpus, plan §2.8): ``final_state.json``, ``events.parquet`` (this draft's
-        log rows), and ``league_settings.json`` when known. The ``league_id`` is sanitized to
-        a single safe path component so it can never escape ``snapshots/``."""
+        log rows), ``league_settings.json`` when known, and ``recommendations.jsonl`` (one
+        Recommendation per line, in emit order) once the engine produced them. The ``league_id``
+        is sanitized to a single safe path component so it can never escape ``snapshots/``."""
         ts = re.sub(r"[^0-9A-Za-z]", "", captured_at or _now_iso())
         out = self.snapshots_dir / f"draft_{_safe_component(state.league_id)}_{ts}"
         out.mkdir(parents=True, exist_ok=True)
@@ -361,7 +412,10 @@ class Warehouse:
                 settings.model_dump_json(indent=2), encoding="utf-8"
             )
         self._export_events_parquet(state.league_id, out / "events.parquet")
-        # TODO(stage 5): recommendations.jsonl once engine.recommend emits Recommendations.
+        if recommendations:  # the corpus's third file (plan §2.8) — closes the Stage-4 TODO
+            (out / "recommendations.jsonl").write_text(
+                "".join(r.model_dump_json() + "\n" for r in recommendations), encoding="utf-8"
+            )
         return out
 
     def _export_events_parquet(self, league_id: str, path: Path) -> None:
