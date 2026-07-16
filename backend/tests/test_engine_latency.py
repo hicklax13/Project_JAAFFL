@@ -56,8 +56,15 @@ def _big_context():
     for pos, n, top, step, sigma in plan:
         for i in range(n):
             specs.append(
-                {"pid": f"{pos.value.lower()}{i}", "pos": pos, "mu": top - step * i,
-                 "sigma": sigma, "adp": float(overall), "sd": 8.0, "ecr": float(overall)}
+                {
+                    "pid": f"{pos.value.lower()}{i}",
+                    "pos": pos,
+                    "mu": top - step * i,
+                    "sigma": sigma,
+                    "adp": float(overall),
+                    "sd": 8.0,
+                    "ecr": float(overall),
+                }
             )
             overall += 1
     return make_context(specs)
