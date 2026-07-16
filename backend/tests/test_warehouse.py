@@ -109,14 +109,16 @@ def test_init_creates_duckdb_analytics_tables(wh: Warehouse) -> None:
     assert wh.duckdb_tables() >= {"projections", "adp"}
 
 
-def test_init_records_a_single_schema_migration(wh: Warehouse) -> None:
+def test_init_records_all_schema_migrations(wh: Warehouse) -> None:
     conn = sqlite3.connect(wh.app_sqlite)
     try:
         rows = conn.execute("SELECT version FROM schema_migrations ORDER BY version")
         versions = [r[0] for r in rows]
     finally:
         conn.close()
-    assert versions == [1]
+    # v1 = Stage-3 app-state; v2 = Stage-4 name_resolutions (resolve_name);
+    # v3 = Stage-4 cbs_page_snapshots (CbsOnPageProvider read surface).
+    assert versions == [1, 2, 3]
 
 
 def test_duckdb_can_attach_and_read_app_sqlite(wh: Warehouse) -> None:

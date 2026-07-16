@@ -136,6 +136,45 @@ def test_handle_event_snapshot_is_skipped_for_non_settings(tmp_path: Path) -> No
     assert _snapshot_count(wh.app_sqlite, "L1") == 0  # picks are not league snapshots
 
 
+def _complete() -> DraftEvent:
+    return DraftEvent(event_type="draft_complete", league_id="L1", data={})
+
+
+def test_handle_event_exports_draft_snapshot_on_complete(tmp_path: Path) -> None:
+    """§2.8 offline backtest corpus: a draft_complete event exports final_state.json +
+    events.parquet under snapshots/. (recommendations.jsonl is deferred to Stage 5.)"""
+    from jaaffl.data.warehouse import Warehouse
+
+    wh = Warehouse(tmp_path)
+    wh.init()
+    log = DraftLog(tmp_path / "app.sqlite")
+    handle_event(pick(1, pick_number=1), log, warehouse=wh)
+    handle_event(_complete(), log, warehouse=wh, captured_at="2026-07-16T00:00:00.000Z")
+    dirs = list(wh.snapshots_dir.glob("draft_L1_*"))
+    assert len(dirs) == 1
+    assert (dirs[0] / "final_state.json").exists()
+    assert (dirs[0] / "events.parquet").exists()
+
+
+def test_handle_event_no_draft_export_without_warehouse(log: DraftLog) -> None:
+    result = handle_event(_complete(), log)  # no warehouse -> no export, still folds
+    assert result.state.complete is True
+
+
+def test_handle_event_draft_export_only_on_first_complete(tmp_path: Path) -> None:
+    """draft_complete has no pick_number so it never dedups — and the 3-probe capture can send
+    several. The export must fire ONCE (on the first), not once per probe/re-send."""
+    from jaaffl.data.warehouse import Warehouse
+
+    wh = Warehouse(tmp_path)
+    wh.init()
+    log = DraftLog(tmp_path / "app.sqlite")
+    handle_event(pick(1, pick_number=1), log, warehouse=wh)
+    handle_event(_complete(), log, warehouse=wh, captured_at="2026-07-16T00:00:00.000Z")
+    handle_event(_complete(), log, warehouse=wh, captured_at="2026-07-16T01:00:00.000Z")
+    assert len(list(wh.snapshots_dir.glob("draft_L1_*"))) == 1
+
+
 def test_normalize_league_settings_preserves_raw_payload() -> None:
     """The raw CBS payload round-trips into LeagueSettings.raw so the snapshot owns it
     verbatim (Stage-4 CbsOnPageProvider reads league_snapshots, not the network)."""

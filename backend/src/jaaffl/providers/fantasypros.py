@@ -8,7 +8,7 @@ Commercial use requires FantasyPros' separate commercial plan — see the compli
 from __future__ import annotations
 
 from jaaffl.config import Settings, get_settings
-from jaaffl.providers.base import Capability, FantasyDataProvider
+from jaaffl.providers.base import AdpRecord, Capability, FantasyDataProvider
 
 
 class FantasyProsProvider(FantasyDataProvider):
@@ -39,7 +39,7 @@ class FantasyProsProvider(FantasyDataProvider):
         # TODO(stage 4): call the FantasyPros API and map ids through the crosswalk.
         raise NotImplementedError("stage 4: FantasyPros projections")
 
-    def adp(self, season: int) -> dict[str, float]:
+    def adp(self, season: int) -> dict[str, AdpRecord]:
         raise NotImplementedError("stage 4: FantasyPros ADP")
 
     def rankings(self, season: int, week: int | None = None) -> dict[str, float]:

@@ -5,6 +5,7 @@ These Pydantic models are the Python side of the wire contract. The TypeScript s
 """
 
 from jaaffl.domain.models import (
+    CbsPageSnapshot,
     DraftEvent,
     DraftEventSource,
     DraftEventType,
@@ -25,6 +26,7 @@ from jaaffl.domain.models import (
 )
 
 __all__ = [
+    "CbsPageSnapshot",
     "DraftEvent",
     "DraftEventSource",
     "DraftEventType",

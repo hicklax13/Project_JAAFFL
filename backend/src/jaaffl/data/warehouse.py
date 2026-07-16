@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from jaaffl.config import get_settings
-from jaaffl.domain import DraftState, LeagueSettings
+from jaaffl.domain import CbsPageSnapshot, DraftState, LeagueSettings
 from jaaffl.ingest.log import open_log, read_events
 
 if TYPE_CHECKING:
@@ -92,9 +92,45 @@ CREATE TABLE IF NOT EXISTS manager_tendencies (
 ) STRICT, WITHOUT ROWID;
 """
 
+# Stage-4 additive tables. ``name_resolutions`` is the name-keyed fuzzy cache backing
+# ``Crosswalk.resolve_name`` (FFC/CBS rows that carry no stable source id). Kept SEPARATE
+# from ``id_crosswalk`` (whose (source, source_id) is a *real* upstream id) so the name-cache
+# semantics stay honest; both persist in app.sqlite so resolutions survive re-precompute.
+_MIGRATION_2 = """
+CREATE TABLE IF NOT EXISTS name_resolutions (
+    name_norm      TEXT NOT NULL,
+    nfl_team       TEXT NOT NULL,   -- '' = team-agnostic (FA / unknown team)
+    position       TEXT NOT NULL,
+    canonical_id   TEXT NOT NULL REFERENCES players(player_id) ON DELETE CASCADE,
+    confidence     REAL NOT NULL DEFAULT 1.0 CHECK (confidence BETWEEN 0.0 AND 1.0),
+    match_features TEXT CHECK (match_features IS NULL OR json_valid(match_features)),
+    resolved_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    PRIMARY KEY (name_norm, nfl_team, position)
+) STRICT, WITHOUT ROWID;
+"""
+
+# Stage-4 CBS on-page snapshot store (read by CbsOnPageProvider, written by ingest). A dedicated
+# table (not a new ``league_snapshots`` kind) avoids recreating that table to widen its CHECK;
+# de-duped by content hash so byte-identical re-pushes are dropped.
+_MIGRATION_3 = """
+CREATE TABLE IF NOT EXISTS cbs_page_snapshots (
+    snapshot_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    league_id    TEXT NOT NULL,
+    payload      TEXT NOT NULL CHECK (json_valid(payload)),
+    content_hash TEXT NOT NULL,
+    captured_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+) STRICT;
+CREATE INDEX IF NOT EXISTS ix_cbs_snap_league_time ON cbs_page_snapshots(league_id, captured_at);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_cbs_snap_dedup ON cbs_page_snapshots(league_id, content_hash);
+"""
+
 # (version, DDL) applied in order; each recorded once in ``schema_migrations``. Add a
-# ``(2, ...)`` tuple for the next additive change — never edit an applied migration.
-_MIGRATIONS: list[tuple[int, str]] = [(1, _MIGRATION_1)]
+# ``(N, ...)`` tuple for the next additive change — never edit an applied migration.
+_MIGRATIONS: list[tuple[int, str]] = [
+    (1, _MIGRATION_1),
+    (2, _MIGRATION_2),
+    (3, _MIGRATION_3),
+]
 
 # DuckDB materialized-analytics schema (plan §2.4). DISPOSABLE — rebuilt by `make warehouse`
 # from Parquet + the ATTACHed app.sqlite. Empty until Stage 5 fills them; the schema exists
@@ -210,13 +246,34 @@ class Warehouse:
 
     def materialize(self) -> None:
         """(Re)create the DISPOSABLE DuckDB analytics schema from Parquet + SQLite. Pure
-        function of the inputs — no network, no wall-clock in the shape it produces."""
+        function of the inputs — no network, no wall-clock in the shape it produces (``adp``'s
+        ``captured_at`` comes from the Parquet, stamped at refresh time). ``projections`` stays
+        empty until Stage 5."""
         con = self._duckdb_connect()
         try:
             for ddl in _DUCKDB_TABLES:
                 con.execute(ddl)
+            self._materialize_adp(con)
         finally:
             con.close()
+
+    def _materialize_adp(self, con: duckdb.DuckDBPyConnection) -> None:
+        """Load the ``adp`` table from the FFC ADP Parquet snapshots (canonical player_id already
+        resolved at refresh time). Idempotent: clears then reloads, so repeated ``materialize`` /
+        rebuild calls reproduce the same rows for fixed Parquet inputs."""
+        con.execute("DELETE FROM adp")
+        files = sorted((self.parquet_dir / "ffc").glob("adp_*.parquet"))
+        if not files:
+            return
+        glob = str(self.parquet_dir / "ffc" / "adp_*.parquet").replace("\\", "/")
+        con.execute(
+            "INSERT OR IGNORE INTO adp"
+            " (player_id, season, scoring, teams, adp, stdev, high, low, times_drafted, bye,"
+            "  captured_at)"
+            " SELECT player_id, season, scoring, teams, adp, stdev, high, low, times_drafted,"
+            "  bye, captured_at FROM read_parquet(?)",
+            [glob],
+        )
 
     # --- SQLite app state ------------------------------------------------------------
     def snapshot_league(self, settings: LeagueSettings) -> int | None:
@@ -242,6 +299,47 @@ class Warehouse:
             return cur.lastrowid if cur.rowcount else None
         finally:
             conn.close()
+
+    def snapshot_cbs_page(self, league_id: str, snapshot: CbsPageSnapshot) -> int | None:
+        """Persist a CBS draft-room snapshot (extension->ingest writes; ``CbsOnPageProvider``
+        reads). De-dups byte-identical re-pushes via ``ux_cbs_snap_dedup`` (content hash):
+        returns the new ``snapshot_id``, or ``None`` when a duplicate is dropped. Stores the
+        snapshot's own ``captured_at`` so ``latest_cbs_snapshot`` orders by capture time."""
+        payload = snapshot.model_dump_json()
+        content_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        conn = open_app_db(self.app_sqlite)
+        try:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO cbs_page_snapshots"
+                " (league_id, payload, content_hash, captured_at)"
+                " VALUES (?, ?, ?, ?)",
+                (league_id, payload, content_hash, snapshot.captured_at.isoformat()),
+            )
+            conn.commit()
+            return cur.lastrowid if cur.rowcount else None
+        finally:
+            conn.close()
+
+    def latest_cbs_snapshot(self, league_id: str | None = None) -> CbsPageSnapshot | None:
+        """Return the newest CBS snapshot for ``league_id`` (by ``captured_at``), or ``None`` if
+        none exists. ``league_id=None`` resolves the sole active league (single-user, ADR 0002)
+        by taking the newest snapshot across all leagues."""
+        conn = open_app_db(self.app_sqlite)
+        try:
+            if league_id is None:
+                row = conn.execute(
+                    "SELECT payload FROM cbs_page_snapshots"
+                    " ORDER BY captured_at DESC, snapshot_id DESC LIMIT 1"
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT payload FROM cbs_page_snapshots WHERE league_id = ?"
+                    " ORDER BY captured_at DESC, snapshot_id DESC LIMIT 1",
+                    (league_id,),
+                ).fetchone()
+        finally:
+            conn.close()
+        return CbsPageSnapshot.model_validate_json(row[0]) if row else None
 
     def snapshot_draft_state(
         self,

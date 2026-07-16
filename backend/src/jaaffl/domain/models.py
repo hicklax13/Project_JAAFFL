@@ -7,6 +7,7 @@ the engine never hard-codes CBS assumptions.
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -119,6 +120,31 @@ class LeagueSettings(BaseModel):
     keeper: bool = False
     dynasty: bool = False
     raw: dict = Field(default_factory=dict, description="Original CBS payload snapshot.")
+
+
+class CbsPageSnapshot(BaseModel):
+    """A point-in-time capture of the user's CBS draft room, written by the extension->ingest
+    path and READ (never fetched) by ``CbsOnPageProvider`` (plan §4.5). Keyed by CBS's own
+    player ids; the provider resolves those to canonical via the ``Crosswalk``.
+
+    Backend-internal (no Zod mirror; not in the E5 contract surface).
+
+    TODO(capture): the exact CBS field shapes are UNVERIFIED — record-mode capture is an
+    owner-manual session (see docs/owner-manual-todo.md). These generic maps are the reader's
+    contract; the ingest parser populates them once a real capture lands. Do NOT claim real
+    CBS-frame support until then.
+    """
+
+    league_id: str
+    projections: dict[str, dict[str, float]] = Field(
+        default_factory=dict, description="cbs_id -> stat_line (stat name -> value)."
+    )
+    injuries: dict[str, str] = Field(default_factory=dict, description="cbs_id -> injury status.")
+    rankings: dict[str, float] = Field(default_factory=dict, description="cbs_id -> rank/ADP.")
+    league_settings: LeagueSettings | None = Field(
+        default=None, description="Authoritative CBS scoring/roster, when captured."
+    )
+    captured_at: datetime = Field(description="When this snapshot was captured (staleness clock).")
 
 
 class DraftPick(BaseModel):
