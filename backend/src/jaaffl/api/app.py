@@ -7,54 +7,131 @@ CORS is permissive because the only callers are the user's own extension and das
 
 from __future__ import annotations
 
+import json
+
 import structlog
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field, ValidationError
 
 from jaaffl import __version__
+from jaaffl.api.origin import is_origin_allowed, parse_allowed_origins
 from jaaffl.api.recs import PROTOCOL_VERSION, SCHEMA_VERSION, RecsHub
-from jaaffl.config import get_settings
+from jaaffl.config import Settings, get_settings
 from jaaffl.domain import DraftEvent, LeagueSettings, Recommendation
-from jaaffl.ingest import handle_event
+from jaaffl.ingest import DraftLog, handle_event
 
 log = structlog.get_logger(__name__)
 
 
-def create_app() -> FastAPI:
+class RecordingBatch(BaseModel):
+    """One record-mode flush from the extension (src/lib/record.ts). Module-scoped so
+    FastAPI can resolve the PEP-563 string annotation."""
+
+    session: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")  # filename-safe, no paths
+    frames: list[dict] = Field(default_factory=list)
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or get_settings()
     app = FastAPI(title="JAAFFL companion service", version=__version__)
     app.state.recs_hub = RecsHub()
+    app.state.draft_log = DraftLog(settings.jaaffl_data_dir / "app.sqlite")
+    allowed_origins = parse_allowed_origins(settings.jaaffl_allowed_origins)
 
-    # Local-only service; callers are the user's extension (chrome-extension://) and
-    # dashboard (http://localhost:3000). Allow all origins since we bind to 127.0.0.1.
+    # Local-only service. CORS is scoped to the user's own extension + local dashboard;
+    # a WebSocket handshake is not gated by CORS, so each WS handler re-checks Origin.
+    cors_origins = ["*"] if "*" in allowed_origins else allowed_origins
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=cors_origins,
+        allow_origin_regex=None if "*" in allowed_origins else r"chrome-extension://.*",
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    def require_allowed_origin(request: Request) -> None:
+        if not is_origin_allowed(request.headers.get("origin"), allowed_origins):
+            raise HTTPException(status_code=403, detail="origin not allowed")
+
+    def ws_origin_ok(ws: WebSocket) -> bool:
+        return is_origin_allowed(ws.headers.get("origin"), allowed_origins)
 
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok", "version": __version__}
 
     @app.post("/draft/events")
-    async def ingest_event(event: DraftEvent) -> dict:
-        """Ingest a single normalized draft event from the extension."""
-        # TODO(stage 1/5): append-only SQLite log -> fold_state -> engine.recompute()
-        # -> app.state.recs_hub.publish(rec), so every ingest pushes a fresh /recs/ws rec.
-        handle_event(event)
-        return {"accepted": True}
+    async def ingest_event(event: DraftEvent, request: Request) -> dict:
+        """Ingest one normalized draft event (REST fail-soft path, §5.6): durable append
+        -> fold -> idempotent ack. Malformed per-type payloads 422 before any append."""
+        require_allowed_origin(request)
+        try:
+            result = handle_event(event, app.state.draft_log)
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail=exc.errors(include_url=False, include_context=False)
+            ) from exc
+        return {"accepted": True, "seq": result.seq, "deduped": result.deduped}
 
     @app.websocket("/draft/ws")
     async def draft_ws(ws: WebSocket) -> None:
-        """Stream normalized draft events for the duration of a live draft."""
+        """Ingest socket (§8.4): accepts bare DraftEvents or {type:"event",...} envelopes,
+        answers control heartbeats, and acks every accepted event idempotently. Control
+        frames are dropped BEFORE the append-only log (A10) so replay stays clean."""
+        if not ws_origin_ok(ws):
+            await ws.close(code=1008)  # policy violation (§8.6)
+            return
         await ws.accept()
         log.info("draft_ws_connected")
         try:
             while True:
-                payload = await ws.receive_json()
-                handle_event(DraftEvent.model_validate(payload))
-                await ws.send_json({"accepted": True})
+                frame = await ws.receive_json()
+                if not isinstance(frame, dict):
+                    await ws.send_json(
+                        {
+                            "type": "error",
+                            "v": PROTOCOL_VERSION,
+                            "code": 4400,
+                            "detail": "frame must be a JSON object",
+                        }
+                    )
+                    continue
+                # Heartbeats — both vocabularies (§5.6 {control:"ping"}, §8.4 {type:"ping"}).
+                if frame.get("control") in ("ping", "pong"):
+                    if frame["control"] == "ping":
+                        await ws.send_json({"control": "pong"})
+                    continue
+                if frame.get("type") in ("ping", "pong"):
+                    if frame["type"] == "ping":
+                        await ws.send_json({"type": "pong", "v": PROTOCOL_VERSION})
+                    continue
+                payload = frame.get("event") if frame.get("type") == "event" else frame
+                captured_at = frame.get("ts") if frame.get("type") == "event" else None
+                try:
+                    event = DraftEvent.model_validate(payload)
+                    result = handle_event(event, app.state.draft_log, captured_at=captured_at)
+                except ValidationError as exc:
+                    await ws.send_json(
+                        {
+                            "type": "error",
+                            "v": PROTOCOL_VERSION,
+                            "code": 4422,
+                            "detail": "DraftEvent validation failed",
+                            "errors": exc.errors(include_url=False, include_context=False),
+                        }
+                    )
+                    continue
+                await ws.send_json(
+                    {
+                        "type": "ack",
+                        "v": PROTOCOL_VERSION,
+                        "seq": result.seq,
+                        "pick_number": result.pick_number,
+                        "accepted": True,
+                        "deduped": result.deduped,
+                    }
+                )
         except WebSocketDisconnect:
             log.info("draft_ws_disconnected")
 
@@ -73,6 +150,9 @@ def create_app() -> FastAPI:
         per published Recommendation. Frames reuse the shared Recommendation contract
         verbatim — no bespoke socket shape.
         """
+        if not ws_origin_ok(ws):
+            await ws.close(code=1008)  # policy violation (§8.6)
+            return
         await ws.accept()
         hub: RecsHub = ws.app.state.recs_hub
         queue = hub.subscribe()
@@ -100,6 +180,20 @@ def create_app() -> FastAPI:
             log.info("recs_ws_disconnected")
         finally:
             hub.unsubscribe(queue)
+
+    @app.post("/dev/recordings")
+    def store_recording(batch: RecordingBatch, request: Request) -> dict:
+        """Record-mode capture sink (Phase-1 tooling, localhost-only): appends observed
+        frames as JSONL under the recordings dir so ONE real CBS mock draft yields the
+        golden fixtures that finalize parse.ts (TODO(capture))."""
+        require_allowed_origin(request)
+        settings.jaaffl_recordings_dir.mkdir(parents=True, exist_ok=True)
+        out = settings.jaaffl_recordings_dir / f"{batch.session}.jsonl"
+        with out.open("a", encoding="utf-8", newline="\n") as fh:
+            for frame in batch.frames:
+                fh.write(json.dumps(frame, sort_keys=True) + "\n")
+        log.info("recording_stored", session=batch.session, frames=len(batch.frames))
+        return {"stored": len(batch.frames), "file": str(out)}
 
     @app.get("/league/{league_id}", response_model=LeagueSettings)
     def league(league_id: str) -> LeagueSettings:

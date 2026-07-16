@@ -138,6 +138,8 @@ class DraftState(BaseModel):
     my_team_id: str | None = None
     picks: list[DraftPick] = Field(default_factory=list)
     available_player_ids: list[str] | None = None
+    # §2.6 reducer: a draft_complete event marks the state terminal.
+    complete: bool = False
 
 
 class DraftEventType(StrEnum):
@@ -146,6 +148,16 @@ class DraftEventType(StrEnum):
     ON_THE_CLOCK = "on_the_clock"
     PICK_MADE = "pick_made"
     DRAFT_COMPLETE = "draft_complete"
+
+
+class DraftEventSource(StrEnum):
+    """Which capture probe won (§5.4): MAIN-world network patch, React-fiber read,
+    MutationObserver DOM fallback, or the manual-paste fallback."""
+
+    WS = "ws"
+    FRAMEWORK = "framework"
+    DOM = "dom"
+    PASTE = "paste"
 
 
 class DraftEvent(BaseModel):
@@ -158,6 +170,12 @@ class DraftEvent(BaseModel):
 
     event_type: DraftEventType
     league_id: str
+    # Cross-probe de-dup key (§5.8): overall pick (1..204 for 12x17); required-when-present
+    # for pick_made, None for non-pick events.
+    pick_number: int | None = Field(default=None, ge=1)
+    source: DraftEventSource | None = Field(
+        default=None, description="Winning probe: ws | framework | dom | paste."
+    )
     data: dict = Field(default_factory=dict)
 
 

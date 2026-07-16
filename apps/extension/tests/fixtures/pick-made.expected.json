@@ -1,0 +1,17 @@
+{
+  "event_type": "pick_made",
+  "league_id": "cbs-jaaffl",
+  "pick_number": 25,
+  "source": "ws",
+  "data": {
+    "overall": 25,
+    "round": 3,
+    "pick_in_round": 1,
+    "team_id": "T12",
+    "player_id": "cbs:2543743",
+    "cbs_player_id": "2543743",
+    "player_name": "Saquon Barkley",
+    "player_team": "PHI",
+    "position": "RB"
+  }
+}

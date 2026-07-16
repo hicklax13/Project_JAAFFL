@@ -1,0 +1,57 @@
+[
+  {
+    "event_type": "league_settings",
+    "league_id": "manual",
+    "source": "paste",
+    "data": {
+      "league_id": "manual",
+      "team_count": 12,
+      "draft_order": ["T7", "T3", "T12", "T5", "T9", "T1", "T11", "T4", "T8", "T2", "T10", "T6"]
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 1,
+    "source": "paste",
+    "data": {
+      "overall": 1,
+      "round": 1,
+      "pick_in_round": 1,
+      "team_id": "Team Seven",
+      "player_name": "Bijan Robinson",
+      "position": "RB",
+      "player_team": "ATL"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 2,
+    "source": "paste",
+    "data": {
+      "overall": 2,
+      "round": 1,
+      "pick_in_round": 2,
+      "team_id": "Team Three",
+      "player_name": "CeeDee Lamb",
+      "position": "WR",
+      "player_team": "DAL"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 25,
+    "source": "paste",
+    "data": {
+      "overall": 25,
+      "round": 3,
+      "pick_in_round": 1,
+      "team_id": "Team Twelve",
+      "player_name": "Saquon Barkley",
+      "position": "RB",
+      "player_team": "PHI"
+    }
+  }
+]

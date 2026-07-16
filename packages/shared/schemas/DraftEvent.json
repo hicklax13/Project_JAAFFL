@@ -1,5 +1,16 @@
 {
   "$defs": {
+    "DraftEventSource": {
+      "description": "Which capture probe won (\u00a75.4): MAIN-world network patch, React-fiber read,\nMutationObserver DOM fallback, or the manual-paste fallback.",
+      "enum": [
+        "ws",
+        "framework",
+        "dom",
+        "paste"
+      ],
+      "title": "DraftEventSource",
+      "type": "string"
+    },
     "DraftEventType": {
       "enum": [
         "league_settings",
@@ -25,6 +36,31 @@
     "league_id": {
       "title": "League Id",
       "type": "string"
+    },
+    "pick_number": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pick Number"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DraftEventSource"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Winning probe: ws | framework | dom | paste."
     }
   },
   "required": [

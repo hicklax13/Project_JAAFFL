@@ -1,6 +1,8 @@
 {
   "event_type": "pick_made",
   "league_id": "cbs-jaaffl",
+  "pick_number": 13,
+  "source": "ws",
   "data": {
     "overall": 13,
     "round": 2,

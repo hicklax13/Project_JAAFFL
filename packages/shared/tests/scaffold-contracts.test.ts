@@ -6,6 +6,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DraftEventSchema,
+  DraftStateSchema,
   LeagueSettingsSchema,
   RecommendedPickSchema,
   ScoreComponentsSchema,
@@ -75,6 +77,40 @@ describe("LeagueSettings scoring_tiers + scoring_bonuses (SC1)", () => {
     expect(() =>
       LeagueSettingsSchema.parse({ league_id: "L1", team_count: 12, scoring_tiers: bad }),
     ).toThrow();
+  });
+});
+
+describe("DraftEvent pick_number + source (Stage 1, §5.8)", () => {
+  it("parses the de-dup key and winning probe", () => {
+    const parsed = DraftEventSchema.parse({
+      event_type: "pick_made",
+      league_id: "L1",
+      pick_number: 25,
+      source: "ws",
+      data: { overall: 25, round: 3, pick_in_round: 1, team_id: "T1" },
+    });
+    expect(parsed.pick_number).toBe(25);
+    expect(parsed.source).toBe("ws");
+  });
+
+  it("keeps both fields additive + optional", () => {
+    const parsed = DraftEventSchema.parse({ event_type: "league_settings", league_id: "L1" });
+    expect(parsed.pick_number ?? null).toBeNull();
+    expect(parsed.source ?? null).toBeNull();
+  });
+
+  it("rejects unknown source values and non-positive pick numbers", () => {
+    expect(() =>
+      DraftEventSchema.parse({ event_type: "pick_made", league_id: "L1", source: "manual" }),
+    ).toThrow();
+    expect(() =>
+      DraftEventSchema.parse({ event_type: "pick_made", league_id: "L1", pick_number: 0 }),
+    ).toThrow();
+  });
+
+  it("DraftState.complete defaults false (§2.6 terminal marker)", () => {
+    const parsed = DraftStateSchema.parse({ league_id: "L1", current_overall_pick: 1 });
+    expect(parsed.complete).toBe(false);
   });
 });
 

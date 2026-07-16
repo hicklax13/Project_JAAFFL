@@ -6,6 +6,7 @@ These Pydantic models are the Python side of the wire contract. The TypeScript s
 
 from jaaffl.domain.models import (
     DraftEvent,
+    DraftEventSource,
     DraftEventType,
     DraftPick,
     DraftState,
@@ -25,6 +26,7 @@ from jaaffl.domain.models import (
 
 __all__ = [
     "DraftEvent",
+    "DraftEventSource",
     "DraftEventType",
     "DraftPick",
     "DraftState",

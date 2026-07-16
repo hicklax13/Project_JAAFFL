@@ -36,6 +36,14 @@ apps/extension/.output/
 *.crx
 *.pem
 
+# ---- Record-mode raw captures (may carry league names — only redacted goldens are
+# committed under apps/extension/tests/fixtures/) ----
+apps/extension/fixtures/cbs/
+
+# ---- Playwright artifacts ----
+test-results/
+playwright-report/
+
 # ---- Local data warehouse artifacts ----
 # Keep the directory (data/.gitkeep) but never commit generated data.
 /data/**
@@ -43,6 +51,8 @@ apps/extension/.output/
 !/data/README.md
 *.parquet
 *.sqlite
+*.sqlite-wal
+*.sqlite-shm
 *.sqlite3
 *.db
 
