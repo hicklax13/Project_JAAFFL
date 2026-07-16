@@ -1,5 +1,5 @@
 """The companion-service wire path: health, ingest (REST + WS /draft/ws with the §8.4
-frame contract), recommendation stub, and the /recs/ws push channel."""
+frame contract), the /recommendation engine endpoint, and the /recs/ws push channel."""
 
 from pathlib import Path
 
@@ -10,8 +10,38 @@ from jaaffl import __version__
 from jaaffl.api import create_app
 from jaaffl.api.recs import RecsHub
 from jaaffl.config import Settings
-from jaaffl.domain import Recommendation, RecommendedPick
+from jaaffl.domain import Position, Recommendation, RecommendedPick
+from jaaffl.engine.service import RecommendationEngine
 from jaaffl.ingest.log import DraftLog
+from tests.engine_fixtures import make_context
+
+
+def _primed_engine() -> RecommendationEngine:
+    """An engine primed with a board context for league 'L1' (no providers/network)."""
+    specs = [
+        {
+            "pid": f"rb{i}",
+            "pos": Position.RB,
+            "mu": 300.0 - 5 * i,
+            "adp": float(i + 1),
+            "sd": 6.0,
+            "ecr": float(i + 1),
+        }
+        for i in range(12)
+    ] + [
+        {
+            "pid": f"wr{i}",
+            "pos": Position.WR,
+            "mu": 280.0 - 4 * i,
+            "adp": float(20 + i),
+            "sd": 6.0,
+            "ecr": float(20 + i),
+        }
+        for i in range(12)
+    ]
+    engine = RecommendationEngine()
+    engine.prime("L1", make_context(specs))
+    return engine
 
 
 @pytest.fixture
@@ -81,9 +111,52 @@ def test_ingest_rejects_malformed_pick_payload(client: TestClient) -> None:
     assert res.status_code == 422
 
 
-def test_recommendation_stubbed_until_engine(client: TestClient) -> None:
+def test_recommendation_404_for_unknown_league(client: TestClient) -> None:
+    res = client.get("/recommendation", params={"league_id": "never-seen"})
+    assert res.status_code == 404
+
+
+def test_recommendation_503_when_engine_not_primed(client: TestClient) -> None:
+    """State exists but the default app has no precomputed context yet → engine warming up."""
+    client.post("/draft/events", json=pick_payload(1))
     res = client.get("/recommendation", params={"league_id": "L1"})
-    assert res.status_code == 501
+    assert res.status_code == 503
+
+
+def test_recommendation_returns_real_recommendation_when_primed(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(jaaffl_data_dir=tmp_path / "data", jaaffl_recordings_dir=tmp_path / "rec"),
+        rec_engine=_primed_engine(),
+    )
+    client = TestClient(app)
+    client.post("/draft/events", json=pick_payload(1))  # fold a DraftState for L1
+    res = client.get("/recommendation", params={"league_id": "L1", "team_id": "t0", "limit": 3})
+    assert res.status_code == 200
+    body = res.json()
+    Recommendation.model_validate(body)  # validates against the shared contract
+    assert 1 <= len(body["ranked"]) <= 3
+    assert body["ranked"][0]["components"] is not None
+    stripped = client.get(
+        "/recommendation",
+        params={"league_id": "L1", "team_id": "t0", "include_components": "false"},
+    ).json()
+    assert stripped["ranked"][0]["components"] is None
+
+
+def test_pick_ingest_publishes_a_fresh_recommendation_to_recs_ws(tmp_path: Path) -> None:
+    """§8.4 step 5: a state-advancing pick recomputes and pushes a rec to /recs/ws subscribers."""
+    app = create_app(
+        Settings(jaaffl_data_dir=tmp_path / "data", jaaffl_recordings_dir=tmp_path / "rec"),
+        rec_engine=_primed_engine(),
+    )
+    client = TestClient(app)
+    with client.websocket_connect("/recs/ws") as ws:
+        ws.receive_json()  # hello
+        ws.receive_json()  # snapshot (None — nothing published yet)
+        client.post("/draft/events", json=pick_payload(1))  # pick_made → publish
+        frame = ws.receive_json()
+        assert frame["type"] == "rec"
+        Recommendation.model_validate(frame["recommendation"])
 
 
 def test_league_settings_404_until_ingested(client: TestClient) -> None:

@@ -178,9 +178,14 @@ def recommend(
         flex_split=context.flex_split,
     )
 
-    # 2) Survival at N₁* (display) and N_H* (VONA horizon, R2), board-conditioned (R3).
+    # 2) Survival at N₁* (display) and N_H* (VONA horizon, R2), board-conditioned (R3). When the
+    # snake order / my_team_id is unknown (e.g. before we know our slot), survival degrades to
+    # "everyone available" so the engine still ranks on MLV rather than crashing.
     available_adp = {pid: context.adp_mean[pid] for pid in available if pid in context.adp_mean}
-    run_pressure = run_pressure_by_position(state, settings, available_adp, context.position)
+    try:
+        run_pressure = run_pressure_by_position(state, settings, available_adp, context.position)
+    except ValueError:
+        run_pressure = {}
     shift = board_adp_shift(run_pressure, context.position, beta=params.board_survival_weight)
     horizon = max(1, int(params.vona_horizon_picks))
 
@@ -190,7 +195,7 @@ def recommend(
                 state, settings, available_adp, context.adp_sd, horizon=h, adp_shift=shift
             )
         except ValueError:
-            taken = {}  # no draft_order (e.g. pre-draft) → treat everyone as available
+            taken = {}  # no draft_order / my_team_id (e.g. pre-draft) → treat everyone as available
         return {pid: 1.0 - taken.get(pid, 0.0) for pid in available}
 
     survival_display = _survival(1)

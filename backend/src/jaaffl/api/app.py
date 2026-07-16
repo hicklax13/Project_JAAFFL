@@ -1,8 +1,8 @@
 """FastAPI application for the localhost companion service.
 
-Receives normalized draft events from the extension, and (once the engine lands in
-Stage 5) serves recommendations back to the overlay and dashboard. Bound to localhost;
-CORS is permissive because the only callers are the user's own extension and dashboard.
+Receives normalized draft events from the extension and serves decomposed recommendations back to
+the overlay and dashboard (pull via GET /recommendation, push via WS /recs/ws). Bound to localhost;
+CORS is scoped to the user's own extension + dashboard, and every WS handler re-checks Origin.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 
 import structlog
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError
 
@@ -19,10 +19,18 @@ from jaaffl.api.origin import is_origin_allowed, parse_allowed_origins
 from jaaffl.api.recs import PROTOCOL_VERSION, SCHEMA_VERSION, RecsHub
 from jaaffl.config import Settings, get_settings
 from jaaffl.data.warehouse import Warehouse, open_app_db
-from jaaffl.domain import DraftEvent, LeagueSettings, Recommendation
-from jaaffl.ingest import DraftLog, handle_event
+from jaaffl.domain import DraftEvent, DraftEventType, LeagueSettings, Recommendation
+from jaaffl.engine.service import RecommendationEngine
+from jaaffl.ingest import DraftLog, IngestResult, handle_event
 
 log = structlog.get_logger(__name__)
+
+# Events that advance the draft state and therefore warrant a fresh recommendation (§8.4 step 4).
+_STATE_ADVANCING = {
+    DraftEventType.PICK_MADE,
+    DraftEventType.ON_THE_CLOCK,
+    DraftEventType.DRAFT_STATE,
+}
 
 
 class RecordingBatch(BaseModel):
@@ -33,12 +41,21 @@ class RecordingBatch(BaseModel):
     frames: list[dict] = Field(default_factory=list)
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    rec_engine: RecommendationEngine | None = None,
+) -> FastAPI:
     settings = settings or get_settings()
     app = FastAPI(title="JAAFFL companion service", version=__version__)
     app.state.recs_hub = RecsHub()
     app.state.draft_log = DraftLog(settings.jaaffl_data_dir / "app.sqlite")
     app.state.warehouse = Warehouse(settings.jaaffl_data_dir)
+    # The Stage-5 engine. Default has no context yet (→ /recommendation 503 warming up) until a
+    # pre-draft precompute primes it; tests inject a primed engine. Per-league recommendation
+    # history feeds the draft-complete recommendations.jsonl export.
+    app.state.rec_engine = rec_engine if rec_engine is not None else RecommendationEngine()
+    app.state.rec_history = {}
     # Ensure the SQLite app-state schema (league_snapshots, players, id_crosswalk, ...) exists
     # from boot — stdlib sqlite only, no DuckDB import, so the base ($0) install still starts
     # without the `data` extra. Full DuckDB/Parquet materialization is `make warehouse`.
@@ -63,6 +80,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def ws_origin_ok(ws: WebSocket) -> bool:
         return is_origin_allowed(ws.headers.get("origin"), allowed_origins)
 
+    def publish_recommendation(event: DraftEvent, result: IngestResult) -> None:
+        """On a state-advancing, non-deduped event, recompute and push to /recs/ws (§8.4 step 4).
+
+        Provider-free hot path: the engine reads its precomputed context, never a provider. A
+        deduped re-send (a slower capture probe) does NOT re-broadcast. Recommendations accumulate
+        per league for the draft-complete recommendations.jsonl export."""
+        if result.seq is None or event.event_type not in _STATE_ADVANCING:
+            return
+        recommendation = app.state.rec_engine.recommend(result.state)
+        if recommendation is not None:
+            app.state.recs_hub.publish(recommendation)
+            app.state.rec_history.setdefault(event.league_id, []).append(recommendation)
+
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok", "version": __version__}
@@ -73,11 +103,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         -> fold -> idempotent ack. Malformed per-type payloads 422 before any append."""
         require_allowed_origin(request)
         try:
-            result = handle_event(event, app.state.draft_log, warehouse=app.state.warehouse)
+            result = handle_event(
+                event,
+                app.state.draft_log,
+                warehouse=app.state.warehouse,
+                recommendations=app.state.rec_history.get(event.league_id),
+            )
         except ValidationError as exc:
             raise HTTPException(
                 status_code=422, detail=exc.errors(include_url=False, include_context=False)
             ) from exc
+        publish_recommendation(event, result)
         return {"accepted": True, "seq": result.seq, "deduped": result.deduped}
 
     @app.websocket("/draft/ws")
@@ -121,6 +157,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         app.state.draft_log,
                         warehouse=app.state.warehouse,
                         captured_at=captured_at,
+                        recommendations=app.state.rec_history.get(event.league_id),
                     )
                 except ValidationError as exc:
                     await ws.send_json(
@@ -143,14 +180,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         "deduped": result.deduped,
                     }
                 )
+                publish_recommendation(event, result)  # push a fresh rec to /recs/ws (§8.4 step 5)
         except WebSocketDisconnect:
             log.info("draft_ws_disconnected")
 
     @app.get("/recommendation", response_model=Recommendation)
-    def recommendation(league_id: str) -> Recommendation:
-        # TODO(stage 5): load current DraftState + LeagueSettings from the warehouse and
-        # call jaaffl.engine.recommend(...).
-        raise HTTPException(status_code=501, detail="engine not yet implemented (roadmap stage 5)")
+    def recommendation(
+        request: Request,
+        league_id: str,
+        as_of_overall_pick: int | None = Query(default=None, ge=1),
+        team_id: str | None = None,
+        limit: int = Query(default=5, ge=1, le=50),
+        include_components: bool = True,
+        mc: bool = False,
+    ) -> Recommendation:
+        """The decomposed recommendation for the current pick (§8.3.3) — the pull twin of the
+        /recs/ws push. Loads the folded DraftState and calls the stateless engine recompute."""
+        require_allowed_origin(request)
+        if not app.state.draft_log.events(league_id):
+            known = app.state.warehouse.latest_cbs_snapshot(league_id) is not None
+            raise HTTPException(
+                status_code=409 if known else 404,
+                detail=(
+                    f"draft not started for league '{league_id}'"
+                    if known
+                    else f"unknown league '{league_id}'"
+                ),
+            )
+        state = app.state.draft_log.state(league_id)
+        if as_of_overall_pick is not None:
+            state = state.model_copy(update={"current_overall_pick": as_of_overall_pick})
+        if team_id is not None:
+            state = state.model_copy(update={"my_team_id": team_id})
+        rec = app.state.rec_engine.recommend(state, limit=limit, use_mc=mc)
+        if rec is None:
+            raise HTTPException(status_code=503, detail="engine warming up")
+        if not include_components:
+            rec = rec.model_copy(
+                update={"ranked": [p.model_copy(update={"components": None}) for p in rec.ranked]}
+            )
+        return rec
 
     @app.websocket("/recs/ws")
     async def recs_ws(ws: WebSocket) -> None:
