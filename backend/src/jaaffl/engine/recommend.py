@@ -36,8 +36,6 @@ from jaaffl.engine.opponents import (
 from jaaffl.engine.optimize import StartingSlot, lineup_value, marginal_lineup_value
 from jaaffl.league.replacement import dynamic_replacement_values
 
-_KDST = frozenset({Position.K, Position.DST})
-
 
 class SlotState(StrEnum):
     """Where a candidate sits relative to your startable need at its position (§3.5)."""
@@ -232,11 +230,14 @@ def recommend(
     # 5) Candidate pool: top-K available by MLV (bounded hot path).
     candidates = sorted(available, key=lambda p: mlv[p], reverse=True)[: params.candidate_cap]
 
-    # Slot-state accounting for my current roster (drives the λ override + punt guard).
+    # Slot-state accounting for my current roster (drives the λ override + punt guard). The
+    # puntable positions come from the config (punt_guard.stream_round keys) — one source of truth,
+    # so making, say, TE streamable is a config change, not a code change.
+    puntable = frozenset(Position(key) for key in params.punt_guard.get("stream_round", {}))
     filled = _seat_roster(my_roster, context.position, context.starting_slots)
     open_startable = _open_startable_by_position(filled, context.starting_slots)
-    has_open_non_kdst = any(
-        not filled[i] and not (slot.eligible <= _KDST)
+    has_open_non_puntable = any(
+        not filled[i] and not (slot.eligible <= puntable)
         for i, slot in enumerate(context.starting_slots)
     )
 
@@ -276,9 +277,9 @@ def recommend(
         stream_round = int(params.punt_guard.get("stream_round", {}).get(pos.value, 0))
         punted = bool(
             params.punt_guard.get("enabled")
-            and pos in _KDST
+            and pos in puntable
             and round_no < stream_round
-            and has_open_non_kdst
+            and has_open_non_puntable
         )
         picks.append(
             (

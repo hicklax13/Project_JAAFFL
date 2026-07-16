@@ -261,38 +261,67 @@ class Warehouse:
             con.close()
 
     def _materialize_adp(self, con: duckdb.DuckDBPyConnection) -> None:
-        """Load the ``adp`` table from the FFC ADP Parquet snapshots (canonical player_id already
-        resolved at refresh time). Idempotent: clears then reloads, so repeated ``materialize`` /
-        rebuild calls reproduce the same rows for fixed Parquet inputs."""
-        con.execute("DELETE FROM adp")
-        files = sorted((self.parquet_dir / "ffc").glob("adp_*.parquet"))
-        if not files:
-            return
-        glob = str(self.parquet_dir / "ffc" / "adp_*.parquet").replace("\\", "/")
-        con.execute(
-            "INSERT OR IGNORE INTO adp"
-            " (player_id, season, scoring, teams, adp, stdev, high, low, times_drafted, bye,"
-            "  captured_at)"
-            " SELECT player_id, season, scoring, teams, adp, stdev, high, low, times_drafted,"
-            "  bye, captured_at FROM read_parquet(?)",
-            [glob],
+        """Load ``adp`` from the FFC ADP Parquet snapshots (canonical player_id resolved at refresh
+        time), reproducibly for fixed inputs."""
+        self._reload_from_parquet(
+            con,
+            "adp",
+            "ffc",
+            "adp_",
+            (
+                "player_id",
+                "season",
+                "scoring",
+                "teams",
+                "adp",
+                "stdev",
+                "high",
+                "low",
+                "times_drafted",
+                "bye",
+                "captured_at",
+            ),
         )
 
     def _materialize_projections(self, con: duckdb.DuckDBPyConnection) -> None:
-        """Load the ``projections`` table (μ/σ/floor/ceiling under the CBS map) from the Parquet
-        snapshots ``jaaffl.materialize.refresh_projections`` writes. Idempotent clear-then-reload,
-        so a rebuild reproduces the same rows for fixed inputs (app.sqlite is never touched)."""
-        con.execute("DELETE FROM projections")
-        files = sorted((self.parquet_dir / "projections").glob("proj_*.parquet"))
-        if not files:
+        """Load ``projections`` (μ/σ/floor/ceiling under the CBS map) from the Parquet snapshots
+        ``jaaffl.materialize.refresh_projections`` writes (app.sqlite is never touched)."""
+        self._reload_from_parquet(
+            con,
+            "projections",
+            "projections",
+            "proj_",
+            (
+                "player_id",
+                "season",
+                "source",
+                "scoring_version",
+                "stat_line",
+                "mu",
+                "sigma",
+                "floor",
+                "ceiling",
+            ),
+        )
+
+    def _reload_from_parquet(
+        self,
+        con: duckdb.DuckDBPyConnection,
+        table: str,
+        subdir: str,
+        prefix: str,
+        columns: tuple[str, ...],
+    ) -> None:
+        """Clear-then-reload a DuckDB analytics table from its ``parquet/{subdir}/{prefix}*``
+        snapshots — idempotent, so a rebuild reproduces identical rows for fixed inputs. ``table``
+        and ``columns`` are trusted code constants (never user input); the glob is a bound param."""
+        con.execute(f"DELETE FROM {table}")
+        if not sorted((self.parquet_dir / subdir).glob(f"{prefix}*.parquet")):
             return
-        glob = str(self.parquet_dir / "projections" / "proj_*.parquet").replace("\\", "/")
+        glob = str(self.parquet_dir / subdir / f"{prefix}*.parquet").replace("\\", "/")
+        cols = ", ".join(columns)
         con.execute(
-            "INSERT OR IGNORE INTO projections"
-            " (player_id, season, source, scoring_version, stat_line, mu, sigma, floor, ceiling)"
-            " SELECT player_id, season, source, scoring_version, stat_line, mu, sigma, floor,"
-            "  ceiling FROM read_parquet(?)",
-            [glob],
+            f"INSERT OR IGNORE INTO {table} ({cols}) SELECT {cols} FROM read_parquet(?)", [glob]
         )
 
     # --- SQLite app state ------------------------------------------------------------

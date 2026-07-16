@@ -156,5 +156,4 @@ def make_context(
         ecr=ecr,
         starting_slots=slots,
         players=players,
-        sigma={pid: projections[pid].sigma for pid in mu},
     )

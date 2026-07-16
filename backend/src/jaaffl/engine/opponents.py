@@ -160,5 +160,15 @@ def board_adp_shift(
     position: Mapping[str, Position],
     beta: float,
 ) -> dict[str, float]:
-    """Per-player ADP-mean shift for R3: ``−β · run_pressure(pos(j))`` (β=0 ⇒ pure static ADP)."""
-    return {pid: -beta * run_pressure.get(pos, 0.0) for pid, pos in position.items()}
+    """Per-player ADP-mean shift for R3: ``−β · run_pressure(pos(j))`` (β=0 ⇒ pure static ADP).
+
+    Returns ``{}`` when there is nothing to shift (β=0, or no run pressure — e.g. pick 1); callers
+    read it via ``.get(j, 0.0)``, so an empty map means "no shift" without building one per player.
+    """
+    if not run_pressure or beta == 0.0:
+        return {}
+    return {
+        pid: -beta * run_pressure.get(pos, 0.0)
+        for pid, pos in position.items()
+        if run_pressure.get(pos)
+    }

@@ -45,7 +45,6 @@ class DraftContext:
     ecr: dict[str, float]
     starting_slots: list[StartingSlot]
     players: dict[str, Player]
-    sigma: dict[str, float] | None = None  # σ_p view (optional; derived from projections)
 
 
 def build_draft_context(
@@ -103,7 +102,6 @@ def build_draft_context(
         games_missed=games_missed,
     )
     mu = {pid: proj.mu for pid, proj in projections.items()}
-    sigma = {pid: proj.sigma for pid, proj in projections.items()}
 
     # --- Static replacement baselines + tiers + cliff bonuses (over static/empty-roster MLV). ---
     flex = (int(params.flex_split["RB"]), int(params.flex_split["WR"]))
@@ -132,5 +130,4 @@ def build_draft_context(
         ecr=ecr,
         starting_slots=starting_slots,
         players=players,
-        sigma=sigma,
     )
