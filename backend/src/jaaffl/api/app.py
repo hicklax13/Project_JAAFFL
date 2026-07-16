@@ -209,7 +209,15 @@ def create_app(
             )
         state = app.state.draft_log.state(league_id)
         if as_of_overall_pick is not None:
-            state = state.model_copy(update={"current_overall_pick": as_of_overall_pick})
+            # Audit a past pick: reconstruct the board as of then — drop picks at/after that pick
+            # so players taken later are AVAILABLE again (not masked), matching what the engine
+            # actually saw at the time.
+            state = state.model_copy(
+                update={
+                    "current_overall_pick": as_of_overall_pick,
+                    "picks": [p for p in state.picks if p.overall < as_of_overall_pick],
+                }
+            )
         if team_id is not None:
             state = state.model_copy(update={"my_team_id": team_id})
         rec = app.state.rec_engine.recommend(state, limit=limit, use_mc=mc)

@@ -102,16 +102,20 @@ def dynamic_replacement_values(
     """Depletion-aware baselines (design §6.C.2 "Dynamic VBD"): the replacement level recomputed
     from the **remaining league-wide startable demand** over the **still-available** players.
 
-    ``baseline[pos] = μ of the R-th best AVAILABLE player``, ``R = max(1, startable_demand[pos] −
-    drafted_at_pos[pos])``. As a position's startable slots fill up leaguewide, R shrinks, so the
-    R-th survivor sits higher on the board and the baseline rises — re-pricing every survivor each
-    pick. (Live positional-run *urgency* is carried by board-conditioned VONA, §3.4/R3, not here.)
+    ``baseline[pos] = μ of the FIRST non-startable available player`` = the ``(R+1)``-th best
+    available, ``R = max(0, startable_demand[pos] − drafted_at_pos[pos])``. Pointing one past the
+    remaining startable pool (not AT its last member) keeps this a true replacement level: when a
+    position's demand saturates (R → 0/1), the baseline lands on a genuinely free player rather than
+    collapsing onto the best remaining candidate's own μ — which would zero the MLV of the very
+    player filling your last open slot at that position (e.g. a K/DST at its stream round). As
+    startable slots fill leaguewide, R shrinks, the baseline rises, and every survivor is re-priced.
+    (Live positional-run *urgency* is carried by board-conditioned VONA, §3.4/R3, not here.)
     """
     demand = _demand_with_flex(settings, flex_split)
     available = set(available_ids)
     out: dict[Position, float] = {}
     for pos, static_demand in demand.items():
-        remaining = max(1, static_demand - drafted_at_pos.get(pos, 0))
+        remaining = max(0, static_demand - drafted_at_pos.get(pos, 0))
         ranked = _ranked_mu(projected_points, players, pos, only=available)
-        out[pos] = _value_at_rank(ranked, remaining)
+        out[pos] = _value_at_rank(ranked, remaining + 1)  # first player BEYOND remaining demand
     return out

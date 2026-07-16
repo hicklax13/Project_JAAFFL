@@ -120,6 +120,24 @@ def test_dynamic_baseline_rises_as_startable_slots_fill() -> None:
     assert base_run[Position.WR] == pytest.approx(base0[Position.WR])
 
 
+def test_dynamic_baseline_does_not_collapse_when_demand_saturated() -> None:
+    """The player filling your LAST open slot at a near-exhausted position keeps positive VOR — the
+    baseline must be the first FREE player, not the best remaining candidate's own μ."""
+    mu = {"d0": 100.0, "d1": 60.0, "d2": 40.0}  # 3 DSTs left on the board
+    players = {p: Player(player_id=p, name=p, position=Position.DST) for p in mu}
+    # DST demand is 12 (1 per team); 11 already drafted → exactly your slot remains startable.
+    base = dynamic_replacement_values(
+        jaaffl_settings(),
+        mu,
+        players,
+        list(mu),
+        drafted_at_pos={Position.DST: 11},
+        flex_split=(8, 4),
+    )
+    assert base[Position.DST] == pytest.approx(60.0)  # first non-starter (d1), NOT the top d0
+    assert base[Position.DST] < mu["d0"]  # so the DST you draft has strictly positive VOR
+
+
 def test_dynamic_baseline_is_monotonic_nondecreasing_in_draft_count() -> None:
     mu, players = _board()
     settings = jaaffl_settings()
