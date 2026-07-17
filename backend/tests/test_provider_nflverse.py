@@ -10,6 +10,7 @@ Ground-truth [VERIFY], closed 2026-07-16 against nflreadpy 0.1.5:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import polars as pl
@@ -184,3 +185,16 @@ def test_players_raises_provider_error_without_data_extra(monkeypatch: pytest.Mo
     monkeypatch.setitem(sys.modules, "nflreadpy", None)  # force ImportError on `import nflreadpy`
     with pytest.raises(ProviderError):
         NflreadpyProvider().players(2026)
+
+
+@pytest.mark.skipif(
+    not os.environ.get("JAAFFL_RUN_NETWORK_TESTS"),
+    reason="opt-in: real nflverse network pull; set JAAFFL_RUN_NETWORK_TESTS=1 to run",
+)
+def test_players_real_nflverse_pull_returns_universe() -> None:
+    pytest.importorskip("nflreadpy")
+    universe = NflreadpyProvider().players(2026)
+    assert len(universe) > 100  # a real universe is thousands of players
+    assert all(p.player_id.startswith("gsis:") for p in universe)
+    positions = {p.position for p in universe}
+    assert {Position.QB, Position.RB, Position.WR, Position.TE}.issubset(positions)
