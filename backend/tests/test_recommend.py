@@ -123,3 +123,16 @@ def test_reasoning_carries_resolved_engine_params() -> None:
         and "flex_split=" in rec.reasoning
         and "EngineParams v" in rec.reasoning
     )
+
+
+def test_ranked_picks_are_enriched_with_player_identity() -> None:
+    """The UI is a pure consumer: each RecommendedPick must carry its display identity
+    (name/position/team) from the context player universe so a pick is self-describing (§6.2)."""
+    ctx = make_context(_board())
+    rec = recommend(draft_state(1), ctx, ctx.params, limit=5)
+    best = rec.ranked[0]
+    assert best.name == ctx.players[best.player_id].name
+    assert best.position == ctx.players[best.player_id].position
+    assert best.nfl_team == ctx.players[best.player_id].nfl_team
+    for pick in rec.ranked:
+        assert pick.position is not None  # needed for the pos chip + MLV colouring

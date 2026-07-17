@@ -281,12 +281,19 @@ def recommend(
             and round_no < stream_round
             and has_open_non_puntable
         )
+        player = context.players.get(pid)
         picks.append(
             (
                 punted,
                 RecommendedPick(
                     player_id=pid,
                     score=score,
+                    # Display identity from the precomputed player universe (§6.2) — makes the
+                    # pick self-describing for the overlay/dashboard; bye is not retained in the
+                    # context (v1), so the UI degrades gracefully when bye_week is None.
+                    name=player.name if player else None,
+                    position=pos,
+                    nfl_team=player.nfl_team if player else None,
                     projected_points=proj.mu,
                     vorp=mlv_p,
                     adp=context.adp_mean.get(pid),

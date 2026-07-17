@@ -10,9 +10,10 @@ from jaaffl import __version__
 from jaaffl.api import create_app
 from jaaffl.api.recs import RecsHub
 from jaaffl.config import Settings
-from jaaffl.domain import Position, Recommendation, RecommendedPick
+from jaaffl.domain import LeagueSettings, Player, Position, Recommendation, RecommendedPick
 from jaaffl.engine.service import RecommendationEngine
 from jaaffl.ingest.log import DraftLog
+from jaaffl.providers.base import AdpRecord, Capability, FantasyDataProvider
 from tests.engine_fixtures import make_context
 
 
@@ -72,6 +73,70 @@ def pick_payload(overall: int) -> dict:
             "team_id": f"T{overall}",
         },
     }
+
+
+class _FakeProvider(FantasyDataProvider):
+    """A no-network provider for the precompute-enabled app path (mirrors the free-tier shape)."""
+
+    def __init__(self, name, caps, *, adp=None, rankings=None, projections=None, players=None):
+        self._name, self._caps = name, frozenset(caps)
+        self._adp, self._rankings = adp or {}, rankings or {}
+        self._projections, self._players = projections or {}, players or []
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def capabilities(self):
+        return self._caps
+
+    def players(self, season):
+        return list(self._players)
+
+    def adp(self, season):
+        return self._adp
+
+    def rankings(self, season, week=None):
+        return self._rankings
+
+    def projections(self, season, week=None):
+        return self._projections
+
+
+def _fake_registry(*_args, **_kwargs):
+    """A fake ``build_registry`` result (nflverse/ffc/cbs_onpage shape) — zero network."""
+    universe = [
+        Player(player_id="rb0", name="rb0", position=Position.RB),
+        Player(player_id="rb1", name="rb1", position=Position.RB),
+        Player(player_id="wr0", name="wr0", position=Position.WR),
+        Player(player_id="wr1", name="wr1", position=Position.WR),
+        Player(player_id="te0", name="te0", position=Position.TE),
+    ]
+    return [
+        _FakeProvider(
+            "nflverse",
+            {Capability.HISTORICAL_STATS, Capability.RANKINGS},
+            rankings={"rb0": 1.0, "rb1": 5.0, "wr0": 2.0, "wr1": 6.0, "te0": 20.0},
+            players=universe,
+        ),
+        _FakeProvider(
+            "ffc",
+            {Capability.ADP},
+            adp={"rb0": AdpRecord(adp=1.0, stdev=3.0), "wr0": AdpRecord(adp=2.0, stdev=None)},
+        ),
+        _FakeProvider(
+            "cbs_onpage",
+            {Capability.PROJECTIONS},
+            projections={
+                "rb0": {"rushing_yards": 1500, "rushing_td": 12},
+                "rb1": {"rushing_yards": 900, "rushing_td": 6},
+                "wr0": {"receiving_yards": 1200, "receiving_td": 9},
+                "wr1": {"receiving_yards": 800, "receiving_td": 5},
+                "te0": {"receiving_yards": 700, "receiving_td": 5},
+            },
+        ),
+    ]
 
 
 def test_health(client: TestClient) -> None:
@@ -161,6 +226,66 @@ def test_pick_ingest_publishes_a_fresh_recommendation_to_recs_ws(tmp_path: Path)
 
 def test_league_settings_404_until_ingested(client: TestClient) -> None:
     assert client.get("/league/unknown-league").status_code == 404
+
+
+def test_league_endpoint_serves_the_verbatim_constitution(tmp_path: Path) -> None:
+    """/league/{configured} returns the immutable roster verbatim; /league/unknown stays 404."""
+    app = create_app(
+        Settings(
+            jaaffl_data_dir=tmp_path / "data",
+            jaaffl_recordings_dir=tmp_path / "rec",
+            jaaffl_league_id="L1",
+        )
+    )
+    client = TestClient(app)
+    assert client.get("/league/unknown").status_code == 404
+    res = client.get("/league/L1")
+    assert res.status_code == 200
+    ls = LeagueSettings.model_validate(res.json())  # validates against the shared contract
+    assert ls.team_count == 12
+    assert ls.draft_type == "snake"
+    assert ls.draft_order is None  # never inferred from team count
+    slots = {s.slot: s for s in ls.roster_slots}
+    assert slots["QB"].count == 1
+    assert slots["RB"].count == 1
+    assert slots["WR"].count == 3
+    assert slots["WR/RB"].count == 1
+    assert set(slots["WR/RB"].eligible_positions) == {Position.WR, Position.RB}  # WR-or-RB only
+    assert slots["TE"].count == 1
+    assert slots["K"].count == 1
+    assert slots["DST"].count == 1
+    assert slots["BENCH"].count == 8
+    assert slots["BENCH"].starting is False
+    # Scoring overlay present (offline cbs_standard_scoring default until capture): CBS 6pt pass TD
+    # + the dual DST bracket.
+    assert any(r.stat == "passing_td" and r.points_per_unit == 6.0 for r in ls.scoring)
+    assert {t.stat for t in ls.scoring_tiers} == {"dst_points_allowed", "dst_yards_allowed"}
+
+
+def test_precompute_enabled_bridge_turns_recommendation_503_into_200(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The 503→200 bridge: with the precompute flag on and INJECTED fake providers (no network),
+    a folded pick yields a real decomposed recommendation."""
+    monkeypatch.setattr("jaaffl.engine.precompute.build_registry", _fake_registry)
+    app = create_app(
+        Settings(
+            jaaffl_data_dir=tmp_path / "data",
+            jaaffl_recordings_dir=tmp_path / "rec",
+            jaaffl_precompute_enabled=True,
+            jaaffl_league_id="L1",
+        )
+    )
+    client = TestClient(app)
+    # Before any pick the league is unknown → 404 (state gate), not 503.
+    assert client.get("/recommendation", params={"league_id": "L1"}).status_code == 404
+    client.post("/draft/events", json=pick_payload(1))  # fold a DraftState for L1
+    res = client.get("/recommendation", params={"league_id": "L1", "team_id": "t0", "limit": 3})
+    assert res.status_code == 200  # 503 → 200: the engine built a context from the registry
+    body = res.json()
+    Recommendation.model_validate(body)
+    assert 1 <= len(body["ranked"]) <= 3
+    assert body["ranked"][0]["components"] is not None
 
 
 def test_draft_ws_acks_bare_event(client: TestClient) -> None:

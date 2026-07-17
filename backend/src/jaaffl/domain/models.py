@@ -253,6 +253,13 @@ class ScoreComponents(BaseModel):
 class RecommendedPick(BaseModel):
     player_id: str
     score: float = Field(description="Blended recommendation score (higher is better).")
+    # Display metadata so a pick is self-describing for the UI (name/pos/team/bye); the engine
+    # fills these from the DraftContext player universe. All optional — additive, so pre-
+    # enrichment payloads still validate and the UI degrades to the player_id.
+    name: str | None = None
+    position: Position | None = None
+    nfl_team: str | None = None
+    bye_week: int | None = None
     projected_points: float | None = None
     vorp: float | None = Field(default=None, description="Value over replacement, league-adjusted.")
     adp: float | None = None
