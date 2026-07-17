@@ -1,11 +1,14 @@
-import type { ReactElement } from "react";
+import type { CSSProperties, ReactElement } from "react";
 
 import {
   decomposeWhy,
   type EngineParamsSource,
+  formatScore,
+  formatSignedScore,
   type Position,
   type RecommendedPick,
   type WhyTerm,
+  whyTermBar,
   whyTermColorVar,
 } from "@jaaffl/shared";
 
@@ -16,29 +19,24 @@ export interface WhyPanelProps {
   position?: Position;
 }
 
-const fmt = (n: number): string => n.toFixed(1);
-const fmtSigned = (n: number): string => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(1)}`;
-
 function TermRow({ term, position }: { term: WhyTerm; position: Position | null }): ReactElement {
-  const color = whyTermColorVar(term.colorRole, position);
-  const fill =
-    term.anchor === "diverging"
-      ? term.contribution < 0
-        ? { right: "50%", width: `${term.barFraction * 50}%`, background: color }
-        : { left: "50%", width: `${term.barFraction * 50}%`, background: color }
-      : { left: 0, width: `${term.barFraction * 100}%`, background: color };
-  const value = term.key === "mlv" ? fmt(term.contribution) : fmtSigned(term.contribution);
+  const bar = whyTermBar(term);
+  const fill: CSSProperties = {
+    width: `${bar.widthPct}%`,
+    background: whyTermColorVar(term.colorRole, position),
+  };
+  fill[bar.anchorEdge] = `${bar.offsetPct}%`;
   return (
     <div className="sc-row">
       <span className="label" style={{ textTransform: "none", letterSpacing: ".02em" }}>
         {term.label}
       </span>
       <div className="sc-track" role="presentation">
-        {term.anchor === "diverging" && <span className="sc-mid" style={{ left: "50%" }} />}
+        {bar.midlinePct !== null && <span className="sc-mid" style={{ left: `${bar.midlinePct}%` }} />}
         <span className="sc-fill" style={fill} />
       </div>
       <span className="mono" data-testid={`why-term-${term.key}`} style={{ fontSize: "var(--fs-xs)" }}>
-        {value}
+        {bar.displayValue}
       </span>
     </div>
   );
@@ -65,8 +63,8 @@ export function WhyPanel({ pick, params, position }: WhyPanelProps): ReactElemen
   const core = why.terms.filter((t) => !t.key.startsWith("mod:"));
   const mods = why.terms.filter((t) => t.key.startsWith("mod:"));
   const reconcileLabel = why.reconciles
-    ? `Reconstructs to ${fmt(why.score)} from its components`
-    : `Warning: does not reconstruct to ${fmt(why.score)} (residual ${fmtSigned(why.residual)})`;
+    ? `Reconstructs to ${formatScore(why.score)} from its components`
+    : `Warning: does not reconstruct to ${formatScore(why.score)} (residual ${formatSignedScore(why.residual)})`;
 
   return (
     <div
@@ -92,7 +90,7 @@ export function WhyPanel({ pick, params, position }: WhyPanelProps): ReactElemen
               className={`stat-pill ${term.contribution >= 0 ? "is-good" : "is-critical"}`}
               data-testid={`why-term-${term.key}`}
             >
-              {term.label} {fmtSigned(term.contribution)}
+              {term.label} {formatSignedScore(term.contribution)}
             </span>
           ))}
         </div>
@@ -120,7 +118,7 @@ export function WhyPanel({ pick, params, position }: WhyPanelProps): ReactElemen
           className="mono"
           style={{ fontSize: "var(--fs-md)", color: "var(--brass)", justifySelf: "end" }}
         >
-          {fmt(why.score)}
+          {formatScore(why.score)}
         </b>
       </div>
     </div>
