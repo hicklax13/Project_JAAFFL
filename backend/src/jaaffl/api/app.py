@@ -18,10 +18,11 @@ from jaaffl import __version__
 from jaaffl.api.origin import is_origin_allowed, parse_allowed_origins
 from jaaffl.api.recs import PROTOCOL_VERSION, SCHEMA_VERSION, RecsHub
 from jaaffl.config import Settings, get_settings
+from jaaffl.data import Crosswalk
 from jaaffl.data.warehouse import Warehouse, open_app_db
 from jaaffl.domain import DraftEvent, DraftEventType, LeagueSettings, Recommendation
 from jaaffl.engine.service import RecommendationEngine
-from jaaffl.ingest import DraftLog, IngestResult, handle_event
+from jaaffl.ingest import DraftLog, IngestResult, handle_event, resolve_pick_ids
 from jaaffl.league.constitution import resolve_league_settings
 
 log = structlog.get_logger(__name__)
@@ -52,6 +53,9 @@ def create_app(
     app.state.recs_hub = RecsHub()
     app.state.draft_log = DraftLog(settings.jaaffl_data_dir / "app.sqlite")
     app.state.warehouse = Warehouse(settings.jaaffl_data_dir)
+    # Resolves name-only (manual-paste) picks to canonical ids before the engine masks them; reads
+    # the same app.sqlite the crosswalk was seeded into pre-draft (materialize.seed_crosswalk).
+    app.state.crosswalk = Crosswalk(app.state.warehouse.app_sqlite)
     # The Stage-5 engine. An injected engine wins (tests prime one). Otherwise, when the precompute
     # bridge is enabled, build a registry-backed context_source (the $0 providers) so the engine
     # lazily precomputes a real DraftContext per league on first use (→ /recommendation 503 → 200);
@@ -93,6 +97,13 @@ def create_app(
     def ws_origin_ok(ws: WebSocket) -> bool:
         return is_origin_allowed(ws.headers.get("origin"), allowed_origins)
 
+    def _resolve_state(state, league_id):
+        """Fill canonical player_ids for name-only (manual-paste) picks — resolving the raw event
+        names via the crosswalk — so the engine masks drafted players from the candidate pool."""
+        return resolve_pick_ids(
+            state, app.state.draft_log.events(league_id), app.state.crosswalk.resolve_name
+        )
+
     def publish_recommendation(event: DraftEvent, result: IngestResult) -> None:
         """On a state-advancing, non-deduped event, recompute and push to /recs/ws (§8.4 step 4).
 
@@ -101,7 +112,9 @@ def create_app(
         per league for the draft-complete recommendations.jsonl export."""
         if result.seq is None or event.event_type not in _STATE_ADVANCING:
             return
-        recommendation = app.state.rec_engine.recommend(result.state)
+        recommendation = app.state.rec_engine.recommend(
+            _resolve_state(result.state, event.league_id)
+        )
         if recommendation is not None:
             app.state.recs_hub.publish(recommendation)
             app.state.rec_history.setdefault(event.league_id, []).append(recommendation)
@@ -233,6 +246,7 @@ def create_app(
             )
         if team_id is not None:
             state = state.model_copy(update={"my_team_id": team_id})
+        state = _resolve_state(state, league_id)
         rec = app.state.rec_engine.recommend(state, limit=limit, use_mc=mc)
         if rec is None:
             raise HTTPException(status_code=503, detail="engine warming up")
