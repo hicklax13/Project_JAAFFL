@@ -169,9 +169,16 @@ def test_registry_player_loader_uses_real_players_method(monkeypatch, tmp_path) 
 
     Warehouse(tmp_path).init()
     row = {
-        "gsis_id": "00-0034796", "cbs_id": "2181292", "pfr_id": "LambCe00", "sleeper_id": "6786",
-        "espn_id": "4241389", "yahoo_id": "32692", "fantasypros_id": "17246",
-        "name": "CeeDee Lamb", "position": "WR", "team": "DAL",
+        "gsis_id": "00-0034796",
+        "cbs_id": "2181292",
+        "pfr_id": "LambCe00",
+        "sleeper_id": "6786",
+        "espn_id": "4241389",
+        "yahoo_id": "32692",
+        "fantasypros_id": "17246",
+        "name": "CeeDee Lamb",
+        "position": "WR",
+        "team": "DAL",
     }
     fake_nflreadpy(monkeypatch, load_ff_playerids=lambda: pl.DataFrame([row]))
     provider = NflreadpyProvider(crosswalk=Crosswalk(tmp_path / "app.sqlite"))
