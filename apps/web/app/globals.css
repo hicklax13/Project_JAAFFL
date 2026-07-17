@@ -1,27 +1,46 @@
-:root {
-  color-scheme: light dark;
+/* The Draft Room design tokens + component kit are the single source of truth in
+   design/tokens/draft-room.css (plan §6.1). Import them first, then layer the
+   dashboard's page chrome on top. @import must precede all other statements. */
+@import "../../../design/tokens/draft-room.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-* {
-  box-sizing: border-box;
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
-  line-height: 1.5;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-.wrap {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 48px 24px;
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.1;
+  text-wrap: balance;
+  letter-spacing: -0.01em;
+  margin: 0;
 }
 
-.muted {
-  color: #6b7280;
+a {
+  color: var(--brass);
+  text-decoration: none;
 }
 
-code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+::selection {
+  background: var(--brass-glow);
 }
