@@ -8,8 +8,8 @@ Three additive passes (design §3.2):
   1. **linear** ``ScoringRule`` — points per unit of a stat (existing core; non-PPR ⇒ no
      ``reception`` rule, so a catch is worth 0).
   2. **tiered** ``ScoringTier`` — bracketed, non-linear stats, matched by ``[lower, upper)``.
-     CBS "Standard" scores DST on BOTH ``dst_points_allowed`` AND ``dst_yards_allowed``, and the
-     two tiers **sum** (design §6.D).
+     A league MAY score DST on multiple tiers (they sum, design §6.D); JAAFFL2025 uses a single
+     ``dst_points_allowed`` bracket (``league/defaults.jaaffl_scoring``).
   3. **threshold** ``ScoringBonus`` — points per qualifying event, e.g. a K's 50+ yard FG. The
      ``stat`` is a pre-bucketed COUNT (ingest buckets by distance); ``threshold`` documents the
      edge; ``points`` is per event.
@@ -19,9 +19,9 @@ presence, design §3.0) AND — when the rule carries ``applies_to`` — the pla
 listed (defensive, consistent with the linear pass, and resolving the §1.4.1/§3.0 ``applies_to``
 inconsistency by supporting both).
 
-TODO(capture): the REAL CBS "Standard" bracket/bonus values are UNVERIFIED (capture-blocked, see
-docs/owner-manual-todo.md). This evaluator is value-agnostic; the offline defaults live in
-``league.defaults`` and the live map arrives via ``CbsOnPageProvider.league_settings()``.
+The JAAFFL2025 scoring VALUES are owner-confirmed in ``league.defaults.jaaffl_scoring``; this
+evaluator stays value-agnostic, and a captured CBS map still arrives via
+``CbsOnPageProvider.league_settings()`` when present.
 """
 
 from __future__ import annotations

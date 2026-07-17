@@ -44,7 +44,7 @@ Before your real draft, open your league's **Settings** page on CBS and confirm 
 | **Draft type**      | Snake                                                                       |
 | **Teams**           | 12                                                                         |
 | **Draft order**     | Decided in-person, then entered into the CBS system (not a plain snake)    |
-| **Scoring**         | Standard (**non-PPR** — 0 points per reception)                            |
+| **Scoring**         | Custom (**non-PPR** — 0 per reception); JAAFFL2025 values (1 pt/50 pass yds, no off. turnover penalty, single DST points-allowed bracket) |
 | **Rounds**          | 17                                                                         |
 
 **Roster slots per team (9 starters + 8 bench = 17):**

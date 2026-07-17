@@ -313,8 +313,8 @@ def create_app(
     @app.get("/league/{league_id}", response_model=LeagueSettings)
     def league(request: Request, league_id: str) -> LeagueSettings:
         """Serve the normalized LeagueSettings the dashboard needs: the immutable constitution
-        (config/league.json) roster + the CBS scoring overlay (offline cbs_standard_scoring until a
-        live capture lands, TODO(capture); a captured CBS snapshot's scoring wins when present).
+        (config/league.json) roster + the owner-provided jaaffl_scoring overlay (a captured CBS
+        snapshot's scoring still wins when present).
 
         200 for the configured primary league, or any league that already has a CBS snapshot or
         folded draft events; 404 otherwise. The immutable roster is reproduced verbatim (team_count

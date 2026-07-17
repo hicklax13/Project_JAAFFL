@@ -10,9 +10,8 @@ the whole bridge with fakes and zero network.
 This file lives under ``engine/`` but is deliberately NOT the hot path — it is the one engine module
 allowed to reach providers, via ``jaaffl.providers.registry`` (base + registry only, §4.7); the
 frozen ``recommend``/``optimize``/``opponents``/``tiers``/``projections``/``context`` modules import
-no concrete provider. Real CBS scoring VALUES stay behind TODO(capture): the offline
-``cbs_standard_scoring()`` map is the validation fallback until a live CBS scoring-page capture
-lands (owner-manual, docs/owner-manual-todo.md).
+no concrete provider. The owner-provided ``jaaffl_scoring()`` map is the authoritative scoring; a
+captured CBS scoring page may still override it (owner-manual, docs/owner-manual-todo.md).
 """
 
 from __future__ import annotations
