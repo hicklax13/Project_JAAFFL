@@ -79,7 +79,7 @@ class Settings(BaseSettings):
 
     # Companion service
     jaaffl_api_host: str = "127.0.0.1"
-    jaaffl_api_port: int = 8787
+    jaaffl_api_port: int = 8788
     jaaffl_log_level: str = "INFO"
     jaaffl_data_dir: Path = Path("./data")
     # Cross-origin allowlist for the localhost service. A WebSocket handshake is NOT gated

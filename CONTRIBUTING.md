@@ -16,7 +16,7 @@ make setup      # backend (editable install, dev extras) + pnpm workspace instal
 
 | Command            | What it does                                             |
 | ------------------ | -------------------------------------------------------- |
-| `make backend-dev` | Run the FastAPI companion service (127.0.0.1:8787)       |
+| `make backend-dev` | Run the FastAPI companion service (127.0.0.1:8788)       |
 | `make web-dev`     | Run the Next.js dashboard                                |
 | `make ext-dev`     | Build the extension in watch mode                        |
 | `make lint`        | Ruff (Python) + ESLint/Prettier (JS)                     |

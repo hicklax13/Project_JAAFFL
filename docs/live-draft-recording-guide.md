@@ -160,15 +160,15 @@ its **own terminal window** and leave it running:
 make backend-dev
 ```
 
-You should see it come up on **`127.0.0.1:8787`**. Confirm it's healthy in a second terminal (or
+You should see it come up on **`127.0.0.1:8788`**. Confirm it's healthy in a second terminal (or
 your browser):
 
 ```bash
-curl http://127.0.0.1:8787/health
+curl http://127.0.0.1:8788/health
 # → {"status":"ok","version":"..."}
 ```
 
-Or just open **http://127.0.0.1:8787/health** in Chrome — you should see `{"status":"ok",...}`.
+Or just open **http://127.0.0.1:8788/health** in Chrome — you should see `{"status":"ok",...}`.
 
 > Keep this terminal open for the whole draft. Closing it stops recording capture.
 
@@ -278,7 +278,7 @@ backstop no matter what.
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | No `REC` badge after clicking the icon              | Make sure the extension card is **ON** in `chrome://extensions`, then reload the CBS tab and click the icon again.               |
 | Overlay panel never appears on the CBS page         | Confirm the URL matches the patterns in Step 7. Reload the page. Check the extension card is enabled.                            |
-| `curl http://127.0.0.1:8787/health` fails           | The backend isn't running — start it with `make backend-dev` (Step 6) and leave that terminal open.                              |
+| `curl http://127.0.0.1:8788/health` fails           | The backend isn't running — start it with `make backend-dev` (Step 6) and leave that terminal open.                              |
 | No `rec-*.jsonl` file appears while recording       | Backend must be running **before** you toggle REC. Check the backend terminal for errors; re-toggle REC off/on.                  |
 | Extension card shows fewer than 3 content scripts   | Known `@crxjs` build risk with the MAIN-world entry. Re-run `pnpm --filter @jaaffl/extension build`, remove + re-load unpacked.  |
 | CBS settings don't match Step 1's table             | **Don't** edit `config/league.json`. Tell Claude what differs so the conflict is handled correctly.                             |
@@ -296,8 +296,8 @@ make setup
 pnpm --filter @jaaffl/extension build      # → apps/extension/dist/  (load unpacked in Chrome)
 
 # Each session
-make backend-dev                            # start the local service on 127.0.0.1:8787
-curl http://127.0.0.1:8787/health           # verify it's up
+make backend-dev                            # start the local service on 127.0.0.1:8788
+curl http://127.0.0.1:8788/health           # verify it's up
 ls -la apps/extension/fixtures/cbs/         # watch captures land while REC is on
 ```
 

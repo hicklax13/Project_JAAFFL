@@ -24,7 +24,7 @@ the extension overlay and the web dashboard.
 python -m pip install -e '.[dev]'   # or: uv pip install -e '.[dev]'
 # add extras as you reach each stage: '.[data]', '.[engine]', '.[assistant]', or '.[all]'
 
-python -m jaaffl.api                # run the companion service (127.0.0.1:8787)
+python -m jaaffl.api                # run the companion service (127.0.0.1:8788)
 ruff check . && ruff format --check .
 pytest -q
 ```

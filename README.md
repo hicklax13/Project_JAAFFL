@@ -76,7 +76,7 @@ the Python side but not required.
 ```bash
 cp .env.example .env          # fill in provider keys as you enable them
 make setup                    # install backend + JS workspace deps
-make backend-dev              # run the FastAPI companion on 127.0.0.1:8787
+make backend-dev              # run the FastAPI companion on 127.0.0.1:8788
 make web-dev                  # run the Next.js dashboard
 make ext-dev                  # build the extension in watch mode, then load unpacked
 ```

@@ -2,7 +2,7 @@
 """Replay a fixture of DraftEvents into the ingest WebSocket (E4 regression / demo).
 
 Usage:
-    python scripts/dev/replay_draft.py <events.json> [--url ws://127.0.0.1:8787/draft/ws]
+    python scripts/dev/replay_draft.py <events.json> [--url ws://127.0.0.1:8788/draft/ws]
                                        [--delay 0.05] [--first N]
 
 The fixture is a JSON array of DraftEvent objects (or JSONL, one per line) — e.g.
@@ -52,7 +52,7 @@ async def replay(events: list[dict], url: str, delay: float) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture", type=Path)
-    parser.add_argument("--url", default="ws://127.0.0.1:8787/draft/ws")
+    parser.add_argument("--url", default="ws://127.0.0.1:8788/draft/ws")
     parser.add_argument("--delay", type=float, default=0.05)
     parser.add_argument("--first", type=int, default=None, help="send only the first N events")
     args = parser.parse_args()

@@ -16,7 +16,7 @@ setup-backend:
 setup-js:
 	pnpm install
 
-## backend-dev: run the FastAPI companion service on 127.0.0.1:8787
+## backend-dev: run the FastAPI companion service on 127.0.0.1:8788
 backend-dev:
 	cd backend && (uv run jaaffl-api || python -m jaaffl.api)
 
