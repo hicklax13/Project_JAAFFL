@@ -1,12 +1,8 @@
 import type { ReactElement } from "react";
 
-import type { RecommendedPick } from "@jaaffl/shared";
+import { formatPct, type RecommendedPick, survivalOutlook } from "@jaaffl/shared";
 
 import { PositionChip, playerName } from "./recommendation-banner";
-
-const pct = (p: number): string => `${Math.round(p * 100)}%`;
-const survColor = (p: number): string =>
-  p >= 0.55 ? "var(--good)" : p >= 0.4 ? "var(--warning)" : "var(--critical)";
 
 /**
  * Next-turn survival — the probability each top candidate is still on the board at your next
@@ -28,23 +24,21 @@ export function SurvivalPanel({ ranked }: { ranked: RecommendedPick[] }): ReactE
         className="surv-list"
         role="img"
         aria-label={`Survival to your next pick: ${rows
-          .map((p) => `${playerName(p)} ${pct(p.next_turn_availability!)}`)
+          .map((p) => `${playerName(p)} ${formatPct(p.next_turn_availability!)}`)
           .join(", ")}`}
       >
         {rows.map((p) => {
           const prob = p.next_turn_availability!;
+          const color = survivalOutlook(prob).colorVar;
           return (
             <li className="surv-row" key={p.player_id}>
               <PositionChip position={p.position} />
               <span className="surv-name">{playerName(p)}</span>
               <div className="surv-track" aria-hidden="true">
-                <span
-                  className="surv-fill"
-                  style={{ width: `${prob * 100}%`, background: survColor(prob) }}
-                />
+                <span className="surv-fill" style={{ width: `${prob * 100}%`, background: color }} />
               </div>
-              <span className="surv-pct mono" style={{ color: survColor(prob) }}>
-                {pct(prob)}
+              <span className="surv-pct mono" style={{ color }}>
+                {formatPct(prob)}
               </span>
             </li>
           );

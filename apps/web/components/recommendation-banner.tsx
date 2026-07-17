@@ -1,6 +1,11 @@
 import type { ReactElement } from "react";
 
-import type { Position, RecommendedPick } from "@jaaffl/shared";
+import {
+  formatPct,
+  type Position,
+  type RecommendedPick,
+  survivalOutlook,
+} from "@jaaffl/shared";
 
 import { WhyPanel } from "./why-panel";
 
@@ -10,8 +15,6 @@ export function PositionChip({ position }: { position?: Position | null }): Reac
   return <span className={`pos pos-${position}`}>{position}</span>;
 }
 
-const pct = (p: number): string => `${Math.round(p * 100)}%`;
-
 /** Next-turn survival badge — icon + word + color (never color-alone), per §6.3. */
 export function SurvivalBadge({
   probability,
@@ -19,12 +22,13 @@ export function SurvivalBadge({
   probability?: number | null;
 }): ReactElement | null {
   if (probability == null) return null;
-  const cls = probability >= 0.55 ? "is-good" : probability >= 0.4 ? "is-warning" : "is-critical";
-  const glyph = probability >= 0.55 ? "◗" : probability >= 0.4 ? "◐" : "●";
-  const word = probability >= 0.55 ? "can wait" : probability >= 0.4 ? "watch" : "scarce now";
+  const { glyph, word, statusClass } = survivalOutlook(probability);
   return (
-    <span className={`stat-pill ${cls}`} aria-label={`${pct(probability)} survives to your next pick — ${word}`}>
-      {glyph} {pct(probability)} survives
+    <span
+      className={`stat-pill ${statusClass}`}
+      aria-label={`${formatPct(probability)} survives to your next pick — ${word}`}
+    >
+      {glyph} {formatPct(probability)} survives
     </span>
   );
 }
@@ -120,7 +124,7 @@ export function TopFive({ ranked }: { ranked: RecommendedPick[] }): ReactElement
             <span className="rt">
               <span className="sc mono">{p.score.toFixed(1)}</span>
               {p.next_turn_availability != null && (
-                <span className="sv mono"> · {pct(p.next_turn_availability)}</span>
+                <span className="sv mono"> · {formatPct(p.next_turn_availability)}</span>
               )}
             </span>
           </li>

@@ -12,9 +12,11 @@
 import {
   decomposeWhy,
   type DraftEvent,
+  formatPct,
   type Position,
   type Recommendation,
   type RecommendedPick,
+  survivalOutlook,
   type WhyTerm,
   whyTermColorVar,
 } from "@jaaffl/shared";
@@ -99,9 +101,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-const pct = (p: number): string => `${Math.round(p * 100)}%`;
-const survClass = (p: number): "is-good" | "is-warning" | "is-critical" =>
-  p >= 0.55 ? "is-good" : p >= 0.4 ? "is-warning" : "is-critical";
 
 /** One Score-Components bar bound to a term (§6.5) — left-anchored or diverging around 0. */
 function whyRow(term: WhyTerm, position: Position | null): HTMLElement {
@@ -254,10 +253,11 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
       const p = best.next_turn_availability;
       const lg = el("div", "lg");
       lg.appendChild(el("span", "sc-label", `${name} survives`));
-      lg.appendChild(el("b", undefined, ` ${pct(p)}`));
+      lg.appendChild(el("b", undefined, ` ${formatPct(p)}`));
       survLegend.appendChild(lg);
-      const pill = el("span", `stat-pill ${survClass(p)}`);
-      pill.textContent = p >= 0.55 ? "◗ can wait" : p >= 0.4 ? "◐ watch" : "● take now";
+      const outlook = survivalOutlook(p);
+      const pill = el("span", `stat-pill ${outlook.statusClass}`);
+      pill.textContent = `${outlook.glyph} ${outlook.word}`;
       survLegend.appendChild(pill);
     }
 
@@ -272,7 +272,7 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
       if (p.nfl_team) nm.appendChild(el("small", undefined, ` ${p.nfl_team}`));
       row.appendChild(nm);
       const rt = p.next_turn_availability != null
-        ? `${p.score.toFixed(1)} · ${pct(p.next_turn_availability)}`
+        ? `${p.score.toFixed(1)} · ${formatPct(p.next_turn_availability)}`
         : p.score.toFixed(1);
       row.appendChild(el("span", "rt", rt));
       altList.appendChild(row);
