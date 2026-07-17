@@ -262,11 +262,6 @@ class Crosswalk:
     def _best_fuzzy_match(
         self, name: str, position: str, nfl_team: str | None
     ) -> tuple[str | None, dict]:
-        # Deferred so the base ($0) install imports crosswalk (and thus the API) without the
-        # `data` extra; only actual fuzzy matching needs rapidfuzz (mirrors warehouse.py's
-        # duckdb/polars deferral).
-        from rapidfuzz import fuzz
-
         norm = name_norm(name, position)
         target_team = team_norm(nfl_team)  # None => team-agnostic (FA / unknown)
         conn = open_app_db(self.db_path)
@@ -281,6 +276,12 @@ class Crosswalk:
             conn.close()
         if target_team is not None:
             candidates = [c for c in candidates if team_norm(c[2]) == target_team]
+        if not candidates:
+            return None, {}
+        # Deferred so the base ($0) install imports crosswalk (and thus the API) without the
+        # `data` extra; only actual fuzzy scoring needs rapidfuzz (mirrors warehouse.py's deferral).
+        from rapidfuzz import fuzz
+
         scored = sorted(
             (
                 (fuzz.token_sort_ratio(norm, cand_norm) / 100.0, pid)
@@ -288,7 +289,7 @@ class Crosswalk:
             ),
             reverse=True,
         )
-        if not scored or scored[0][0] < self.threshold:
+        if scored[0][0] < self.threshold:
             return None, {}
         best_score, best_id = scored[0]
         features = {

@@ -356,3 +356,14 @@ def test_resolve_name_resolves_dst_by_nickname_token(cx: Crosswalk) -> None:
     case handled by skip-if-unresolved in the FFC adapter.)"""
     cx.upsert(player("gsis:sea", "Seattle Seahawks", pos="DST", team="SEA"))
     assert cx.resolve_name("Seahawks Defense", "SEA", "DST") == "gsis:sea"
+
+
+def test_resolve_name_on_empty_table_returns_none_without_rapidfuzz(
+    monkeypatch: pytest.MonkeyPatch, cx: Crosswalk
+) -> None:
+    """A base ($0) install with an unseeded players table must resolve to None without importing
+    rapidfuzz (which the data extra provides) — else the API resolution path would 500."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "rapidfuzz", None)  # force ImportError if imported
+    assert cx.resolve_name("Nobody Here", "SF", "WR") is None
