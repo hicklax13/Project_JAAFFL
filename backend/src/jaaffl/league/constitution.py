@@ -7,10 +7,10 @@ those values **verbatim** — team_count, draft_type, and the roster slots/count
 league rule / ``agent_usage_contract``).
 
 The file carries no per-category scoring values (§ ``league.json`` ``scoring_note``);
-``resolve_league_settings`` layers scoring on top: the offline ``cbs_standard_scoring()`` map is the
-validation fallback (TODO(capture) — the real CBS map is capture-blocked), overridden by a captured
-CBS snapshot's ``league_settings`` scoring when one is present. The immutable roster is never
-rewritten by a snapshot (conflicts are surfaced upstream, never silently applied).
+``resolve_league_settings`` layers scoring on top: the owner-provided ``jaaffl_scoring()`` map is
+authoritative (only CBS live-frame *parsing* stays capture-blocked, not the scoring values),
+overridden by a captured CBS snapshot's ``league_settings`` scoring when present. The immutable
+roster is never rewritten by a snapshot (conflicts are surfaced upstream, never silently applied).
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 
 from jaaffl.domain import CbsPageSnapshot, LeagueSettings, Position, RosterSlot
-from jaaffl.league.defaults import cbs_standard_scoring
+from jaaffl.league.defaults import jaaffl_scoring
 
 # backend/src/jaaffl/league/constitution.py → repo root is parents[4].
 _REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -81,13 +81,13 @@ def resolve_league_settings(
 ) -> LeagueSettings:
     """The normalized settings the engine/dashboard consume: constitution roster + CBS scoring.
 
-    Scoring is the offline ``cbs_standard_scoring()`` default (TODO(capture): the REAL CBS values
-    are capture-blocked, docs/owner-manual-todo.md), overridden by a captured CBS snapshot's
+    Scoring is the owner-provided ``jaaffl_scoring()`` map (authoritative — only CBS live-frame
+    parsing stays capture-blocked, not the values), overridden by a captured CBS snapshot's
     ``league_settings`` scoring when one is present. The immutable roster / team_count / draft_type
     / ``None`` draft_order are preserved verbatim — a snapshot never rewrites them.
     """
     base = load_constitution(league_id, path=path)
-    rules, tiers, bonuses = cbs_standard_scoring()
+    rules, tiers, bonuses = jaaffl_scoring()
     captured = snapshot.league_settings if snapshot is not None else None
     if captured is not None and captured.scoring:  # a real capture wins over the offline default
         rules, tiers, bonuses = captured.scoring, captured.scoring_tiers, captured.scoring_bonuses

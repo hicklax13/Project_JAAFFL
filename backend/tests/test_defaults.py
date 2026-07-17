@@ -1,42 +1,61 @@
-"""Offline CBS 'Standard' (non-PPR) scoring defaults (league/defaults.py).
+"""Owner-provided JAAFFL2025 scoring (league/defaults.py) — custom, non-PPR.
 
-Pins the two CBS distinctives the deep-research verified (2026-07-16): passing TD = 6 (not 4) and
-a DST that scores BOTH points-allowed AND yards-allowed brackets. Non-PPR ⇒ receptions score 0.
-Values are the published default (TODO(capture): the live room may be commissioner-customized).
+Authoritative owner rules (2026-07-17): passing 0.02/yd (1 per 50); NO offensive turnover penalty;
+all TDs 6; non-PPR (rec 0); K FG base 3 + CUMULATIVE distance bonuses (+1 at 50, +1 more at 60); DST
+scores a SINGLE points-allowed bracket (0-9 = 6) and NO yards-allowed tier.
 """
 
 from __future__ import annotations
 
 from jaaffl.domain import Position
 from jaaffl.league import league_points
-from jaaffl.league.defaults import cbs_standard_scoring
+from jaaffl.league.defaults import jaaffl_scoring
 
 
-def test_receptions_score_zero_in_standard() -> None:
-    rules, tiers, bonuses = cbs_standard_scoring()
+def test_receptions_score_zero_non_ppr() -> None:
+    rules, tiers, bonuses = jaaffl_scoring()
     line = {"receptions": 10, "receiving_yards": 100, "receiving_td": 1}
     pts = league_points(line, rules, Position.WR, tiers=tiers, bonuses=bonuses)
     assert pts == 100 * 0.1 + 1 * 6  # 16.0 — the 10 catches add nothing (non-PPR)
 
 
-def test_cbs_passing_td_is_six_not_four() -> None:
-    rules, tiers, bonuses = cbs_standard_scoring()
-    line = {"passing_yards": 300, "passing_td": 3, "interception": 1}
+def test_passing_is_one_point_per_50_and_no_interception_penalty() -> None:
+    rules, tiers, bonuses = jaaffl_scoring()
+    line = {"passing_yards": 300, "passing_td": 3, "interception": 1}  # INT must NOT be penalized
     pts = league_points(line, rules, Position.QB, tiers=tiers, bonuses=bonuses)
-    assert pts == 300 * 0.04 + 3 * 6 - 2  # 12 + 18 − 2 = 28.0
+    assert pts == 300 * 0.02 + 3 * 6  # 6 + 18 = 24.0 (interception scores nothing)
 
 
-def test_dst_scores_both_points_and_yards_allowed() -> None:
-    rules, tiers, bonuses = cbs_standard_scoring()
-    # 3 pts allowed → +8 (1–6 bracket); 280 yds allowed → +2 (250–299 bracket); 4 sacks → +4.
-    line = {"dst_points_allowed": 3, "dst_yards_allowed": 280, "sack": 4}
+def test_no_offensive_fumble_lost_penalty() -> None:
+    rules, tiers, bonuses = jaaffl_scoring()
+    line = {"rushing_yards": 100, "rushing_td": 1, "fumble_lost": 2}
+    pts = league_points(line, rules, Position.RB, tiers=tiers, bonuses=bonuses)
+    assert pts == 100 * 0.1 + 1 * 6  # 16.0 — offensive fumbles are not penalized
+
+
+def test_dst_single_points_allowed_bracket_and_no_yards_tier() -> None:
+    rules, tiers, bonuses = jaaffl_scoring()
+    # Allow 7 → +6 (single 0-9 bracket); dst_yards_allowed has NO tier; 4 sacks +4; 1 INT +2.
+    line = {"dst_points_allowed": 7, "dst_yards_allowed": 280, "sack": 4, "dst_int": 1}
     pts = league_points(line, rules, Position.DST, tiers=tiers, bonuses=bonuses)
-    assert pts == 8 + 2 + 4  # 14.0
+    assert pts == 6 + 4 + 2  # 12.0 (yards-allowed is ignored — JAAFFL scores no yards tier)
 
 
-def test_kicker_50plus_field_goal_nets_five() -> None:
-    rules, tiers, bonuses = cbs_standard_scoring()
-    # One 45-yd FG (3) + one 52-yd FG (3 linear + 2 bonus = 5) + PAT (1) = 9.
-    line = {"fg_made": 2, "fg_made_50plus": 1, "xp_made": 1}
-    pts = league_points(line, rules, Position.K, tiers=tiers, bonuses=bonuses)
-    assert pts == 2 * 3 + 1 * 2 + 1 * 1  # 6 + 2 + 1 = 9.0
+def test_dst_points_allowed_boundary() -> None:
+    rules, tiers, bonuses = jaaffl_scoring()
+    kw = {"tiers": tiers, "bonuses": bonuses}
+    assert league_points({"dst_points_allowed": 9}, rules, Position.DST, **kw) == 6.0  # under 10
+    assert league_points({"dst_points_allowed": 10}, rules, Position.DST, **kw) == 0.0  # 10+ → 0
+
+
+def test_kicker_distance_bonuses_are_cumulative() -> None:
+    rules, tiers, bonuses = jaaffl_scoring()
+    kw = {"tiers": tiers, "bonuses": bonuses}
+    # 55-yd FG: 50plus only → 3 + 1 = 4.  62-yd FG: 50plus AND 60plus → 3 + 1 + 1 = 5.
+    assert league_points({"fg_made": 1, "fg_made_50plus": 1}, rules, Position.K, **kw) == 4.0
+    assert (
+        league_points(
+            {"fg_made": 1, "fg_made_50plus": 1, "fg_made_60plus": 1}, rules, Position.K, **kw
+        )
+        == 5.0
+    )

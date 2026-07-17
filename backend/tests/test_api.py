@@ -352,10 +352,10 @@ def test_league_endpoint_serves_the_verbatim_constitution(tmp_path: Path) -> Non
     assert slots["DST"].count == 1
     assert slots["BENCH"].count == 8
     assert slots["BENCH"].starting is False
-    # Scoring overlay present (offline cbs_standard_scoring default until capture): CBS 6pt pass TD
-    # + the dual DST bracket.
+    # Scoring overlay present (owner-provided jaaffl_scoring): 6pt pass TD + a SINGLE DST
+    # points-allowed bracket (JAAFFL scores no yards-allowed tier).
     assert any(r.stat == "passing_td" and r.points_per_unit == 6.0 for r in ls.scoring)
-    assert {t.stat for t in ls.scoring_tiers} == {"dst_points_allowed", "dst_yards_allowed"}
+    assert {t.stat for t in ls.scoring_tiers} == {"dst_points_allowed"}
 
 
 def test_precompute_enabled_bridge_turns_recommendation_503_into_200(

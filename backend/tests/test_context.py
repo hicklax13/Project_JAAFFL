@@ -9,7 +9,7 @@ import pytest
 
 from jaaffl.domain import Player, Position
 from jaaffl.engine.context import build_draft_context
-from jaaffl.league.defaults import cbs_standard_scoring
+from jaaffl.league.defaults import jaaffl_scoring
 from jaaffl.providers.base import AdpRecord, Capability, FantasyDataProvider
 from tests.engine_fixtures import engine_params, jaaffl_settings, teams
 
@@ -38,7 +38,7 @@ class _Fake(FantasyDataProvider):
 
 
 def _settings():
-    rules, tiers, bonuses = cbs_standard_scoring()
+    rules, tiers, bonuses = jaaffl_scoring()
     return jaaffl_settings(draft_order=teams(12)).model_copy(
         update={"scoring": rules, "scoring_tiers": tiers, "scoring_bonuses": bonuses}
     )

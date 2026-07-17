@@ -16,7 +16,7 @@ from jaaffl.engine.projections import (
     assemble_projections,
     build_projections,
 )
-from jaaffl.league.defaults import cbs_standard_scoring
+from jaaffl.league.defaults import jaaffl_scoring
 from jaaffl.league.replacement import replacement_values
 from jaaffl.providers.base import Capability, FantasyDataProvider
 from tests.engine_fixtures import engine_params, jaaffl_settings
@@ -107,7 +107,7 @@ class _FakeProvider(FantasyDataProvider):
 
 
 def test_build_projections_blends_cbs_stat_lines_and_ecr() -> None:
-    rules, tiers, bonuses = cbs_standard_scoring()
+    rules, tiers, bonuses = jaaffl_scoring()
     settings = jaaffl_settings()
     settings = settings.model_copy(
         update={"scoring": rules, "scoring_tiers": tiers, "scoring_bonuses": bonuses}
