@@ -3,6 +3,7 @@ import {
   LeagueSettingsSchema,
   parseRecsFrame,
   type Recommendation,
+  RecommendationSchema,
   RECS_PROTOCOL_VERSION,
 } from "@jaaffl/shared";
 
@@ -14,11 +15,29 @@ export const DEFAULT_LEAGUE_ID = process.env.NEXT_PUBLIC_LEAGUE_ID ?? "cbs-local
 
 /** Fetch the current recommendation from the companion service (§8.3.3). */
 export async function fetchRecommendation(leagueId: string): Promise<Recommendation | null> {
-  const res = await fetch(`${API_BASE}/recommendation?league_id=${encodeURIComponent(leagueId)}`, {
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  return (await res.json()) as Recommendation;
+  return (await getRecommendation(leagueId)).recommendation;
+}
+
+export interface RecommendationResult {
+  /** HTTP status so callers can distinguish 404 (unknown league) / 409 (not started) /
+   * 503 (engine warming up) — the §6.6 degraded states — from a 200. 0 means the fetch threw. */
+  status: number;
+  recommendation: Recommendation | null;
+}
+
+/** Status-aware GET /recommendation so the dashboard can render 404/409/503 honestly (§6.6). */
+export async function getRecommendation(leagueId: string): Promise<RecommendationResult> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/recommendation?league_id=${encodeURIComponent(leagueId)}`, {
+      cache: "no-store",
+    });
+  } catch {
+    return { status: 0, recommendation: null };
+  }
+  if (!res.ok) return { status: res.status, recommendation: null };
+  const parsed = RecommendationSchema.safeParse(await res.json());
+  return { status: 200, recommendation: parsed.success ? parsed.data : null };
 }
 
 /** Fetch the normalized, authoritative LeagueSettings for a league (§8.3.2). Null on 404. */
