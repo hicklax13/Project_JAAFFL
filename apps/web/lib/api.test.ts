@@ -9,6 +9,7 @@ import type { Recommendation } from "@jaaffl/shared";
 
 import {
   fetchLeague,
+  getRecommendation,
   type RecsSocketState,
   subscribeRecs,
   type WebSocketLike,
@@ -161,5 +162,47 @@ describe("fetchLeague", () => {
   it("returns null on 404", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 404 })));
     expect(await fetchLeague("unknown")).toBeNull();
+  });
+
+  it("returns null (never rejects) when the backend is unreachable", async () => {
+    // The expected "dashboard opened before the backend is up / backend restarting" path:
+    // fetch rejects. fetchLeague must resolve to null, not surface an unhandled rejection.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    await expect(fetchLeague("cbs-local")).resolves.toBeNull();
+  });
+
+  it("returns null when a 200 body is unparseable JSON", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<<not json>>", { status: 200 })));
+    await expect(fetchLeague("cbs-local")).resolves.toBeNull();
+  });
+});
+
+describe("getRecommendation", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reports offline (status 0) when the backend is unreachable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    await expect(getRecommendation("cbs-local")).resolves.toEqual({
+      status: 0,
+      recommendation: null,
+    });
+  });
+
+  it("returns a null recommendation (never rejects) when a 200 body is unparseable JSON", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<<not json>>", { status: 200 })));
+    await expect(getRecommendation("cbs-local")).resolves.toEqual({
+      status: 200,
+      recommendation: null,
+    });
   });
 });

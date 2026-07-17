@@ -285,7 +285,7 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
     const map: Record<OverlaySyncState, { text: string; color: string }> = {
       live: { text: "Live · CBS synced", color: "var(--good)" },
       connecting: { text: "Connecting…", color: "var(--warning)" },
-      stale: { text: "Stale · reconnect due", color: "var(--warning)" },
+      stale: { text: "Stale · awaiting pick", color: "var(--warning)" },
       disconnected: { text: "Reconnecting…", color: "var(--critical)" },
       waiting: { text: "Watching the board", color: "var(--ink-3)" },
       manual: { text: "Manual paste", color: "var(--warning)" },

@@ -36,18 +36,30 @@ export async function getRecommendation(leagueId: string): Promise<Recommendatio
     return { status: 0, recommendation: null };
   }
   if (!res.ok) return { status: res.status, recommendation: null };
-  const parsed = RecommendationSchema.safeParse(await res.json());
-  return { status: 200, recommendation: parsed.success ? parsed.data : null };
+  try {
+    const parsed = RecommendationSchema.safeParse(await res.json());
+    return { status: 200, recommendation: parsed.success ? parsed.data : null };
+  } catch {
+    return { status: 200, recommendation: null }; // 200 but an unparseable body → no rec, not a throw
+  }
 }
 
-/** Fetch the normalized, authoritative LeagueSettings for a league (§8.3.2). Null on 404. */
+/**
+ * Fetch the normalized, authoritative LeagueSettings for a league (§8.3.2). Null on 404,
+ * an unparseable body, OR an unreachable backend — the dashboard opens before `make backend-dev`
+ * and survives restarts, so a rejected fetch must degrade to null, never an unhandled rejection.
+ */
 export async function fetchLeague(leagueId: string): Promise<LeagueSettings | null> {
-  const res = await fetch(`${API_BASE}/league/${encodeURIComponent(leagueId)}`, {
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  const parsed = LeagueSettingsSchema.safeParse(await res.json());
-  return parsed.success ? parsed.data : null;
+  try {
+    const res = await fetch(`${API_BASE}/league/${encodeURIComponent(leagueId)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const parsed = LeagueSettingsSchema.safeParse(await res.json());
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }
 
 export type RecsSocketState = "connecting" | "live" | "reconnecting" | "closed";
