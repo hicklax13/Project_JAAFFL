@@ -6,6 +6,9 @@ of each build phase on purpose — nothing here blocks the automated build unles
 
 ## 1. CBS record-mode capture session  `[PARTIAL BLOCKER — CBS field mapping only]`
 
+> 📋 **Full step-by-step walkthrough:** [`docs/live-draft-recording-guide.md`](live-draft-recording-guide.md)
+> — exact install commands, Chrome load-unpacked steps, and the record-mode buttons.
+
 The one real-frame session. It unblocks the **real** CBS field shapes that the code currently
 mocks behind `TODO(capture)`: the settings-page parse (Stage 2), `CbsOnPageProvider`'s real
 projections/injuries/rankings mapping and the `CbsPageSnapshot` schema
