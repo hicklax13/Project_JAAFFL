@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from jaaffl.data.crosswalk import Crosswalk, name_norm, team_norm
+from jaaffl.data.crosswalk import Crosswalk, name_norm, player_from_playerid_row, team_norm
 from jaaffl.data.warehouse import Warehouse
 from jaaffl.domain import Player
 
@@ -63,6 +63,40 @@ def playerid_row(**over) -> dict:
     }
     row.update(over)
     return row
+
+
+# --- player_from_playerid_row (shared seed/universe mapper) ---------------------------
+
+
+def test_player_from_playerid_row_maps_canonical() -> None:
+    p = player_from_playerid_row(playerid_row())
+    assert p is not None
+    assert p.player_id == "gsis:00-0034796"
+    assert p.name == "CeeDee Lamb"
+    assert p.position == "WR"  # Position is a StrEnum
+    assert p.nfl_team == "DAL"
+
+
+def test_player_from_playerid_row_skips_without_gsis() -> None:
+    assert player_from_playerid_row(playerid_row(gsis_id=None)) is None
+
+
+def test_player_from_playerid_row_skips_non_league_position() -> None:
+    # db_playerids carries IDP codes (DE/DT/CB/S/...) outside this league's Position set.
+    assert player_from_playerid_row(playerid_row(gsis_id="00-idp", position="DE")) is None
+
+
+def test_player_from_playerid_row_falls_back_to_canonical_name() -> None:
+    p = player_from_playerid_row(playerid_row(name=None))
+    assert p is not None and p.name == "gsis:00-0034796"
+
+
+def test_player_from_playerid_row_keeps_idp_positions_in_enum() -> None:
+    # LB/DL/DB are IDP extras that ARE in the domain Position enum, so the shared mapper KEEPS them
+    # (universe and seed stay aligned by construction). Inert downstream: no ECR/projection join for
+    # them in this non-IDP league, so they never become candidates. Pins the deliberate choice.
+    p = player_from_playerid_row(playerid_row(gsis_id="00-lb", position="LB", name="A Linebacker"))
+    assert p is not None and p.position == "LB"
 
 
 # --- name_norm -----------------------------------------------------------------------
@@ -330,3 +364,14 @@ def test_resolve_name_resolves_dst_by_nickname_token(cx: Crosswalk) -> None:
     case handled by skip-if-unresolved in the FFC adapter.)"""
     cx.upsert(player("gsis:sea", "Seattle Seahawks", pos="DST", team="SEA"))
     assert cx.resolve_name("Seahawks Defense", "SEA", "DST") == "gsis:sea"
+
+
+def test_resolve_name_on_empty_table_returns_none_without_rapidfuzz(
+    monkeypatch: pytest.MonkeyPatch, cx: Crosswalk
+) -> None:
+    """A base ($0) install with an unseeded players table must resolve to None without importing
+    rapidfuzz (which the data extra provides) — else the API resolution path would 500."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "rapidfuzz", None)  # force ImportError if imported
+    assert cx.resolve_name("Nobody Here", "SF", "WR") is None

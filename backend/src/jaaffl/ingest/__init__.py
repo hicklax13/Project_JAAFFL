@@ -19,6 +19,7 @@ from jaaffl.ingest.cbs import (
     normalize_league_settings,
 )
 from jaaffl.ingest.log import DraftLog
+from jaaffl.ingest.resolve import resolve_pick_ids
 
 if TYPE_CHECKING:  # avoid importing the data layer (and its optional deps) at runtime
     from jaaffl.data.warehouse import Warehouse
@@ -32,6 +33,7 @@ __all__ = [
     "normalize_draft_state",
     "normalize_event_data",
     "normalize_league_settings",
+    "resolve_pick_ids",
 ]
 
 

@@ -10,13 +10,14 @@ Ground-truth [VERIFY], closed 2026-07-16 against nflreadpy 0.1.5:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import polars as pl
 import pytest
 
 from jaaffl.data import Crosswalk, Warehouse
-from jaaffl.domain import Player
+from jaaffl.domain import Player, Position
 from jaaffl.providers.base import ProviderError
 from jaaffl.providers.nflverse import NflreadpyProvider
 from tests.test_providers import fake_nflreadpy
@@ -139,3 +140,61 @@ def test_rankings_raises_provider_error_without_data_extra(
     monkeypatch.setitem(sys.modules, "nflreadpy", None)  # force ImportError on `import nflreadpy`
     with pytest.raises(ProviderError):
         NflreadpyProvider(crosswalk=cx).rankings(2026)
+
+
+def test_players_maps_playerids_to_domain_players(monkeypatch: pytest.MonkeyPatch) -> None:
+    df = pl.DataFrame(
+        [
+            _playerid_row(),  # CeeDee Lamb WR DAL
+            _playerid_row(gsis_id="00-0035676", name="Bijan Robinson", position="RB", team="ATL"),
+        ]
+    )
+    fake_nflreadpy(monkeypatch, load_ff_playerids=lambda: df)
+    universe = NflreadpyProvider().players(2026)
+    assert {p.player_id for p in universe} == {"gsis:00-0034796", "gsis:00-0035676"}
+    lamb = next(p for p in universe if p.player_id == "gsis:00-0034796")
+    assert (lamb.name, lamb.position, lamb.nfl_team) == ("CeeDee Lamb", Position.WR, "DAL")
+
+
+def test_players_skips_rows_without_gsis_or_bad_position(monkeypatch: pytest.MonkeyPatch) -> None:
+    df = pl.DataFrame(
+        [
+            _playerid_row(),  # kept
+            _playerid_row(gsis_id=None, name="No GSIS"),  # skipped: no gsis
+            _playerid_row(gsis_id="00-idp", position="DE", name="Edge"),  # skipped: IDP pos
+        ]
+    )
+    fake_nflreadpy(monkeypatch, load_ff_playerids=lambda: df)
+    # One good row survives; the two bad rows are skipped without aborting the batch.
+    assert [p.player_id for p in NflreadpyProvider().players(2026)] == ["gsis:00-0034796"]
+
+
+def test_players_ids_match_seed_canonical(monkeypatch: pytest.MonkeyPatch, cx: Crosswalk) -> None:
+    """The universe id equals the seeded canonical id equals what rankings() resolves to."""
+    df = pl.DataFrame([_playerid_row()])
+    fake_nflreadpy(monkeypatch, load_ff_playerids=lambda: df)
+    provider = NflreadpyProvider(crosswalk=cx)
+    provider.seed_crosswalk()
+    universe = provider.players(2026)
+    assert universe[0].player_id == cx.resolve("fantasypros", "17246") == "gsis:00-0034796"
+
+
+def test_players_raises_provider_error_without_data_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
+    monkeypatch.setitem(sys.modules, "nflreadpy", None)  # force ImportError on `import nflreadpy`
+    with pytest.raises(ProviderError):
+        NflreadpyProvider().players(2026)
+
+
+@pytest.mark.skipif(
+    not os.environ.get("JAAFFL_RUN_NETWORK_TESTS"),
+    reason="opt-in: real nflverse network pull; set JAAFFL_RUN_NETWORK_TESTS=1 to run",
+)
+def test_players_real_nflverse_pull_returns_universe() -> None:
+    pytest.importorskip("nflreadpy")
+    universe = NflreadpyProvider().players(2026)
+    assert len(universe) > 100  # a real universe is thousands of players
+    assert all(p.player_id.startswith("gsis:") for p in universe)
+    positions = {p.position for p in universe}
+    assert {Position.QB, Position.RB, Position.WR, Position.TE}.issubset(positions)
