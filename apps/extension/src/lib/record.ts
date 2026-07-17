@@ -7,7 +7,7 @@
  * are committed (plan §5.10).
  */
 
-const ENDPOINT = "http://127.0.0.1:8787/dev/recordings";
+const ENDPOINT = "http://127.0.0.1:8788/dev/recordings";
 const FLUSH_MS = 5_000;
 const DOM_SNAPSHOT_EVERY = 100; // mutations between board snapshots
 const RECORD_FLAG = "jaaffl_record";

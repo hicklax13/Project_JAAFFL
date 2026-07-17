@@ -9,13 +9,14 @@ description: Verify JAAFFL backend changes by driving the real FastAPI surface �
 
 ```bash
 cd <repo root>
-.venv/Scripts/python.exe -m jaaffl.api            # binds 127.0.0.1:8787
-JAAFFL_API_PORT=8788 .venv/Scripts/python.exe -m jaaffl.api   # if 8787 is busy
+.venv/Scripts/python.exe -m jaaffl.api            # binds 127.0.0.1:8788 (default)
+JAAFFL_API_PORT=8789 .venv/Scripts/python.exe -m jaaffl.api   # if 8788 is also busy
 ```
 
 Gotchas:
-- Port 8787 may be held by an unrelated local process (seen: bun.exe) — don't kill it;
-  use `JAAFFL_API_PORT` instead. Check with `netstat -ano | grep :8787`.
+- The default port is now **8788** (the extension + web default here too). 8787 is often held by an
+  unrelated local process (seen: bun.exe) — don't kill it; the 8788 default sidesteps it. If 8788 is
+  also busy, override with `JAAFFL_API_PORT`. Check with `netstat -ano | grep :8788`.
 - Run from the repo root: `config/engine.json` and `.env` resolve relative to cwd.
 - The venv lives at repo root (`.venv/Scripts/python.exe`); backend installed editable.
 

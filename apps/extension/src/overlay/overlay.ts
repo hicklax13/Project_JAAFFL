@@ -26,7 +26,7 @@ import { subscribeRecs, type RecsSyncState, type WebSocketLike } from "../lib/re
 import { DRAFT_ROOM_CSS } from "./draft-room-tokens";
 import { mountManualPaste } from "./manual-paste";
 
-const RECS_WS_URL = "ws://127.0.0.1:8787/recs/ws";
+const RECS_WS_URL = "ws://127.0.0.1:8788/recs/ws";
 
 // Overlay layout on top of the shared component kit (which already defines .pos/.sc-*/.btn/etc.).
 const OVERLAY_CSS = `

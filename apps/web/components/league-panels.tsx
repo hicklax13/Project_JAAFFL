@@ -124,7 +124,7 @@ export function StatusBanner({
     text = "Engine warming up — precompute in progress (503)";
   } else if (hydrateError === "offline") {
     cls = "is-critical";
-    text = "Companion service unreachable at 127.0.0.1:8787";
+    text = "Companion service unreachable at 127.0.0.1:8788";
   } else if (socket === "closed" || socket === "reconnecting") {
     cls = "is-warning";
     glyph = "◌";

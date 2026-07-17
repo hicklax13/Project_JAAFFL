@@ -71,7 +71,7 @@ describe("subscribeRecs", () => {
       { wsFactory: factory },
     );
     const ws = FakeWs.last();
-    expect(ws.url).toBe("ws://127.0.0.1:8787/recs/ws");
+    expect(ws.url).toBe("ws://127.0.0.1:8788/recs/ws");
     expect(states).toContain("connecting");
     ws.open();
     expect(states).toContain("live");

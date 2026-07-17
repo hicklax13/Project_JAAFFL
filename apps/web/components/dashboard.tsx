@@ -18,7 +18,7 @@ export interface DashboardProps {
 /**
  * The war room (§6.4). Owns the live /recs/ws subscription (via useDraftRoom) and lays out the
  * recommendation + its decomposed "why", the verbatim league settings, roster, and the v1-lite
- * analytics. Read-only: it performs NO CBS write and talks only to 127.0.0.1:8787.
+ * analytics. Read-only: it performs NO CBS write and talks only to 127.0.0.1:8788.
  */
 export function Dashboard({ leagueId = DEFAULT_LEAGUE_ID, api }: DashboardProps): ReactElement {
   const state = useDraftRoom(leagueId, api);

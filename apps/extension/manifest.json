@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "description": "Reads your live CBS fantasy draft in your own session and shows league-specific pick guidance.",
   "permissions": ["storage", "scripting"],
-  "host_permissions": ["https://*.cbssports.com/*", "http://127.0.0.1:8787/*"],
+  "host_permissions": ["https://*.cbssports.com/*", "http://127.0.0.1:8788/*"],
   "background": {
     "service_worker": "src/background/service-worker.ts",
     "type": "module"

@@ -49,5 +49,5 @@ read the real order from the CBS room.
 
 ## Dev quickstart
 
-`make setup` · `make backend-dev` (FastAPI on 127.0.0.1:8787) · `make web-dev` · `make test`
+`make setup` · `make backend-dev` (FastAPI on 127.0.0.1:8788) · `make web-dev` · `make test`
 · backend lint/format via `ruff`; JS via `tsc`. See `CONTRIBUTING.md`.

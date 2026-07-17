@@ -59,7 +59,7 @@ describe("overlay subscribeRecs", () => {
     const states: RecsSyncState[] = [];
     const recs: Recommendation[] = [];
     subscribeRecs(
-      "ws://127.0.0.1:8787/recs/ws",
+      "ws://127.0.0.1:8788/recs/ws",
       { onRecommendation: (r) => recs.push(r), onStatus: (s) => states.push(s) },
       { wsFactory: factory, staleAfterMs: 100000 },
     );
