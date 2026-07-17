@@ -18,6 +18,7 @@ import {
   type RecommendedPick,
   survivalOutlook,
   type WhyTerm,
+  whyTermBar,
   whyTermColorVar,
 } from "@jaaffl/shared";
 
@@ -102,39 +103,26 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 
-/** One Score-Components bar bound to a term (§6.5) — left-anchored or diverging around 0. */
+/** One Score-Components bar bound to a term (§6.5) — geometry + text from the shared whyTermBar. */
 function whyRow(term: WhyTerm, position: Position | null): HTMLElement {
   const row = el("div", "sc-row");
   row.appendChild(el("span", "sc-label", term.label));
   const track = el("div", "sc-track");
-  const color = whyTermColorVar(term.colorRole, position);
-  if (term.anchor === "diverging") {
+  const bar = whyTermBar(term);
+  if (bar.midlinePct !== null) {
     const mid = el("span", "sc-mid");
-    mid.style.left = "50%";
+    mid.style.left = `${bar.midlinePct}%`;
     track.appendChild(mid);
-    const fill = el("span", "sc-fill");
-    if (term.contribution < 0) {
-      fill.style.right = "50%";
-    } else {
-      fill.style.left = "50%";
-    }
-    fill.style.width = `${term.barFraction * 50}%`;
-    fill.style.background = color;
-    track.appendChild(fill);
-  } else {
-    const fill = el("span", "sc-fill");
-    fill.style.left = "0";
-    fill.style.width = `${term.barFraction * 100}%`;
-    fill.style.background = color;
-    track.appendChild(fill);
   }
+  const fill = el("span", "sc-fill");
+  fill.style[bar.anchorEdge] = `${bar.offsetPct}%`;
+  fill.style.width = `${bar.widthPct}%`;
+  fill.style.background = whyTermColorVar(term.colorRole, position);
+  track.appendChild(fill);
   row.appendChild(track);
-  const value = term.key === "mlv" ? term.contribution.toFixed(1) : signed(term.contribution);
-  row.appendChild(el("span", "sc-val", value));
+  row.appendChild(el("span", "sc-val", bar.displayValue));
   return row;
 }
-
-const signed = (n: number): string => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(1)}`;
 
 export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
   document.getElementById("jaaffl-overlay")?.remove();
