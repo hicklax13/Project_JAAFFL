@@ -7,7 +7,15 @@
 import { describe, expect, it } from "vitest";
 
 import type { RecommendedPick } from "../src/recommendation";
-import { decomposeWhy, parseEngineParams, whyTermColorVar } from "../src/why";
+import {
+  decomposeWhy,
+  formatScore,
+  formatSignedScore,
+  parseEngineParams,
+  whyTermBar,
+  whyTermColorVar,
+} from "../src/why";
+import type { WhyTerm, WhyTermBar } from "../src/why";
 
 const REASONING =
   "R1P5 · floor-tilt λ=+0.3 · κ=0.6 · α=0.4 · flex_split=8RB/4WR " +
@@ -149,5 +157,86 @@ describe("whyTermColorVar", () => {
 
   it("falls back to brass when a position role has no position", () => {
     expect(whyTermColorVar("pos", null)).toBe("var(--brass-solid)");
+  });
+});
+
+describe("formatScore / formatSignedScore", () => {
+  it("formatScore is unsigned, one decimal place", () => {
+    expect(formatScore(33.7)).toBe("33.7");
+    expect(formatScore(0)).toBe("0.0");
+  });
+
+  it("formatSignedScore always carries an explicit sign", () => {
+    expect(formatSignedScore(3.4)).toBe("+3.4");
+    expect(formatSignedScore(0)).toBe("+0.0");
+    expect(formatSignedScore(-2.1)).toBe("−2.1");
+  });
+
+  it("signs the minus with U+2212 MINUS SIGN, never an ASCII hyphen", () => {
+    const s = formatSignedScore(-2.1);
+    expect(s.charCodeAt(0)).toBe(0x2212);
+    expect(s).not.toContain("-"); // U+002D ASCII hyphen
+  });
+});
+
+describe("whyTermBar — box geometry + display text (§6.5)", () => {
+  const mkTerm = (over: Partial<WhyTerm>): WhyTerm => ({
+    key: "cliff",
+    label: "Cliff",
+    contribution: 0,
+    rawComponent: 0,
+    anchor: "left",
+    colorRole: "pine",
+    barFraction: 0,
+    ...over,
+  });
+
+  it("left-anchors MLV across the full track, unsigned (MLV is a level, not a delta)", () => {
+    const b: WhyTermBar = whyTermBar(mkTerm({ key: "mlv", contribution: 33.7, barFraction: 1 }));
+    expect(b.anchorEdge).toBe("left");
+    expect(b.offsetPct).toBe(0);
+    expect(b.widthPct).toBeCloseTo(100);
+    expect(b.midlinePct).toBeNull();
+    expect(b.displayValue).toBe("33.7");
+  });
+
+  it("signs a non-MLV left-anchored term and scales width over the full track", () => {
+    const b = whyTermBar(mkTerm({ key: "cliff", contribution: 3.4, barFraction: 0.5 }));
+    expect(b.anchorEdge).toBe("left");
+    expect(b.offsetPct).toBe(0);
+    expect(b.widthPct).toBeCloseTo(50);
+    expect(b.midlinePct).toBeNull();
+    expect(b.displayValue).toBe("+3.4");
+  });
+
+  it("anchors a diverging PENALTY to the RIGHT edge so it paints left of the midline (§6.5)", () => {
+    const b = whyTermBar(
+      mkTerm({ key: "risk", anchor: "diverging", contribution: -2.1, barFraction: 0.5, colorRole: "critical" }),
+    );
+    expect(b.anchorEdge).toBe("right");
+    expect(b.offsetPct).toBe(50);
+    expect(b.widthPct).toBeCloseTo(25); // barFraction * 50
+    expect(b.midlinePct).toBe(50);
+    expect(b.displayValue).toBe("−2.1");
+  });
+
+  it("anchors a diverging BONUS to the LEFT edge so it paints right of the midline", () => {
+    const b = whyTermBar(
+      mkTerm({ key: "risk", anchor: "diverging", contribution: 1.5, barFraction: 0.3, colorRole: "pine" }),
+    );
+    expect(b.anchorEdge).toBe("left");
+    expect(b.offsetPct).toBe(50);
+    expect(b.widthPct).toBeCloseTo(15);
+    expect(b.midlinePct).toBe(50);
+    expect(b.displayValue).toBe("+1.5");
+  });
+
+  it("keeps a zero-magnitude bar left-anchored with zero width", () => {
+    const b = whyTermBar(mkTerm({ key: "cliff", contribution: 0, barFraction: 0 }));
+    expect(b.anchorEdge).toBe("left");
+    expect(b.offsetPct).toBe(0);
+    expect(b.widthPct).toBe(0);
+    expect(b.midlinePct).toBeNull();
+    expect(b.displayValue).toBe("+0.0");
   });
 });

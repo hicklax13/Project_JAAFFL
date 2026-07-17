@@ -14,10 +14,11 @@
  * or sigma (plan §8.2). Every number the UI shows is one of these contributions; nothing is
  * hidden.
  *
- * Rendering guidance (deep-research, resolved): the dashboard renders these terms as a
- * horizontal WATERFALL (a running additive total with signed steps — the defensible form
- * for an additive decomposition, cf. SHAP's own waterfall view); the compact overlay renders
- * them as diverging component bars. Both consume the same `terms` array below.
+ * Rendering guidance (plan §6.5, resolved): BOTH surfaces render these terms as component bars —
+ * left-anchored for MLV/VONA/Cliff, diverging around zero for Risk and signed modifiers. The
+ * Next.js dashboard (`TermRow`) and the Shadow-DOM overlay (`whyRow`) are pure renderers of the
+ * same `terms` array AND the same `whyTermBar` geometry + `whyTermColorVar` colour helpers below,
+ * so "one visual system" holds by construction, not convention.
  */
 import type { Position } from "./league";
 import type { RecommendedPick, ScoreComponents } from "./recommendation";
@@ -213,5 +214,61 @@ export function decomposeWhy(
     dominantKey: dominant.key,
     kappa,
     position,
+  };
+}
+
+export type WhyBarEdge = "left" | "right";
+
+/** Pure render geometry + display text for one WhyTerm — the single source both surfaces consume. */
+export interface WhyTermBar {
+  /** CSS edge to pin the fill to — NOT the visual side. A diverging penalty pins `right` so it
+   *  grows leftward (§6.5 penalty = left/red); naming it a "side" invites an inverted "fix". */
+  anchorEdge: WhyBarEdge;
+  /** Percent offset of the pinned edge within `.sc-track` (0 for left-anchored, 50 for diverging). */
+  offsetPct: number;
+  /** Fill width as a percent of the track. */
+  widthPct: number;
+  /** Percent offset of the `.sc-mid` zero tick, or null when the term has no zero crossing. */
+  midlinePct: number | null;
+  /** The label-adjacent number: MLV unsigned (a level), every other term signed (a delta). */
+  displayValue: string;
+}
+
+const DIVERGING_MIDPOINT_PCT = 50;
+const FULL_TRACK_PCT = 100;
+
+/** Unsigned, one decimal — for levels (MLV) and the reconstructed total. */
+export const formatScore = (n: number): string => n.toFixed(1);
+
+/** Explicitly signed, one decimal — for deltas (every non-MLV term, residual, modifier chips).
+ *  The minus is U+2212 MINUS SIGN, not an ASCII hyphen; why.test.ts pins this by codepoint. */
+export const formatSignedScore = (n: number): string =>
+  `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(1)}`;
+
+/**
+ * Translate a decomposed term into the box geometry + display string both surfaces render, so a
+ * rescale is a one-file edit and the geometry is unit-testable. The `.sc-mid` tick, the diverging
+ * fill's anchor offset, and its max width are all `DIVERGING_MIDPOINT_PCT` because they encode one
+ * fact: zero sits at the track's centre.
+ */
+export function whyTermBar(term: WhyTerm): WhyTermBar {
+  const displayValue =
+    term.key === "mlv" ? formatScore(term.contribution) : formatSignedScore(term.contribution);
+
+  if (term.anchor === "diverging") {
+    return {
+      anchorEdge: term.contribution < 0 ? "right" : "left",
+      offsetPct: DIVERGING_MIDPOINT_PCT,
+      widthPct: term.barFraction * DIVERGING_MIDPOINT_PCT,
+      midlinePct: DIVERGING_MIDPOINT_PCT,
+      displayValue,
+    };
+  }
+  return {
+    anchorEdge: "left",
+    offsetPct: 0,
+    widthPct: term.barFraction * FULL_TRACK_PCT,
+    midlinePct: null,
+    displayValue,
   };
 }
