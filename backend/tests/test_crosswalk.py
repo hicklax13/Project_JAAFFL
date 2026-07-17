@@ -91,6 +91,14 @@ def test_player_from_playerid_row_falls_back_to_canonical_name() -> None:
     assert p is not None and p.name == "gsis:00-0034796"
 
 
+def test_player_from_playerid_row_keeps_idp_positions_in_enum() -> None:
+    # LB/DL/DB are IDP extras that ARE in the domain Position enum, so the shared mapper KEEPS them
+    # (universe and seed stay aligned by construction). Inert downstream: no ECR/projection join for
+    # them in this non-IDP league, so they never become candidates. Pins the deliberate choice.
+    p = player_from_playerid_row(playerid_row(gsis_id="00-lb", position="LB", name="A Linebacker"))
+    assert p is not None and p.position == "LB"
+
+
 # --- name_norm -----------------------------------------------------------------------
 
 

@@ -20,7 +20,7 @@ from jaaffl.api.recs import PROTOCOL_VERSION, SCHEMA_VERSION, RecsHub
 from jaaffl.config import Settings, get_settings
 from jaaffl.data import Crosswalk
 from jaaffl.data.warehouse import Warehouse, open_app_db
-from jaaffl.domain import DraftEvent, DraftEventType, LeagueSettings, Recommendation
+from jaaffl.domain import DraftEvent, DraftEventType, DraftState, LeagueSettings, Recommendation
 from jaaffl.engine.service import RecommendationEngine
 from jaaffl.ingest import DraftLog, IngestResult, handle_event, resolve_pick_ids
 from jaaffl.league.constitution import resolve_league_settings
@@ -97,7 +97,7 @@ def create_app(
     def ws_origin_ok(ws: WebSocket) -> bool:
         return is_origin_allowed(ws.headers.get("origin"), allowed_origins)
 
-    def _resolve_state(state, league_id):
+    def _resolve_state(state: DraftState, league_id: str) -> DraftState:
         """Fill canonical player_ids for name-only (manual-paste) picks — resolving the raw event
         names via the crosswalk — so the engine masks drafted players from the candidate pool."""
         return resolve_pick_ids(

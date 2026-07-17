@@ -85,8 +85,9 @@ def _registry_player_loader(
     canonical player_id (design §4.7 / providers.base).
 
     Degrades to ``{}`` — so the source returns None and ``/recommendation`` 503s, never 500s — when
-    no such provider exists or it does not implement ``players`` yet (the nflverse universe loader
-    is a network TODO). Enabling precompute without a live universe therefore fails soft.
+    no HISTORICAL_STATS provider exists, or its ``players`` is unavailable: a provider that doesn't
+    override the base stub (``NotImplementedError``) or the ``data`` extra is missing
+    (``ProviderError``). Enabling precompute without a live universe therefore fails soft.
     """
 
     def _load(season: int) -> dict[str, Player]:

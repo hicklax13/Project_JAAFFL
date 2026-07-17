@@ -261,6 +261,49 @@ def test_recommendation_masks_name_only_paste_pick(tmp_path: Path) -> None:
     assert "gsis:cmc" not in ranked_ids  # elite RB resolved from the paste name, then masked
 
 
+def test_recommendation_survives_unresolvable_paste_pick(tmp_path: Path) -> None:
+    """An unresolvable manual-paste name degrades gracefully: 200 with a non-empty board (the
+    player is simply left unmasked), never a 500."""
+    specs = [
+        {
+            "pid": f"wr{i}",
+            "pos": Position.WR,
+            "mu": 300.0 - 4 * i,
+            "adp": float(i + 1),
+            "sd": 6.0,
+            "ecr": float(i + 1),
+        }
+        for i in range(12)
+    ]
+    engine = RecommendationEngine()
+    engine.prime("L1", make_context(specs))
+    app = create_app(
+        Settings(jaaffl_data_dir=tmp_path / "data", jaaffl_recordings_dir=tmp_path / "rec"),
+        rec_engine=engine,
+    )
+    # Crosswalk deliberately NOT seeded → the paste name cannot resolve.
+    client = TestClient(app)
+    paste = {
+        "event_type": "pick_made",
+        "league_id": "L1",
+        "pick_number": 1,
+        "source": "paste",
+        "data": {
+            "overall": 1,
+            "round": 1,
+            "pick_in_round": 1,
+            "team_id": "T1",
+            "player_name": "Nobody InThe Crosswalk",
+            "position": "RB",
+            "player_team": "SF",
+        },
+    }
+    client.post("/draft/events", json=paste)
+    res = client.get("/recommendation", params={"league_id": "L1", "team_id": "t0", "limit": 5})
+    assert res.status_code == 200  # graceful: served the board, did not 500
+    assert res.json()["ranked"]
+
+
 def test_pick_ingest_publishes_a_fresh_recommendation_to_recs_ws(tmp_path: Path) -> None:
     """§8.4 step 5: a state-advancing pick recomputes and pushes a rec to /recs/ws subscribers."""
     app = create_app(

@@ -85,6 +85,16 @@ def resolve_pick_ids(
         resolved += 1
         changed = True
 
-    if resolved or unresolved:
-        log.info("drafted_pick_name_resolution", resolved=resolved, unresolved=unresolved)
+    if unresolved:
+        # An unresolved name-only pick means a drafted player is NOT masked and can be recommended
+        # again — a real correctness gap (loudest when the crosswalk was never seeded and EVERY pick
+        # fails). Surface it at WARNING with the offending picks; never a silent swallow.
+        log.warning(
+            "drafted_pick_name_resolution_incomplete",
+            resolved=resolved,
+            unresolved=unresolved,
+            unresolved_overalls=[p.overall for p in new_picks if p.player_id is None],
+        )
+    elif resolved:
+        log.info("drafted_pick_name_resolution", resolved=resolved, unresolved=0)
     return state.model_copy(update={"picks": new_picks}) if changed else state
