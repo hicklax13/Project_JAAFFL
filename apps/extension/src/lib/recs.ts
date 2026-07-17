@@ -1,10 +1,11 @@
 /**
- * Overlay-side WS /recs/ws client (plan §6.2 / §8.5): subscribe to the backend push channel and
- * resynchronize from the server's hello -> snapshot -> rec on every (re)connect — never a replayed
- * stream. Reconnect with jittered backoff; mark the last rec "stale" if a push is overdue.
+ * Overlay-side WS /recs/ws adapter (plan §6.2 / §8.5). A thin surface over the shared
+ * createRecsSocket: it maps the core's phases to the overlay's labels and enables stale marking.
+ * The core owns the state machine — resync from the server's hello -> snapshot -> rec on every
+ * (re)connect (never a replayed stream), capped-backoff reconnect, and validated frame parsing.
  *
- * Owned by the ISOLATED content script (the trust boundary), read-only to the client. Frames run
- * through the shared, validated parseRecsFrame so the overlay never renders an unvalidated payload.
+ * Owned by the ISOLATED content script (the trust boundary), read-only to the client; the shared
+ * parser means the overlay never renders an unvalidated payload.
  */
 import {
   createRecsSocket,
