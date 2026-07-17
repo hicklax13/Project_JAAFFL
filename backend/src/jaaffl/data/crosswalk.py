@@ -115,6 +115,32 @@ def name_norm(name: str, position: str | None = None) -> str:
     return " ".join(tokens)
 
 
+def player_from_playerid_row(row: Mapping) -> Player | None:
+    """Map one ``load_ff_playerids()`` row to a canonical :class:`Player`, or ``None`` to skip.
+
+    Canonical id = the stable ``gsis:<gsis_id>``. Rows without a gsis id, or whose position is
+    outside this league's :data:`_VALID_POSITIONS` (db_playerids carries DE/DT/CB/S/... IDP codes),
+    are skipped. This is the ONE mapper shared by :meth:`Crosswalk.seed_from_playerids` and
+    ``NflreadpyProvider.players`` so the seeded ids and the loaded universe can never diverge.
+    Returns ``None`` on a row that fails :class:`Player` validation, so one bad row can't abort
+    a batch.
+    """
+    gsis = _clean(row.get("gsis_id"))
+    position = str(row.get("position") or "").upper()
+    if gsis is None or position not in _VALID_POSITIONS:
+        return None
+    canonical = f"gsis:{gsis}"
+    try:
+        return Player(
+            player_id=canonical,
+            name=str(row.get("name") or canonical),
+            position=position,
+            nfl_team=_clean(row.get("team")),
+        )
+    except ValidationError:
+        return None
+
+
 class Crosswalk:
     """Resolve source-specific ids to canonical JAAFFL player ids over SQLite."""
 
@@ -297,27 +323,16 @@ class Crosswalk:
         seeded = 0
         try:
             for row in rows:
-                gsis = _clean(row.get("gsis_id"))
-                position = str(row.get("position") or "").upper()
-                if gsis is None or position not in _VALID_POSITIONS:
+                player = player_from_playerid_row(row)  # shared mapper: skip rule + canonical id
+                if player is None:  # no gsis / non-league position / invalid → skip this row
                     continue
-                canonical = f"gsis:{gsis}"
-                try:
-                    self._upsert_player(
-                        conn,
-                        Player(
-                            player_id=canonical,
-                            name=str(row.get("name") or canonical),
-                            position=position,
-                            nfl_team=_clean(row.get("team")),
-                        ),
-                    )
-                    for source, column in _SEED_SOURCES.items():
-                        source_id = _clean(row.get(column))
-                        if source_id is not None:
-                            self._link(conn, source, source_id, canonical, method="deterministic")
-                except ValidationError:
-                    continue  # a single malformed row must not discard the whole batch
+                self._upsert_player(conn, player)
+                for source, column in _SEED_SOURCES.items():
+                    source_id = _clean(row.get(column))
+                    if source_id is not None:
+                        self._link(
+                            conn, source, source_id, player.player_id, method="deterministic"
+                        )
                 seeded += 1
             conn.commit()
         finally:
