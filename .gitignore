@@ -63,3 +63,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# ---- Claude Code tooling (ephemeral worktree checkouts; settings/skills stay tracked) ----
+.claude/worktrees/
