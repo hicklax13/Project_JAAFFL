@@ -1,0 +1,257 @@
+/* ============================================================================
+   JAAFFL — "The Draft Room" design tokens & component kit (SINGLE SOURCE OF TRUTH)
+   A quant terminal with the poise of a private club. Brass on warm ink.
+   Dark-mode-first, fully theme-aware (light + dark), WCAG-AA.
+
+   Promoted verbatim from the published Appendix-B mockups (design/mockups/*.html,
+   plan §6.1). This file is the ONE source consumed by BOTH product surfaces:
+     • apps/web/app/globals.css      — @imports this file (Next.js dashboard).
+     • apps/extension/src/overlay/*  — inlines this file (Vite `?raw`) into the
+                                        Shadow-DOM <style> so the overlay is fully
+                                        self-contained ($0 / local-first / no CDN).
+   A drift guard (apps/extension/tests/overlay-tokens.test.ts) asserts the overlay
+   inlines this exact file, so the two consumers can never diverge (§6.8).
+
+   Selector note: tokens target BOTH `:root` (the web, light DOM) and `:host` (the
+   overlay's Shadow root). `:host` never matches in the light DOM and `:root` never
+   matches inside a shadow tree, so the dual selector is inert in the wrong context
+   and correct in the right one. Custom properties are exempt from `all: initial`
+   (CSS Cascade §), so the overlay's `:host{ all: initial }` isolation does NOT wipe
+   these variables.
+   ============================================================================ */
+
+:root,
+:host {
+  color-scheme: light dark;
+  --plane: #eae7dd; --surface: #f1eee6; --card: #f8f6f0; --card-2: #ffffff;
+  --hairline: rgba(38, 32, 18, 0.12); --hairline-2: rgba(38, 32, 18, 0.2); --wash: rgba(38, 32, 18, 0.04);
+  --ink: #1b1810; --ink-2: #524c3c; --ink-3: #837b66;
+  --brass: #8a6d22; --brass-solid: #b8912f; --brass-bright: #a07e28; --brass-ink: #1a1408; --brass-glow: rgba(184, 145, 47, 0.16);
+  --pine: #2e5d46;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --pos-qb: #e87ba4; --pos-rb: #2a78d6; --pos-wr: #008300; --pos-te: #eda100; --pos-k: #1baf7a; --pos-dst: #eb6834;
+  --grid: rgba(38, 32, 18, 0.09); --axis: rgba(38, 32, 18, 0.28);
+  --e1: 0 1px 0 var(--hairline), 0 1px 2px rgba(20, 16, 6, 0.06);
+  --e2: 0 2px 4px rgba(20, 16, 6, 0.06), 0 12px 28px -12px rgba(20, 16, 6, 0.2);
+  --e3: 0 8px 20px rgba(20, 16, 6, 0.1), 0 34px 70px -24px rgba(20, 16, 6, 0.34);
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, Cambria, serif;
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --fs-xxs: 0.6875rem; --fs-xs: 0.75rem; --fs-sm: 0.8125rem; --fs-base: 0.9375rem; --fs-md: 1.0625rem;
+  --fs-lg: 1.375rem; --fs-xl: 1.875rem; --fs-2xl: 2.75rem; --fs-3xl: 4rem;
+  --r-xs: 3px; --r-sm: 5px; --r: 8px; --r-lg: 11px; --r-xl: 16px; --r-pill: 999px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1); --ease-io: cubic-bezier(0.6, 0.05, 0.2, 0.95);
+  --t-fast: 120ms; --t: 200ms; --t-slow: 380ms;
+  /* Width of the label column on a Score-Components "why" row; the narrow overlay
+     shrinks it (see overlay.ts). */
+  --sc-label-w: 4.6em;
+}
+
+/* ---- Dark theme: system preference (unless a light override is pinned) ---- */
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])),
+  :host(:not([data-theme="light"])) {
+    --plane: #0e0c08; --surface: #14110b; --card: #1b1710; --card-2: #221d14;
+    --hairline: rgba(228, 212, 176, 0.12); --hairline-2: rgba(228, 212, 176, 0.22); --wash: rgba(228, 212, 176, 0.05);
+    --ink: #f3eee1; --ink-2: #c4bba6; --ink-3: #8e8672;
+    --brass: #e7c877; --brass-solid: #c8a24c; --brass-bright: #f1d98f; --brass-ink: #1a1408; --brass-glow: rgba(200, 162, 76, 0.2);
+    --pine: #7fb79a;
+    --pos-qb: #d55181; --pos-rb: #3987e5; --pos-wr: #2fa14b; --pos-te: #c98500; --pos-k: #199e70; --pos-dst: #d95926;
+    --grid: rgba(228, 212, 176, 0.08); --axis: rgba(228, 212, 176, 0.26);
+    --e1: 0 1px 0 rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.5);
+    --e2: 0 2px 6px rgba(0, 0, 0, 0.5), 0 16px 34px -14px rgba(0, 0, 0, 0.66);
+    --e3: 0 10px 30px rgba(0, 0, 0, 0.55), 0 40px 90px -30px rgba(0, 0, 0, 0.8);
+  }
+}
+
+/* ---- Dark theme: explicit toggle (`data-theme="dark"` wins over system) ---- */
+:root[data-theme="dark"],
+:host([data-theme="dark"]) {
+  color-scheme: dark;
+  --plane: #0e0c08; --surface: #14110b; --card: #1b1710; --card-2: #221d14;
+  --hairline: rgba(228, 212, 176, 0.12); --hairline-2: rgba(228, 212, 176, 0.22); --wash: rgba(228, 212, 176, 0.05);
+  --ink: #f3eee1; --ink-2: #c4bba6; --ink-3: #8e8672;
+  --brass: #e7c877; --brass-solid: #c8a24c; --brass-bright: #f1d98f; --brass-ink: #1a1408; --brass-glow: rgba(200, 162, 76, 0.2);
+  --pine: #7fb79a;
+  --pos-qb: #d55181; --pos-rb: #3987e5; --pos-wr: #2fa14b; --pos-te: #c98500; --pos-k: #199e70; --pos-dst: #d95926;
+  --grid: rgba(228, 212, 176, 0.08); --axis: rgba(228, 212, 176, 0.26);
+  --e1: 0 1px 0 rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.5);
+  --e2: 0 2px 6px rgba(0, 0, 0, 0.5), 0 16px 34px -14px rgba(0, 0, 0, 0.66);
+  --e3: 0 10px 30px rgba(0, 0, 0, 0.55), 0 40px 90px -30px rgba(0, 0, 0, 0.8);
+}
+
+/* ---- Light theme: explicit toggle (wins over a dark system preference) ---- */
+:root[data-theme="light"],
+:host([data-theme="light"]) {
+  color-scheme: light;
+}
+
+/* ============================================================================
+   Shared typographic helpers
+   ============================================================================ */
+.mono,
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.eyebrow,
+.label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-xxs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+.rule {
+  height: 1px;
+  background: var(--hairline);
+  border: 0;
+}
+.rule-brass {
+  height: 1px;
+  background: linear-gradient(90deg, var(--brass-solid), transparent);
+  border: 0;
+}
+
+/* ============================================================================
+   Component kit — the vocabulary both surfaces assemble from (plan §6.1)
+   ============================================================================ */
+.card {
+  background: var(--card);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  box-shadow: var(--e1);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: var(--fs-xxs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.28em 0.6em;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--hairline-2);
+  color: var(--ink-2);
+  background: var(--wash);
+}
+
+/* Position chips — identity is NEVER color-alone; the letter always rides along. */
+.pos {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.35em;
+  padding: 0.2em 0.5em;
+  border-radius: var(--r-sm);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xxs);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #fff;
+}
+.pos-QB { background: var(--pos-qb); }
+.pos-RB { background: var(--pos-rb); }
+.pos-WR { background: var(--pos-wr); }
+.pos-TE { background: var(--pos-te); color: #231a02; }
+.pos-K { background: var(--pos-k); }
+.pos-DST { background: var(--pos-dst); }
+
+/* Status pills — semantic only; ALWAYS paired with an icon + word (never color-alone). */
+.stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: var(--fs-xxs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.26em 0.55em;
+  border-radius: var(--r-pill);
+  border: 1px solid transparent;
+}
+.is-good {
+  color: var(--good);
+  background: color-mix(in srgb, var(--good) 15%, transparent);
+  border-color: color-mix(in srgb, var(--good) 34%, transparent);
+}
+.is-warning {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 17%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 42%, transparent);
+}
+.is-critical {
+  color: var(--critical);
+  background: color-mix(in srgb, var(--critical) 15%, transparent);
+  border-color: color-mix(in srgb, var(--critical) 40%, transparent);
+}
+
+.btn {
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  padding: 0.55em 0.95em;
+  border-radius: var(--r);
+  border: 1px solid var(--hairline-2);
+  background: var(--wash);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+.btn:hover { border-color: var(--brass-solid); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--brass-solid);
+  color: var(--brass-ink);
+  border-color: transparent;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+}
+.btn-primary:hover {
+  background: var(--brass-bright);
+  box-shadow: 0 0 0 4px var(--brass-glow);
+}
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Score-Components "why" bars — bind term-for-term to ScoreComponents (§6.5). */
+.sc-row {
+  display: grid;
+  grid-template-columns: var(--sc-label-w) 1fr auto;
+  align-items: center;
+  gap: 0.6em;
+}
+.sc-track {
+  position: relative;
+  height: 7px;
+  border-radius: var(--r-pill);
+  background: var(--wash);
+  overflow: hidden;
+}
+.sc-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--r-pill);
+}
+.sc-mid {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--hairline-2);
+}
+
+/* Reduced-motion: collapse every transition/animation to ~0 (WCAG 2.3.3). */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -22,6 +22,7 @@ from jaaffl.data.warehouse import Warehouse, open_app_db
 from jaaffl.domain import DraftEvent, DraftEventType, LeagueSettings, Recommendation
 from jaaffl.engine.service import RecommendationEngine
 from jaaffl.ingest import DraftLog, IngestResult, handle_event
+from jaaffl.league.constitution import resolve_league_settings
 
 log = structlog.get_logger(__name__)
 
@@ -51,10 +52,22 @@ def create_app(
     app.state.recs_hub = RecsHub()
     app.state.draft_log = DraftLog(settings.jaaffl_data_dir / "app.sqlite")
     app.state.warehouse = Warehouse(settings.jaaffl_data_dir)
-    # The Stage-5 engine. Default has no context yet (→ /recommendation 503 warming up) until a
-    # pre-draft precompute primes it; tests inject a primed engine. Per-league recommendation
-    # history feeds the draft-complete recommendations.jsonl export.
-    app.state.rec_engine = rec_engine if rec_engine is not None else RecommendationEngine()
+    # The Stage-5 engine. An injected engine wins (tests prime one). Otherwise, when the precompute
+    # bridge is enabled, build a registry-backed context_source (the $0 providers) so the engine
+    # lazily precomputes a real DraftContext per league on first use (→ /recommendation 503 → 200);
+    # all provider I/O + network live in that source, not the hot path (§4.7). When disabled (the
+    # default), the engine has no context yet and /recommendation stays 503 "warming up" until a
+    # context is primed. Per-league recommendation history feeds the recommendations.jsonl export.
+    if rec_engine is not None:
+        app.state.rec_engine = rec_engine
+    elif settings.jaaffl_precompute_enabled:
+        from jaaffl.engine.precompute import build_registry_context_source
+
+        app.state.rec_engine = RecommendationEngine(
+            context_source=build_registry_context_source(settings, warehouse=app.state.warehouse)
+        )
+    else:
+        app.state.rec_engine = RecommendationEngine()
     app.state.rec_history = {}
     # Ensure the SQLite app-state schema (league_snapshots, players, id_crosswalk, ...) exists
     # from boot — stdlib sqlite only, no DuckDB import, so the base ($0) install still starts
@@ -284,11 +297,27 @@ def create_app(
         return {"stored": len(batch.frames), "file": str(out)}
 
     @app.get("/league/{league_id}", response_model=LeagueSettings)
-    def league(league_id: str) -> LeagueSettings:
-        # TODO(stage 2): serve the normalized settings ingested from the CBS league pages.
-        raise HTTPException(
-            status_code=404, detail="league settings not yet ingested (roadmap stage 2)"
+    def league(request: Request, league_id: str) -> LeagueSettings:
+        """Serve the normalized LeagueSettings the dashboard needs: the immutable constitution
+        (config/league.json) roster + the CBS scoring overlay (offline cbs_standard_scoring until a
+        live capture lands, TODO(capture); a captured CBS snapshot's scoring wins when present).
+
+        200 for the configured primary league, or any league that already has a CBS snapshot or
+        folded draft events; 404 otherwise. The immutable roster is reproduced verbatim (team_count
+        12, snake, QB1/RB1/WR3/flex1/TE1/K1/DST1/Bench8, draft_order null — never inferred).
+
+        Read-only, but it honours the same Origin allowlist as its siblings — a hostile
+        cross-origin page can't read the constitution even if origins are widened."""
+        require_allowed_origin(request)
+        snapshot = app.state.warehouse.latest_cbs_snapshot(league_id)
+        known = (
+            league_id == settings.jaaffl_league_id
+            or snapshot is not None
+            or bool(app.state.draft_log.events(league_id))
         )
+        if not known:
+            raise HTTPException(status_code=404, detail=f"unknown league '{league_id}'")
+        return resolve_league_settings(league_id, snapshot=snapshot)
 
     return app
 

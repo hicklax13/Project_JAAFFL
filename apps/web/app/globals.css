@@ -1,27 +1,449 @@
-:root {
-  color-scheme: light dark;
+/* The Draft Room design tokens + component kit are the single source of truth in
+   design/tokens/draft-room.css (plan §6.1). Import them first, then layer the
+   dashboard's page chrome on top. @import must precede all other statements. */
+@import "../../../design/tokens/draft-room.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-* {
-  box-sizing: border-box;
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
-  line-height: 1.5;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-.wrap {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 48px 24px;
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.1;
+  text-wrap: balance;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+a {
+  color: var(--brass);
+  text-decoration: none;
+}
+
+::selection {
+  background: var(--brass-glow);
 }
 
 .muted {
-  color: #6b7280;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
 }
 
-code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+/* Screen-reader-only live region (announce the pushed pick without moving focus). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ============================ Layout ============================ */
+.draft-room {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: clamp(14px, 2.4vw, 28px) clamp(14px, 3vw, 36px) 64px;
+}
+.dr-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+.brandmark {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55em;
+}
+.brandmark .word {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.dr-top-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dr-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(360px, 1fr) minmax(300px, 380px);
+  gap: clamp(14px, 1.8vw, 24px);
+  margin-top: 22px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .dr-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.dr-rail,
+.dr-analytics {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.dr-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.dr-foot {
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+  font-size: var(--fs-xs);
+}
+
+/* ============================ Panels ============================ */
+.panel {
+  padding: 16px 18px;
+}
+.panel-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.panel-title {
+  font-family: var(--font-ui);
+  font-size: var(--fs-xxs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+.panel-note {
+  font-size: var(--fs-xxs);
+  color: var(--ink-3);
+}
+
+/* ====================== Recommendation banner ====================== */
+.reco {
+  padding: 0;
+  overflow: hidden;
+}
+.reco-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px 10px;
+  background: linear-gradient(180deg, var(--brass-glow), transparent);
+  border-bottom: 1px solid var(--hairline);
+}
+.reco-who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px 6px;
+}
+.reco-id {
+  min-width: 0;
+}
+.reco-id .name {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  line-height: 1.05;
+}
+.reco-sub {
+  color: var(--ink-3);
+  font-size: var(--fs-xxs);
+  margin-top: 3px;
+}
+.reco-score {
+  margin-left: auto;
+  text-align: right;
+}
+.reco-score b {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--brass);
+  line-height: 0.9;
+}
+.reco-actions {
+  display: flex;
+  gap: 8px;
+  padding: 6px 18px 0;
+}
+.reco-actions .btn {
+  flex: 1;
+}
+.reco .rule-brass {
+  margin: 14px 18px 0;
+}
+.reco .why {
+  padding: 14px 18px 8px;
+}
+.reco-rationale {
+  padding: 0 18px 16px;
+  margin: 0;
+}
+.waiting {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ============================ Roster ============================ */
+.roster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.roster-slot {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--hairline);
+}
+.roster-slot:first-child {
+  border-top: 0;
+}
+.slot-name {
+  font-size: var(--fs-sm);
+}
+.slot-count {
+  font-size: var(--fs-md);
+  color: var(--brass);
+}
+.slot-note {
+  grid-column: 1 / -1;
+  font-size: var(--fs-xxs);
+  color: var(--ink-3);
+}
+
+/* ============================ Top 5 ============================ */
+.alts {
+  padding: 14px 18px 8px;
+}
+.alt-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.alt {
+  display: grid;
+  grid-template-columns: 1.4em auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 4px;
+  border-top: 1px solid var(--hairline);
+  border-radius: 6px;
+}
+.alt:first-child {
+  border-top: 0;
+}
+.alt:hover {
+  background: var(--wash);
+}
+.alt .rk {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  text-align: center;
+}
+.alt .nm {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  min-width: 0;
+}
+.alt .nm small {
+  font-family: var(--font-ui);
+  color: var(--ink-3);
+  font-size: var(--fs-xxs);
+  margin-left: 6px;
+}
+.alt .rt {
+  text-align: right;
+}
+.alt .rt .sc {
+  font-size: var(--fs-sm);
+  color: var(--brass);
+}
+.alt .rt .sv {
+  font-size: var(--fs-xxs);
+  color: var(--ink-3);
+}
+
+/* ============================ Survival ============================ */
+.surv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.surv-row {
+  display: grid;
+  grid-template-columns: auto 1fr 5em auto;
+  gap: 8px;
+  align-items: center;
+}
+.surv-name {
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.surv-track {
+  position: relative;
+  height: 7px;
+  border-radius: var(--r-pill);
+  background: var(--wash);
+  overflow: hidden;
+}
+.surv-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: var(--r-pill);
+}
+.surv-pct {
+  font-size: var(--fs-xs);
+  text-align: right;
+}
+
+/* ============================ Tiers ============================ */
+.tier-ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tier-group {
+  border-left: 2px solid var(--hairline-2);
+  padding-left: 12px;
+}
+.tier-players {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tier-player {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font-size: var(--fs-sm);
+}
+.tier-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tier-cliff {
+  margin-top: 8px;
+}
+
+/* ============================ Reasoning ============================ */
+.reasoning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--wash);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r);
+  font-size: var(--fs-xs);
+}
+.reasoning-params {
+  color: var(--ink-2);
+}
+.reasoning-full {
+  color: var(--ink-3);
+  font-size: var(--fs-xxs);
+  flex-basis: 100%;
+}
+.est-note {
+  margin-left: auto;
+}
+
+/* ============================ Scoring ============================ */
+.scoring-tier {
+  margin-bottom: 10px;
+}
+.tier-brackets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: var(--fs-xxs);
+}
+.bracket {
+  padding: 2px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xs);
+  color: var(--ink-2);
+}
+.scoring-bonus {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  margin-bottom: 8px;
+}
+.provenance {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* ============================ Why (dashboard) ============================ */
+.why .mods {
+  margin-top: 10px;
+}
+.why-total-row {
+  --sc-label-w: 4.6em;
+}
+.why-total-row b {
+  justify-self: end;
 }

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { PositionSchema } from "./league";
+
 /**
  * Auditable decomposition of Score(p) (design §10.3) — never a black box.
  *
@@ -29,6 +31,13 @@ export type ScoreComponents = z.infer<typeof ScoreComponentsSchema>;
 export const RecommendedPickSchema = z.object({
   player_id: z.string(),
   score: z.number(),
+  // Display metadata so a pick is self-describing for the UI (name/pos/team/bye); the engine
+  // fills these from the DraftContext player universe. All optional/nullable — additive, so
+  // pre-enrichment payloads still validate and the UI degrades to the player_id.
+  name: z.string().nullable().optional(),
+  position: PositionSchema.nullable().optional(),
+  nfl_team: z.string().nullable().optional(),
+  bye_week: z.number().int().nullable().optional(),
   projected_points: z.number().nullable().optional(),
   vorp: z.number().nullable().optional(),
   adp: z.number().nullable().optional(),

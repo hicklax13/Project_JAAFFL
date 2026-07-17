@@ -1,5 +1,20 @@
 {
   "$defs": {
+    "Position": {
+      "enum": [
+        "QB",
+        "RB",
+        "WR",
+        "TE",
+        "K",
+        "DST",
+        "DL",
+        "LB",
+        "DB"
+      ],
+      "title": "Position",
+      "type": "string"
+    },
     "RecommendedPick": {
       "properties": {
         "adp": {
@@ -14,6 +29,18 @@
           "default": null,
           "title": "Adp"
         },
+        "bye_week": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bye Week"
+        },
         "components": {
           "anyOf": [
             {
@@ -24,6 +51,18 @@
             }
           ],
           "default": null
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
         },
         "next_turn_availability": {
           "anyOf": [
@@ -40,9 +79,32 @@
           "description": "P(player still available at your next pick).",
           "title": "Next Turn Availability"
         },
+        "nfl_team": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Nfl Team"
+        },
         "player_id": {
           "title": "Player Id",
           "type": "string"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Position"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "projected_points": {
           "anyOf": [

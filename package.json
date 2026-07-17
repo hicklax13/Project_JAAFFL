@@ -15,6 +15,7 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
+    "gen:tokens": "node scripts/gen-overlay-tokens.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yaml,yml}\""
   },
   "devDependencies": {

@@ -89,6 +89,15 @@ class Settings(BaseSettings):
     jaaffl_allowed_origins: str = "chrome-extension://*,http://localhost:3000,http://127.0.0.1:3000"
     jaaffl_season: int = 2026
     jaaffl_engine_params_path: Path = Path("./config/engine.json")
+    # Pre-draft precompute bridge (§4.7). OFF by default so the base install boots to a 503
+    # "warming up" /recommendation until a context is primed (existing behavior / tests). Flip on to
+    # have create_app build a registry-backed context_source (the $0 providers) that turns
+    # /recommendation 503 → 200 end-to-end. All provider I/O stays in precompute.
+    jaaffl_precompute_enabled: bool = False
+    # The primary/demo league id the local dashboard + precompute target (single-user, ADR 0002).
+    # GET /league/{id} serves the immutable constitution for THIS id (or any id that already has a
+    # CBS snapshot or folded draft events); every other id is 404.
+    jaaffl_league_id: str = "cbs-local"
     # Stage-3 ID crosswalk (data/crosswalk.py) Stage-B fuzzy fallback acceptance threshold τ:
     # a name-similarity score (0–1, rapidfuzz/100) at/above this — with exact position + team
     # (team-agnostic for FAs) — is accepted as a 'fuzzy' match; below it stays unresolved for

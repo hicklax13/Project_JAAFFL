@@ -1,5 +1,20 @@
 {
   "$defs": {
+    "Position": {
+      "enum": [
+        "QB",
+        "RB",
+        "WR",
+        "TE",
+        "K",
+        "DST",
+        "DL",
+        "LB",
+        "DB"
+      ],
+      "title": "Position",
+      "type": "string"
+    },
     "ScoreComponents": {
       "description": "Auditable decomposition of Score(p) (design \u00a710.3) \u2014 never a black box.\n\nReconstruction (kappa/alpha and caps from EngineParams):\n    score ~= mlv + kappa*max(0.0, vona) - risk_penalty + cliff_bonus + sum(modifiers.values())\nConvention: ``vona`` is RAW (pre-kappa, may be negative \u2014 the overlay shows urgency even\nwhen gated to 0); ``risk_penalty`` and ``cliff_bonus`` are the APPLIED signed contributions;\n``sigma``/``floor``/``ceiling``/``replacement_baseline`` are descriptive, not summed.",
       "properties": {
@@ -119,6 +134,18 @@
       "default": null,
       "title": "Adp"
     },
+    "bye_week": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Bye Week"
+    },
     "components": {
       "anyOf": [
         {
@@ -129,6 +156,18 @@
         }
       ],
       "default": null
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
     },
     "next_turn_availability": {
       "anyOf": [
@@ -145,9 +184,32 @@
       "description": "P(player still available at your next pick).",
       "title": "Next Turn Availability"
     },
+    "nfl_team": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Nfl Team"
+    },
     "player_id": {
       "title": "Player Id",
       "type": "string"
+    },
+    "position": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Position"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "projected_points": {
       "anyOf": [
