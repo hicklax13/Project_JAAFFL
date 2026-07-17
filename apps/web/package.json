@@ -14,8 +14,6 @@
   },
   "dependencies": {
     "@jaaffl/shared": "workspace:*",
-    "ag-grid-community": "^36.0.1",
-    "ag-grid-react": "^36.0.1",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

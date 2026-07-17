@@ -53,8 +53,26 @@ free DynastyProcess crosswalk. Unresolved rows are logged and skipped (the engin
 and all skill-position starters resolve. If you later want K/DST ADP fully covered, ask Claude to
 add a DST city→team alias map; otherwise it's a safe, low-impact gap (K/DST go in the last rounds).
 
+## 4. Stage 6 (UI) — live data + deferred panels
+
+The dashboard + overlay are built, tested, and render the full decomposed recommendation
+live. Three items are opt-in / follow-up, none block the UI:
+
+- **Live $0 recommendations need a player-universe loader**  `[BLOCKER — when you want live recs
+  without injecting fixtures]`. `NflreadpyProvider.players()` is not implemented yet, so flipping
+  `JAAFFL_PRECOMPUTE_ENABLED=true` on a live server 503s gracefully until a network universe loader
+  (nflverse `load_ff_playerids()`) lands. The 503→200 bridge itself is proven end-to-end through the
+  injection seam (tests). Tell Claude "wire the live player universe" to implement it (needs the
+  nflverse pull; recorded fixtures keep CI offline).
+- **Draft board + pick-log panels**  `[WHEN YOU WANT IT]`. Deferred: they need a `GET /state`
+  endpoint (folded `DraftState`) plus drafted-player name resolution (picks carry `player_id`; the
+  board wants names). The mockups render these as a table + ticker; the deep-research found AG Grid
+  is overkill for a 204-cell static board, so the AG Grid deps were removed to avoid shipping unused
+  weight. Say the word and Claude adds the board (semantic table or AG Grid — your call).
+- **Vercel deploy auth**  `[WHEN YOU WANT IT — otherwise it's localhost]`. The dashboard runs
+  local-first at `127.0.0.1`. Hosting it on Vercel is opt-in and needs your Vercel auth; not done.
+
 ## Later phases (add here as they surface)
 
-- Stage 6 dashboard: Vercel deploy auth.
 - Stage 7 assistant: an OpenAI key (`OPENAI_API_KEY`).
 - Any MCP / connector authorizations a future phase needs.
