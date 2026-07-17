@@ -6,7 +6,12 @@
  * Owned by the ISOLATED content script (the trust boundary), read-only to the client. Frames run
  * through the shared, validated parseRecsFrame so the overlay never renders an unvalidated payload.
  */
-import { parseRecsFrame, type Recommendation, RECS_PROTOCOL_VERSION } from "@jaaffl/shared";
+import {
+  createRecsSocket,
+  type Recommendation,
+  type RecsSocketPhase,
+  type WebSocketLike,
+} from "@jaaffl/shared";
 
 export type RecsSyncState = "connecting" | "live" | "stale" | "disconnected";
 
@@ -16,12 +21,7 @@ export interface RecsOverlayHandlers {
 }
 
 /** Minimal WebSocket surface (the DOM WebSocket satisfies it; tests inject a fake). */
-export interface WebSocketLike {
-  readyState: number;
-  send(data: string): void;
-  close(code?: number, reason?: string): void;
-  addEventListener(type: string, listener: (event: { data?: unknown }) => void): void;
-}
+export type { WebSocketLike };
 
 export interface SubscribeRecsOptions {
   wsFactory?: (url: string) => WebSocketLike;
@@ -30,77 +30,38 @@ export interface SubscribeRecsOptions {
   staleAfterMs?: number;
 }
 
-const DEFAULT_BACKOFF = [250, 500, 1000, 2000, 5000];
+/**
+ * The overlay's phase -> label map (total: every phase answered; `null` = not reported). The
+ * overlay renames `reconnecting` to "disconnected" and reports nothing on teardown (`closed` ->
+ * null), matching what it has always emitted; the other three pass straight through.
+ */
+const PHASE_LABELS: Record<RecsSocketPhase, RecsSyncState | null> = {
+  connecting: "connecting",
+  live: "live",
+  stale: "stale",
+  reconnecting: "disconnected",
+  closed: null,
+};
 
+/**
+ * Subscribe to WS /recs/ws (§6.2 / §8.5) — a thin adapter over the shared createRecsSocket. The
+ * overlay resynchronizes from the server's hello -> snapshot -> rec on every (re)connect, sends no
+ * subscribe frame, and marks the last rec stale when a push is overdue. Returns an unsubscribe
+ * function.
+ */
 export function subscribeRecs(
   url: string,
   handlers: RecsOverlayHandlers,
   opts: SubscribeRecsOptions = {},
 ): () => void {
-  const wsFactory = opts.wsFactory ?? ((u) => new WebSocket(u) as unknown as WebSocketLike);
-  const backoff = opts.backoffMs ?? DEFAULT_BACKOFF;
-  const staleAfterMs = opts.staleAfterMs ?? 3000;
-
-  let closed = false;
-  let attempt = 0;
-  let ws: WebSocketLike | null = null;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let staleTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const setStatus = (state: RecsSyncState) => handlers.onStatus?.(state);
-
-  function armStaleTimer(): void {
-    if (staleTimer) clearTimeout(staleTimer);
-    staleTimer = setTimeout(() => setStatus("stale"), staleAfterMs);
-  }
-
-  function connect(): void {
-    if (closed) return;
-    ws = wsFactory(url);
-    ws.addEventListener("open", () => {
-      attempt = 0;
-      setStatus("live");
-      armStaleTimer();
-    });
-    ws.addEventListener("message", (event) => {
-      const frame = parseRecsFrame(event.data);
-      if (!frame) return;
-      if (frame.type === "ping") {
-        ws?.send(JSON.stringify({ type: "pong", v: RECS_PROTOCOL_VERSION }));
-        return;
-      }
-      const rec =
-        frame.type === "rec"
-          ? frame.recommendation
-          : frame.type === "snapshot"
-            ? frame.recommendation
-            : null;
-      if (rec) {
-        setStatus("live");
-        armStaleTimer();
-        handlers.onRecommendation(rec);
-      }
-    });
-    ws.addEventListener("close", scheduleReconnect);
-    ws.addEventListener("error", () => ws?.close());
-  }
-
-  function scheduleReconnect(): void {
-    if (closed) return;
-    if (staleTimer) clearTimeout(staleTimer);
-    setStatus("disconnected");
-    const delay = backoff[Math.min(attempt, backoff.length - 1)] ?? 0;
-    attempt += 1;
-    reconnectTimer = setTimeout(connect, delay);
-  }
-
-  setStatus("connecting");
-  connect();
-
-  return () => {
-    closed = true;
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    if (staleTimer) clearTimeout(staleTimer);
-    ws?.close();
-  };
+  return createRecsSocket(url, {
+    onRecommendation: handlers.onRecommendation,
+    onStatus: (phase) => {
+      const label = PHASE_LABELS[phase];
+      if (label) handlers.onStatus?.(label);
+    },
+    staleAfterMs: opts.staleAfterMs ?? 3000,
+    backoffMs: opts.backoffMs,
+    wsFactory: opts.wsFactory,
+  });
 }
