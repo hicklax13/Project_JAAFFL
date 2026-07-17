@@ -1,10 +1,12 @@
 import {
+  createRecsSocket,
   type LeagueSettings,
   LeagueSettingsSchema,
-  parseRecsFrame,
   type Recommendation,
   RecommendationSchema,
+  type RecsSocketPhase,
   RECS_PROTOCOL_VERSION,
+  type WebSocketLike,
 } from "@jaaffl/shared";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8787";
@@ -70,12 +72,7 @@ export interface RecsHandlers {
 }
 
 /** Minimal WebSocket surface the client uses (the DOM WebSocket satisfies it; tests inject a fake). */
-export interface WebSocketLike {
-  readyState: number;
-  send(data: string): void;
-  close(code?: number, reason?: string): void;
-  addEventListener(type: string, listener: (event: { data?: unknown }) => void): void;
-}
+export type { WebSocketLike };
 
 export interface SubscribeRecsOptions {
   url?: string;
@@ -84,70 +81,39 @@ export interface SubscribeRecsOptions {
   backoffMs?: number[];
 }
 
-const DEFAULT_BACKOFF = [250, 500, 1000, 2000, 5000];
+/**
+ * The dashboard's phase -> label map (total: every phase answered; `null` = not reported).
+ * `stale` is unreachable here — the dashboard passes no staleAfterMs — so it maps to null; the
+ * other four are the labels the dashboard has always emitted.
+ */
+const PHASE_LABELS: Record<RecsSocketPhase, RecsSocketState | null> = {
+  connecting: "connecting",
+  live: "live",
+  stale: null,
+  reconnecting: "reconnecting",
+  closed: "closed",
+};
 
 /**
- * Subscribe to WS /recs/ws (§8.5): hello -> snapshot -> rec, with reconnect + resync from the
- * server's snapshot (never a replayed stream). Returns an unsubscribe function.
- *
- * On reconnect the server re-sends hello + snapshot, so the UI resynchronizes from the current
- * state rather than replaying a dropped stream; back-pressure is the server's single-slot
- * latest-wins, so we only ever see the newest Recommendation.
+ * Subscribe to WS /recs/ws (§8.5), scoped to a league — a thin adapter over the shared
+ * createRecsSocket. The dashboard re-sends its `subscribe` frame on every (re)connect (the server
+ * answers with hello + snapshot, so the UI resynchronizes from current state rather than replaying
+ * a dropped stream) and enables no stale tracking. Returns an unsubscribe function.
  */
 export function subscribeRecs(
   leagueId: string,
   handlers: RecsHandlers,
   opts: SubscribeRecsOptions = {},
 ): () => void {
-  const url = opts.url ?? `${WS_BASE}/recs/ws`;
-  const wsFactory = opts.wsFactory ?? ((u) => new WebSocket(u) as unknown as WebSocketLike);
-  const backoff = opts.backoffMs ?? DEFAULT_BACKOFF;
-
-  let closed = false;
-  let attempt = 0;
-  let ws: WebSocketLike | null = null;
-  let timer: ReturnType<typeof setTimeout> | null = null;
-
-  const setStatus = (state: RecsSocketState) => handlers.onStatus?.(state);
-
-  function connect(): void {
-    if (closed) return;
-    ws = wsFactory(url);
-    ws.addEventListener("open", () => {
-      attempt = 0;
-      setStatus("live");
-      ws?.send(JSON.stringify({ type: "subscribe", v: RECS_PROTOCOL_VERSION, league_id: leagueId }));
-    });
-    ws.addEventListener("message", (event) => {
-      const frame = parseRecsFrame(event.data);
-      if (!frame) return;
-      if (frame.type === "ping") {
-        ws?.send(JSON.stringify({ type: "pong", v: RECS_PROTOCOL_VERSION }));
-      } else if (frame.type === "rec") {
-        handlers.onRecommendation(frame.recommendation);
-      } else if (frame.type === "snapshot" && frame.recommendation) {
-        handlers.onRecommendation(frame.recommendation);
-      }
-    });
-    ws.addEventListener("close", scheduleReconnect);
-    ws.addEventListener("error", () => ws?.close());
-  }
-
-  function scheduleReconnect(): void {
-    if (closed) return;
-    setStatus("reconnecting");
-    const delay = backoff[Math.min(attempt, backoff.length - 1)] ?? 0;
-    attempt += 1;
-    timer = setTimeout(connect, delay);
-  }
-
-  setStatus("connecting");
-  connect();
-
-  return () => {
-    closed = true;
-    if (timer) clearTimeout(timer);
-    setStatus("closed");
-    ws?.close();
-  };
+  return createRecsSocket(opts.url ?? `${WS_BASE}/recs/ws`, {
+    onRecommendation: handlers.onRecommendation,
+    onStatus: (phase) => {
+      const label = PHASE_LABELS[phase];
+      if (label) handlers.onStatus?.(label);
+    },
+    onOpen: (send) =>
+      send(JSON.stringify({ type: "subscribe", v: RECS_PROTOCOL_VERSION, league_id: leagueId })),
+    backoffMs: opts.backoffMs,
+    wsFactory: opts.wsFactory,
+  });
 }
