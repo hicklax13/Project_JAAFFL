@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     import polars as pl
 
     from jaaffl.data import Crosswalk
+    from jaaffl.domain import Player
 
 log = structlog.get_logger(__name__)
 
@@ -90,6 +91,31 @@ class NflreadpyProvider(FantasyDataProvider):
         if skipped:
             log.info("nflverse_rankings_unresolved_skipped", skipped=skipped, kept=len(out))
         return out
+
+    def players(self, season: int) -> list[Player]:
+        """The FREE nflverse player universe as domain ``Player``s (canonical ``gsis:<gsis_id>``).
+
+        Loads the DynastyProcess ``ff_playerids`` dimension — the SAME source as
+        :meth:`seed_crosswalk`, so the universe ids are exactly the ids the seed + :meth:`rankings`
+        resolve to; the precompute join cannot silently empty out. Rows without a gsis id or with a
+        non-league position (incl. team DSTs, which have no gsis) are SKIPPED and logged, mirroring
+        :meth:`rankings`. ``season`` is accepted for protocol compatibility but does not filter this
+        dimension. Raises :class:`ProviderError` when the ``data`` extra is missing.
+        """
+        from jaaffl.data.crosswalk import player_from_playerid_row
+
+        frame = _import_nflreadpy().load_ff_playerids()
+        universe: list[Player] = []
+        skipped = 0
+        for row in frame.iter_rows(named=True):
+            player = player_from_playerid_row(row)
+            if player is None:
+                skipped += 1
+                continue
+            universe.append(player)
+        if skipped:
+            log.info("nflverse_players_unresolved_skipped", skipped=skipped, kept=len(universe))
+        return universe
 
     def seed_crosswalk(self) -> int:
         """Stage-A seed: pull the nflverse ``ff_playerids`` crosswalk (the DynastyProcess table
