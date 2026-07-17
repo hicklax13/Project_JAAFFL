@@ -12,9 +12,11 @@
 import {
   decomposeWhy,
   type DraftEvent,
+  type Position,
   type Recommendation,
   type RecommendedPick,
   type WhyTerm,
+  whyTermColorVar,
 } from "@jaaffl/shared";
 
 import { subscribeRecs, type RecsSyncState, type WebSocketLike } from "../lib/recs";
@@ -101,17 +103,12 @@ const pct = (p: number): string => `${Math.round(p * 100)}%`;
 const survClass = (p: number): "is-good" | "is-warning" | "is-critical" =>
   p >= 0.55 ? "is-good" : p >= 0.4 ? "is-warning" : "is-critical";
 
-const roleColor = (term: WhyTerm, position: string | null): string => {
-  if (term.colorRole === "pos") return position ? `var(--pos-${position})` : "var(--brass-solid)";
-  return `var(--${term.colorRole === "brass" ? "brass-solid" : term.colorRole})`;
-};
-
 /** One Score-Components bar bound to a term (§6.5) — left-anchored or diverging around 0. */
-function whyRow(term: WhyTerm, position: string | null): HTMLElement {
+function whyRow(term: WhyTerm, position: Position | null): HTMLElement {
   const row = el("div", "sc-row");
   row.appendChild(el("span", "sc-label", term.label));
   const track = el("div", "sc-track");
-  const color = roleColor(term, position);
+  const color = whyTermColorVar(term.colorRole, position);
   if (term.anchor === "diverging") {
     const mid = el("span", "sc-mid");
     mid.style.left = "50%";

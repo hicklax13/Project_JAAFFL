@@ -112,6 +112,20 @@ function humanize(name: string): string {
 }
 
 /**
+ * Map a term's color role to a design-token CSS variable, shared by both surfaces so the "why"
+ * bars colour identically. NOTE: CSS custom-property names are case-sensitive and the tokens are
+ * lowercase (`--pos-rb`), while Position values are uppercase (`"RB"`) — so a "pos" role MUST
+ * lowercase the position or the fill silently fails to resolve. Identity is never colour-alone;
+ * every term also carries its label + signed number.
+ */
+export function whyTermColorVar(role: WhyColorRole, position: Position | null): string {
+  if (role === "pos") {
+    return position ? `var(--pos-${position.toLowerCase()})` : "var(--brass-solid)";
+  }
+  return `var(--${role === "brass" ? "brass-solid" : role})`;
+}
+
+/**
  * Decompose a pick's score into its renderable, sign-preserving contributions, and check
  * the reconstruction identity. Returns null when the pick carries no components.
  */

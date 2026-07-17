@@ -39,6 +39,9 @@ describe("WhyPanel", () => {
     expect(screen.getByTestId("why-term-vona")).toHaveTextContent("7.5"); // kappa*max(0,12.5)
     expect(screen.getByTestId("why-term-risk")).toHaveTextContent("2.1");
     expect(screen.getByTestId("why-term-cliff")).toHaveTextContent("3.4");
+    // the MLV bar colours by position via the LOWERCASE token (CSS custom props are case-sensitive)
+    const mlvFill = document.querySelectorAll<HTMLElement>(".sc-fill")[0]!;
+    expect(mlvFill.style.background).toBe("var(--pos-rb)");
   });
 
   it("proves the reconstruction: the displayed total equals score and reconciles", () => {

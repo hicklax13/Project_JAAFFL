@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { RecommendedPick } from "../src/recommendation";
-import { decomposeWhy, parseEngineParams } from "../src/why";
+import { decomposeWhy, parseEngineParams, whyTermColorVar } from "../src/why";
 
 const REASONING =
   "R1P5 · floor-tilt λ=+0.3 · κ=0.6 · α=0.4 · flex_split=8RB/4WR " +
@@ -131,5 +131,23 @@ describe("decomposeWhy — score reconstruction (§8.2 identity)", () => {
   it("returns null when the pick has no components (pre-v1 payload)", () => {
     const bare: RecommendedPick = { player_id: "p1", score: 10 };
     expect(decomposeWhy(bare, 0.6)).toBeNull();
+  });
+});
+
+describe("whyTermColorVar", () => {
+  it("maps a position role to the LOWERCASE --pos-* token (CSS custom props are case-sensitive)", () => {
+    // Position values are uppercase ("RB"); the tokens define --pos-rb, not --pos-RB.
+    expect(whyTermColorVar("pos", "RB")).toBe("var(--pos-rb)");
+    expect(whyTermColorVar("pos", "DST")).toBe("var(--pos-dst)");
+  });
+
+  it("maps brass to the solid brass token and passes other roles through", () => {
+    expect(whyTermColorVar("brass", null)).toBe("var(--brass-solid)");
+    expect(whyTermColorVar("critical", null)).toBe("var(--critical)");
+    expect(whyTermColorVar("pine", "RB")).toBe("var(--pine)");
+  });
+
+  it("falls back to brass when a position role has no position", () => {
+    expect(whyTermColorVar("pos", null)).toBe("var(--brass-solid)");
   });
 });

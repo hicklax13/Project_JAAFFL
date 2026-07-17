@@ -11,8 +11,11 @@ function current(): Theme {
 }
 
 /**
- * Dark/light toggle. The initial theme is set pre-paint by the inline script in layout.tsx (no
- * flash, hydration-safe); this only flips + persists the `data-theme` attribute the tokens key on.
+ * Dark/light toggle. The tokens default to the viewer's system preference via
+ * @media (prefers-color-scheme), so system-preference users see no flash. An EXPLICIT override
+ * (data-theme in localStorage) is restored client-side in the effect below — so a user who has
+ * pinned a theme against their OS setting sees a brief flash to their override on load (we
+ * deliberately avoid an inline pre-paint script). This flips + persists the data-theme attribute.
  */
 export function ThemeToggle(): React.ReactElement {
   const [theme, setTheme] = useState<Theme>("dark");

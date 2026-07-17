@@ -5,8 +5,8 @@ import {
   type EngineParamsSource,
   type Position,
   type RecommendedPick,
-  type WhyColorRole,
   type WhyTerm,
+  whyTermColorVar,
 } from "@jaaffl/shared";
 
 export interface WhyPanelProps {
@@ -19,15 +19,8 @@ export interface WhyPanelProps {
 const fmt = (n: number): string => n.toFixed(1);
 const fmtSigned = (n: number): string => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(1)}`;
 
-/** Map a term's color role to a design-token CSS variable (identity is never color-alone —
- * every term also carries its label + signed number). */
-function roleColor(role: WhyColorRole, position: Position | null): string {
-  if (role === "pos") return position ? `var(--pos-${position})` : "var(--brass-solid)";
-  return `var(--${role === "brass" ? "brass-solid" : role})`;
-}
-
 function TermRow({ term, position }: { term: WhyTerm; position: Position | null }): ReactElement {
-  const color = roleColor(term.colorRole, position);
+  const color = whyTermColorVar(term.colorRole, position);
   const fill =
     term.anchor === "diverging"
       ? term.contribution < 0
