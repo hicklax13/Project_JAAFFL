@@ -154,3 +154,27 @@ def test_hot_path_touches_no_provider_once_the_context_is_cached(tmp_path) -> No
     assert calls_after_build > 0
     engine.recommend(state)  # cached → no provider touched
     assert sum(p.calls for p in providers) == calls_after_build
+
+
+def test_registry_player_loader_uses_real_players_method(monkeypatch, tmp_path) -> None:
+    """The 503→universe flip at the loader seam: the real NflreadpyProvider.players() (fake
+    nflreadpy) yields a real universe dict through _registry_player_loader — where it used to
+    swallow NotImplementedError to {} (the keystone before players() existed)."""
+    import polars as pl
+
+    from jaaffl.data import Crosswalk, Warehouse
+    from jaaffl.engine.precompute import _registry_player_loader
+    from jaaffl.providers.nflverse import NflreadpyProvider
+    from tests.test_providers import fake_nflreadpy
+
+    Warehouse(tmp_path).init()
+    row = {
+        "gsis_id": "00-0034796", "cbs_id": "2181292", "pfr_id": "LambCe00", "sleeper_id": "6786",
+        "espn_id": "4241389", "yahoo_id": "32692", "fantasypros_id": "17246",
+        "name": "CeeDee Lamb", "position": "WR", "team": "DAL",
+    }
+    fake_nflreadpy(monkeypatch, load_ff_playerids=lambda: pl.DataFrame([row]))
+    provider = NflreadpyProvider(crosswalk=Crosswalk(tmp_path / "app.sqlite"))
+    universe = _registry_player_loader([provider])(2026)
+    assert set(universe) == {"gsis:00-0034796"}
+    assert universe["gsis:00-0034796"].name == "CeeDee Lamb"
