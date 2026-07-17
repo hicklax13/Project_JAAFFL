@@ -33,6 +33,8 @@ read the real order from the CBS room.
   testing / evaluation, deployment, and a sequenced task backlog. **Start here to build.**
 - **[`docs/draft-system-design.md`](docs/draft-system-design.md)** — the comprehensive draft
   strategy + system design + build plan (research, reasoning, architecture, recommendations).
+- **[`docs/live-draft-recording-guide.md`](docs/live-draft-recording-guide.md)** — owner's
+  **step-by-step** guide to recording a live CBS draft (install, launch, the record-mode buttons).
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`ROADMAP.md`](ROADMAP.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md)
 - [`docs/legal-and-compliance.md`](docs/legal-and-compliance.md) — CBS/provider guardrails.
 - [`docs/owner-manual-todo.md`](docs/owner-manual-todo.md) — owner-only tasks (CBS record-mode
