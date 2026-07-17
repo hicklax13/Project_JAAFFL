@@ -71,6 +71,19 @@ live. Three items are opt-in / follow-up, none block the UI:
   weight. Say the word and Claude adds the board (semantic table or AG Grid — your call).
 - **Vercel deploy auth**  `[WHEN YOU WANT IT — otherwise it's localhost]`. The dashboard runs
   local-first at `127.0.0.1`. Hosting it on Vercel is opt-in and needs your Vercel auth; not done.
+- **Status-pill text contrast (WCAG AA) — design-palette decision**  `[WHEN YOU WANT IT]`. The
+  small status pills (`.is-good/.is-warning/.is-critical` in `design/tokens/draft-room.css`) render
+  the accent hue as text on a 15–17% tint of the same hue. In the **light** theme the ~11px pill
+  text falls below the 4.5:1 AA contrast minimum (measured roughly: good ≈2.6:1, warning ≈1.5:1,
+  critical ≈3.6:1; critical is also ≈3.3:1 in dark). This is **not** a functional a11y blocker —
+  identity is never colour-alone (every pill carries a glyph + word, satisfying WCAG 1.4.1), and
+  the surrounding body text/ink/focus are AA — but the pill *text legibility* itself is sub-AA.
+  It was left for you because a correct fix darkens the pill text in light mode (and would brighten
+  it in dark), which touches the Appendix-B brand palette. Concrete proposed fix (no chart/bar
+  impact): add theme-aware `--pill-ink-{good,warning,critical}` tokens (dark shades in light theme,
+  bright in dark) used only by the three `.is-*` selectors' `color`, leaving the tinted
+  backgrounds/borders as-is. Tell Claude "approve the pill-contrast tokens" (or hand over your own
+  brand-safe shades) and it lands with a contrast check baked into the token drift-guard.
 
 ## Later phases (add here as they surface)
 
