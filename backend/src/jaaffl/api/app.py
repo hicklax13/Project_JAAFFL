@@ -297,14 +297,18 @@ def create_app(
         return {"stored": len(batch.frames), "file": str(out)}
 
     @app.get("/league/{league_id}", response_model=LeagueSettings)
-    def league(league_id: str) -> LeagueSettings:
+    def league(request: Request, league_id: str) -> LeagueSettings:
         """Serve the normalized LeagueSettings the dashboard needs: the immutable constitution
         (config/league.json) roster + the CBS scoring overlay (offline cbs_standard_scoring until a
         live capture lands, TODO(capture); a captured CBS snapshot's scoring wins when present).
 
         200 for the configured primary league, or any league that already has a CBS snapshot or
         folded draft events; 404 otherwise. The immutable roster is reproduced verbatim (team_count
-        12, snake, QB1/RB1/WR3/flex1/TE1/K1/DST1/Bench8, draft_order null — never inferred)."""
+        12, snake, QB1/RB1/WR3/flex1/TE1/K1/DST1/Bench8, draft_order null — never inferred).
+
+        Read-only, but it honours the same Origin allowlist as its siblings — a hostile
+        cross-origin page can't read the constitution even if origins are widened."""
+        require_allowed_origin(request)
         snapshot = app.state.warehouse.latest_cbs_snapshot(league_id)
         known = (
             league_id == settings.jaaffl_league_id

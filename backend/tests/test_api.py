@@ -377,6 +377,10 @@ def test_browser_origins_outside_allowlist_are_rejected(client: TestClient) -> N
         headers={"origin": "https://evil.example"},
     )
     assert res.status_code == 403
+    # The read-only /league constitution endpoint honours the same allowlist as its siblings
+    # (defense-in-depth; matters if an operator ever widens jaaffl_allowed_origins).
+    res = client.get("/league/cbs-local", headers={"origin": "https://evil.example"})
+    assert res.status_code == 403
 
 
 def test_extension_and_dashboard_origins_are_allowed(client: TestClient) -> None:
