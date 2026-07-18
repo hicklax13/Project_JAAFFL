@@ -13,12 +13,13 @@ Load it before any draft-system work and compute all baselines against *this* ro
 - **Draft Type:** Snake
 - **Teams:** 12
 - **Draft Order:** Decided in-person, then entered into CBS Sports system
-- **Scoring Format:** Standard
+- **Scoring Format:** Custom (non-PPR) — JAAFFL2025 owner-confirmed values (typed map: `backend/src/jaaffl/league/defaults.py::jaaffl_scoring`)
 - **Draft Rounds:** 17
 - **Roster Slots per Team:** QB = 1, RB = 1, WR = 3, WR/RB = 1, TE = 1, K = 1, DST = 1, Bench = 8
 
 Derived: 9 starters + 8 bench = 17 roster slots = 17 rounds. Flex (`WR/RB`) is **WR or RB only**
-(no TE). Standard = **non-PPR**. Draft order is **not** a plain snake inferred from team count —
+(no TE). Scoring is **custom non-PPR** (JAAFFL2025 — 1 pt/50 pass yds, no offensive turnover
+penalty, single DST points-allowed bracket). Draft order is **not** a plain snake inferred from team count —
 read the real order from the CBS room.
 
 > Any agent that touches draft logic MUST honor the `agent_usage_contract` in

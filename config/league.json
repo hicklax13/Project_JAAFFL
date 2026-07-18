@@ -53,7 +53,7 @@
     "Draft Type: Snake",
     "Teams: 12",
     "Draft Order: Decided in-person, then entered into CBS Sports system",
-    "Scoring Format: Standard",
+    "Scoring Format: Custom (non-PPR) — JAAFFL2025 owner-confirmed 2026-07-17 (see scoring_note; typed map in league/defaults.jaaffl_scoring)",
     "Draft Rounds: 17",
     "Roster Slots per Team: QB = 1, RB = 1, WR = 3, WR/RB = 1, TE = 1, K = 1, DST = 1, Bench = 8"
   ],
