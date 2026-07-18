@@ -59,3 +59,20 @@ def test_kicker_distance_bonuses_are_cumulative() -> None:
         )
         == 5.0
     )
+
+
+def test_individual_kick_return_td_scores_six_like_any_td() -> None:
+    rules, tiers, bonuses = jaaffl_scoring()
+    # Owner rule (Constitution 6i): an individual returner's kick-return TD counts as any TD (6),
+    # scored on the returner (any offensive position) — separate from the DST's own return_td.
+    line = {"kick_return_td": 1, "receiving_yards": 50}
+    pts = league_points(line, rules, Position.WR, tiers=tiers, bonuses=bonuses)
+    assert pts == 6 + 50 * 0.1  # 11.0
+
+
+def test_no_individual_fumble_recovery_points() -> None:
+    rules, tiers, bonuses = jaaffl_scoring()
+    # Owner: NO points for an individual fumble recovery (only the DST's fumble_recovery counts).
+    line = {"rushing_yards": 40, "fumble_recovery": 1}
+    pts = league_points(line, rules, Position.RB, tiers=tiers, bonuses=bonuses)
+    assert pts == 40 * 0.1  # 4.0 — the individual fumble recovery adds nothing
