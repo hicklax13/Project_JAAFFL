@@ -11,7 +11,8 @@ Stat keys are JAAFFL-canonical; the ingest/context layer maps provider columns (
 the scoring VALUES are owner-confirmed. Do NOT edit config/league.json's roster (immutable); a
 captured CBS ``league_settings`` may still override this map (defense-in-depth).
 
-Omitted (no per-player data on the $0 tier; inert): individual fumble-recovery / kick-return TDs.
+An individual kick-return TD scores 6 like any TD (Const. 6i — returner AND DST both score).
+Omitted (owner rule): points for an individual fumble recovery or its TD (only the DST's counts).
 """
 
 from __future__ import annotations
@@ -32,6 +33,8 @@ def jaaffl_scoring() -> tuple[list[ScoringRule], list[ScoringTier], list[Scoring
         ScoringRule(stat="rushing_td", points_per_unit=6.0),
         ScoringRule(stat="receiving_yards", points_per_unit=0.1),
         ScoringRule(stat="receiving_td", points_per_unit=6.0),
+        # Individual kick-return TD = 6 like any TD (Const. 6i — returner AND DST both score).
+        ScoringRule(stat="kick_return_td", points_per_unit=6.0),
         ScoringRule(stat="two_point", points_per_unit=2.0),  # pass/rush/rec conversions
         # Kicker — FG base 3 (linear); PAT 1. Distance bonuses below.
         ScoringRule(stat="fg_made", points_per_unit=3.0, applies_to=_K),
