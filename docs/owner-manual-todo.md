@@ -15,12 +15,13 @@ projections/injuries/rankings mapping and the `CbsPageSnapshot` schema
 (`backend/src/jaaffl/domain/models.py`, `backend/src/jaaffl/providers/cbs_onpage.py`), and — new
 in **Phase 4 (Stage 5 engine)** — two more things:
 
-- **The real CBS scoring VALUES.** The engine scores every projection under
-  `backend/src/jaaffl/league/defaults.py::cbs_standard_scoring()` — CBS's *published* Standard
-  defaults (verified/cited: passing TD = 6, DST dual points+yards brackets, K 50+ = 5). Your live
-  room may be commissioner-customized, so those values stay behind `TODO(capture)` until the
-  capture confirms them; the real map then arrives via `CbsOnPageProvider.league_settings()`
-  (config/league.json stays immutable).
+- **The real CBS scoring VALUES — RESOLVED (owner-confirmed 2026-07-17).** The owner provided the
+  official JAAFFL2025 scoring (passing 1 pt / 50 yds, no offensive turnover penalty, K distance
+  bonuses +1 at 50 / +1 more at 60, DST single points-allowed bracket 0-9 = 6 with no yards-allowed
+  tier), now encoded in `backend/src/jaaffl/league/defaults.py::jaaffl_scoring()`. A captured CBS
+  scoring page still overrides it via `CbsOnPageProvider.league_settings()` if the room ever differs
+  (config/league.json roster stays immutable). Only CBS *frame parsing* (live draft-room shapes)
+  remains capture-blocked.
 - **Calibration against real drafts (E1/E2/E3).** The tunables in `config/engine.json` (flex split
   8RB/4WR, κ, λ-table, α, reliability shrinkage, situation caps) are literature/first-principles
   priors. E1 measures the flex split from live FFC ADP (top-60); E2/E3 tune the weight vector and

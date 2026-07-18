@@ -13,7 +13,7 @@ from jaaffl.domain import (
     RecommendedPick,
     ScoreComponents,
 )
-from jaaffl.league.defaults import cbs_standard_scoring
+from jaaffl.league.defaults import jaaffl_scoring
 from jaaffl.materialize import refresh_projections
 from jaaffl.providers.base import Capability, FantasyDataProvider
 from tests.engine_fixtures import draft_state, engine_params, jaaffl_settings
@@ -46,7 +46,7 @@ def _warehouse(tmp_path) -> Warehouse:
 
 
 def _settings():
-    rules, tiers, bonuses = cbs_standard_scoring()
+    rules, tiers, bonuses = jaaffl_scoring()
     return jaaffl_settings().model_copy(
         update={"scoring": rules, "scoring_tiers": tiers, "scoring_bonuses": bonuses}
     )
