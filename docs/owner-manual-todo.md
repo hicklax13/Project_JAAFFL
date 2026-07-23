@@ -62,12 +62,12 @@ add a DST city→team alias map; otherwise it's a safe, low-impact gap (K/DST go
 The dashboard + overlay are built, tested, and render the full decomposed recommendation
 live. Three items are opt-in / follow-up, none block the UI:
 
-- **Live $0 recommendations need a player-universe loader**  `[BLOCKER — when you want live recs
-  without injecting fixtures]`. `NflreadpyProvider.players()` is not implemented yet, so flipping
-  `JAAFFL_PRECOMPUTE_ENABLED=true` on a live server 503s gracefully until a network universe loader
-  (nflverse `load_ff_playerids()`) lands. The 503→200 bridge itself is proven end-to-end through the
-  injection seam (tests). Tell Claude "wire the live player universe" to implement it (needs the
-  nflverse pull; recorded fixtures keep CI offline).
+- **Live $0 recommendations — ✅ RESOLVED (PR #14, merged `fb338d2`; no owner action needed).**
+  `NflreadpyProvider.players()` now loads the FREE nflverse universe via `load_ff_playerids()`
+  (real pull verified: **4,571 players**), so with `JAAFFL_PRECOMPUTE_ENABLED=true` a live server
+  serves `GET /recommendation` **503→200** on the $0 tier with **no fixture injection**.
+  `ingest/resolve.resolve_pick_ids` masks name-only manual-paste picks upstream of the frozen
+  `recommend()`; recorded fixtures keep CI offline. *(This was the former `[BLOCKER]`; it is done.)*
 - **Draft board + pick-log panels**  `[WHEN YOU WANT IT]`. Deferred: they need a `GET /state`
   endpoint (folded `DraftState`) plus drafted-player name resolution (picks carry `player_id`; the
   board wants names). The mockups render these as a table + ticker; the deep-research found AG Grid
