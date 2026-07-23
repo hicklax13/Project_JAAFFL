@@ -2,13 +2,15 @@
 
 import { useEffect, useReducer, useRef } from "react";
 
-import type { LeagueSettings, Recommendation } from "@jaaffl/shared";
+import type { DraftBoardState, LeagueSettings, Recommendation } from "@jaaffl/shared";
 
 import {
   fetchLeague as realFetchLeague,
+  fetchState as realFetchState,
   getRecommendation as realGetRecommendation,
   type RecommendationResult,
   type RecsSocketState,
+  type StateResult,
   subscribeRecs as realSubscribeRecs,
 } from "../lib/api";
 import type { HydrateError } from "./league-panels";
@@ -18,17 +20,20 @@ export interface DraftRoomApi {
   subscribeRecs: typeof realSubscribeRecs;
   getRecommendation: (leagueId: string) => Promise<RecommendationResult>;
   fetchLeague: (leagueId: string) => Promise<LeagueSettings | null>;
+  fetchState: (leagueId: string) => Promise<StateResult>;
 }
 
 const REAL_API: DraftRoomApi = {
   subscribeRecs: realSubscribeRecs,
   getRecommendation: realGetRecommendation,
   fetchLeague: realFetchLeague,
+  fetchState: realFetchState,
 };
 
 export interface DraftRoomState {
   recommendation: Recommendation | null;
   league: LeagueSettings | null;
+  boardState: DraftBoardState | null;
   socket: RecsSocketState;
   hydrateError: HydrateError;
   lastUpdated: number | null;
@@ -38,6 +43,7 @@ type Action =
   | { type: "rec"; recommendation: Recommendation; at: number }
   | { type: "hydrate"; result: RecommendationResult; at: number }
   | { type: "league"; league: LeagueSettings | null }
+  | { type: "board"; boardState: DraftBoardState | null }
   | { type: "socket"; socket: RecsSocketState };
 
 function statusToError(status: number): HydrateError {
@@ -66,6 +72,10 @@ function reducer(state: DraftRoomState, action: Action): DraftRoomState {
       };
     case "league":
       return { ...state, league: action.league };
+    case "board":
+      // Keep the last board on a null result (transient offline / parse miss) so a blip mid-draft
+      // doesn't blank the board — mirrors how "hydrate" preserves the last recommendation.
+      return { ...state, boardState: action.boardState ?? state.boardState };
     case "socket":
       return { ...state, socket: action.socket };
   }
@@ -74,6 +84,7 @@ function reducer(state: DraftRoomState, action: Action): DraftRoomState {
 const INITIAL: DraftRoomState = {
   recommendation: null,
   league: null,
+  boardState: null,
   socket: "connecting",
   hydrateError: null,
   lastUpdated: null,
@@ -92,16 +103,27 @@ export function useDraftRoom(leagueId: string, apiOverride?: Partial<DraftRoomAp
     const api = apiRef.current;
     let active = true;
 
+    // The board is a pull view (no push channel of its own): hydrate it once, then re-pull on each
+    // /recs/ws push, since a new recommendation means a new pick landed and the board changed.
+    const refreshBoard = () =>
+      void api.fetchState(leagueId).then((result) => {
+        if (active) dispatch({ type: "board", boardState: result.state });
+      });
+
     void api.getRecommendation(leagueId).then((result) => {
       if (active) dispatch({ type: "hydrate", result, at: Date.now() });
     });
     void api.fetchLeague(leagueId).then((league) => {
       if (active) dispatch({ type: "league", league });
     });
+    refreshBoard();
 
     const unsubscribe = api.subscribeRecs(leagueId, {
-      onRecommendation: (recommendation) =>
-        active && dispatch({ type: "rec", recommendation, at: Date.now() }),
+      onRecommendation: (recommendation) => {
+        if (!active) return;
+        dispatch({ type: "rec", recommendation, at: Date.now() });
+        refreshBoard();
+      },
       onStatus: (socket) => active && dispatch({ type: "socket", socket }),
     });
 

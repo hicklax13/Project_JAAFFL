@@ -6,9 +6,14 @@
 import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { type LeagueSettings, LeagueSettingsSchema, type Recommendation } from "@jaaffl/shared";
+import {
+  type DraftBoardState,
+  type LeagueSettings,
+  LeagueSettingsSchema,
+  type Recommendation,
+} from "@jaaffl/shared";
 
-import type { RecsHandlers, RecommendationResult } from "../lib/api";
+import type { RecsHandlers, RecommendationResult, StateResult } from "../lib/api";
 import { Dashboard } from "./dashboard";
 import type { DraftRoomApi } from "./use-recs";
 
@@ -60,7 +65,9 @@ const LEAGUE: LeagueSettings = LeagueSettingsSchema.parse({
   ],
 });
 
-function fakeApi(opts: { recResult?: RecommendationResult; league?: LeagueSettings } = {}): {
+function fakeApi(
+  opts: { recResult?: RecommendationResult; league?: LeagueSettings; stateResult?: StateResult } = {},
+): {
   api: Partial<DraftRoomApi>;
   captured: { handlers?: RecsHandlers };
 } {
@@ -68,6 +75,7 @@ function fakeApi(opts: { recResult?: RecommendationResult; league?: LeagueSettin
   const api: Partial<DraftRoomApi> = {
     getRecommendation: async () => opts.recResult ?? { status: 200, recommendation: null },
     fetchLeague: async () => opts.league ?? null,
+    fetchState: async () => opts.stateResult ?? { status: 200, state: null },
     subscribeRecs: (_id, handlers) => {
       captured.handlers = handlers;
       handlers.onStatus?.("live");
@@ -108,5 +116,35 @@ describe("Dashboard", () => {
     const { api } = fakeApi({ recResult: { status: 404, recommendation: null } });
     render(<Dashboard leagueId="nope" api={api} />);
     expect(await screen.findByText(/unknown league/i)).toBeInTheDocument();
+  });
+
+  it("renders the draft board + pick log from GET /state", async () => {
+    const boardState: DraftBoardState = {
+      league_id: "cbs-local",
+      current_overall_pick: 2,
+      on_the_clock_team_id: "T2",
+      my_team_id: "T1",
+      complete: false,
+      picks: [
+        {
+          overall: 1,
+          round: 1,
+          pick_in_round: 1,
+          team_id: "T1",
+          player_id: "gsis:cmc",
+          name: "Christian McCaffrey",
+          position: "RB",
+          nfl_team: "SF",
+        },
+      ],
+    };
+    const { api } = fakeApi({
+      recResult: { status: 200, recommendation: null },
+      league: LEAGUE,
+      stateResult: { status: 200, state: boardState },
+    });
+    render(<Dashboard leagueId="cbs-local" api={api} />);
+    expect(await screen.findByLabelText("Pick log")).toBeInTheDocument();
+    expect(screen.getAllByText("Christian McCaffrey").length).toBeGreaterThan(0);
   });
 });

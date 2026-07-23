@@ -9,6 +9,7 @@ import type { Recommendation } from "@jaaffl/shared";
 
 import {
   fetchLeague,
+  fetchState,
   getRecommendation,
   type RecsSocketState,
   subscribeRecs,
@@ -204,5 +205,68 @@ describe("getRecommendation", () => {
       status: 200,
       recommendation: null,
     });
+  });
+});
+
+describe("fetchState", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const BOARD = {
+    league_id: "cbs-local",
+    current_overall_pick: 3,
+    on_the_clock_team_id: "T3",
+    my_team_id: "T1",
+    complete: false,
+    picks: [
+      {
+        overall: 1,
+        round: 1,
+        pick_in_round: 1,
+        team_id: "T1",
+        player_id: "gsis:cmc",
+        name: "Christian McCaffrey",
+        position: "RB",
+        nfl_team: "SF",
+      },
+      // A name-only paste pick whose canonical id never resolved still carries its display name.
+      {
+        overall: 2,
+        round: 1,
+        pick_in_round: 2,
+        team_id: "T2",
+        player_id: null,
+        name: "Tyreek Hill",
+        position: "WR",
+        nfl_team: "MIA",
+      },
+    ],
+  };
+
+  it("returns the parsed board on 200", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify(BOARD), { status: 200 })),
+    );
+    const result = await fetchState("cbs-local");
+    expect(result.status).toBe(200);
+    expect(result.state?.picks).toHaveLength(2);
+    expect(result.state?.picks[0]?.name).toBe("Christian McCaffrey");
+    expect(result.state?.picks[1]?.player_id).toBeNull();
+    expect(result.state?.on_the_clock_team_id).toBe("T3");
+  });
+
+  it("reports 404 with a null state for an unknown league", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 404 })));
+    await expect(fetchState("unknown")).resolves.toEqual({ status: 404, state: null });
+  });
+
+  it("reports offline (status 0), never rejects, when the backend is unreachable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    await expect(fetchState("cbs-local")).resolves.toEqual({ status: 0, state: null });
   });
 });
