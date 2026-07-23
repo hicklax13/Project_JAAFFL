@@ -527,3 +527,53 @@ def test_recs_ws_snapshot_replays_latest_rec_to_late_joiners(client: TestClient,
         ws.receive_json()  # hello
         snapshot = ws.receive_json()
         assert Recommendation.model_validate(snapshot["recommendation"]) == rec
+
+
+def _named_paste_pick(overall: int, team_id: str, name: str, pos: str, team: str) -> dict:
+    return {
+        "event_type": "pick_made",
+        "league_id": "L1",
+        "pick_number": overall,
+        "source": "paste",
+        "data": {
+            "overall": overall,
+            "round": 1,
+            "pick_in_round": overall,
+            "team_id": team_id,
+            "player_name": name,
+            "position": pos,
+            "player_team": team,
+        },
+    }
+
+
+def test_state_404_for_unknown_league(client: TestClient) -> None:
+    """No events + no snapshot → unknown league (distinct from a missing route's bare 404)."""
+    res = client.get("/state", params={"league_id": "never-seen"})
+    assert res.status_code == 404
+    assert "unknown" in res.json()["detail"].lower()
+
+
+def test_state_returns_named_board_after_named_pick(client: TestClient) -> None:
+    """GET /state folds the log and enriches each pick with its drafted-player name — even a
+    name-only paste pick whose canonical id never resolved still shows on the board."""
+    client.post("/draft/events", json=_named_paste_pick(1, "T1", "Christian McCaffrey", "RB", "SF"))
+    res = client.get("/state", params={"league_id": "L1"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["league_id"] == "L1"
+    assert len(body["picks"]) == 1
+    pick = body["picks"][0]
+    assert pick["overall"] == 1
+    assert pick["team_id"] == "T1"
+    assert pick["name"] == "Christian McCaffrey"
+    assert pick["position"] == "RB"
+    assert pick["nfl_team"] == "SF"
+
+
+def test_state_honours_origin_allowlist(client: TestClient) -> None:
+    """Read-only, but scoped to the same Origin allowlist as its siblings (defense-in-depth)."""
+    res = client.get(
+        "/state", params={"league_id": "cbs-local"}, headers={"origin": "https://evil.example"}
+    )
+    assert res.status_code == 403
