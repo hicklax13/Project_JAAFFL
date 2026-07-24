@@ -41,9 +41,9 @@ SURVIVAL_CANDIDATES = 6
 # Picks charted beyond your second upcoming pick, so the curve continues past the marker.
 SURVIVAL_TAIL = 6
 
-# Backstop on the charted width (e.g. when the draft order/team slot is unknown and end-of-draft
-# clamping in survival_curves has nothing to clamp against). The real no-picks-left guard is
-# _total_picks below — see _marker_picks and survival_curves.
+# Defensive ceiling. Not the binding term for the fixed 12-team league at today's SURVIVAL_TAIL;
+# kept as headroom against either changing. The real no-picks-left guard is _total_picks below —
+# see _marker_picks and survival_curves.
 SURVIVAL_MAX_SPAN = 60
 
 # Mirrors opponents._draft_rounds: rounds = total roster slots, falling back to the JAAFFL
@@ -161,7 +161,9 @@ def _marker_picks(context: DraftContext, state: DraftState) -> list[int]:
         except ValueError:
             return []
         # Beyond the last pick of the draft = the no-picks-left sentinel, not a real upcoming pick.
-        if pick <= state.current_overall_pick or (total and pick > total):
+        # ``pick in markers`` catches horizon=2 clamping to the same last pick as horizon=1 when
+        # exactly one pick remains, which would otherwise draw two overlapping marker lines.
+        if pick <= state.current_overall_pick or (total and pick > total) or pick in markers:
             break
         markers.append(pick)
     return markers
@@ -187,7 +189,7 @@ def survival_curves(
     else:
         available_set = set(available)
         chosen = [pid for pid in candidates if pid in available_set]
-    chosen = [pid for pid in chosen[:SURVIVAL_CANDIDATES] if pid in context.adp_mean]
+    chosen = [pid for pid in chosen if pid in context.adp_mean][:SURVIVAL_CANDIDATES]
 
     markers = _marker_picks(context, state)
     start = state.current_overall_pick

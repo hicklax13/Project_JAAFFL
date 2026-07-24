@@ -129,13 +129,15 @@ def test_survival_is_monotonically_decreasing_and_bounded() -> None:
         values = [p.survival for p in curve.points]
         assert all(0.0 <= v <= 1.0 for v in values)
         assert values == sorted(values, reverse=True)
+        assert values[0] > values[-1]  # real decay, not a flat/degenerate curve
 
 
 def test_survival_caps_candidate_count() -> None:
-    """One line per candidate, capped so the chart stays readable."""
+    """One line per candidate, capped so the chart stays readable — and the cap is actually
+    reached when enough valid candidates exist, not just an upper bound nothing hits."""
     context = make_context(_specs())
     curves, _ = survival_curves(context, draft_state(10))
-    assert len(curves) <= SURVIVAL_CANDIDATES
+    assert len(curves) == SURVIVAL_CANDIDATES
 
 
 def test_explicit_candidates_are_honoured_in_order() -> None:
@@ -205,3 +207,57 @@ def test_total_picks_mirrors_the_sentinel_opponents_returns() -> None:
     state = draft_state(204, my_team_id="t0")  # t0 has no picks left by the end of the draft
     sentinel = next_overall_pick(settings, state, horizon=1)
     assert _total_picks(settings) == sentinel - 1
+
+
+def test_candidates_without_adp_are_backfilled_not_dropped() -> None:
+    """Filtering must happen BEFORE the cap, or one unranked player shrinks the whole chart."""
+    specs = _specs()
+    # Highest-mu RB has no ADP/ECR at all (an unranked rookie the projections priced).
+    specs.append({"pid": "rb_noadp", "pos": Position.RB, "mu": 999.0})
+    context = make_context(specs)
+
+    curves, _ = survival_curves(context, draft_state(10))
+
+    assert "rb_noadp" not in {c.player_id for c in curves}
+    assert len(curves) == SURVIVAL_CANDIDATES
+
+
+def test_markers_deduplicate_when_exactly_one_pick_remains() -> None:
+    """next_overall_pick clamps horizon=2 to your last pick when only one remains; without a
+    dedupe that draws two overlapping marker lines instead of the single real one."""
+    context = make_context(_specs())
+    state = draft_state(192, my_team_id="t0")  # t0's last pick (193) is the only one left
+    _, markers = survival_curves(context, state)
+    assert markers == [193]
+
+
+def test_board_conditioning_lowers_survival_through_the_public_surface() -> None:
+    """R3 is unit-tested against the primitives in test_opponents.py
+    (test_board_adp_shift_pulls_effective_adp_earlier_under_a_run), but this module's own promise
+    is that the CHART agrees with the advice the engine gives — so the shift must also move
+    survival the right way through THIS surface, not just the primitives underneath it.
+
+    Worked example, mirroring that test's style: t0's picks are 1, 24, 25, 48, 49, ...; at
+    current_overall_pick=55 the since-my-last-pick window is [50, 54] (all WR by ADP here, no RB
+    expected). ``rb_target`` sits just past that window (ADP 56) so its own ADP never counts
+    toward the window's "expected" tally in either scenario.
+    """
+    specs = _specs()
+    specs.append({"pid": "rb_target", "pos": Position.RB, "mu": 130.0, "adp": 56.0, "sd": 6.0})
+    context = make_context(specs)
+
+    no_run = draft_state(55, my_team_id="t0", picks=[])
+    # An opponent takes an RB inside the window — that position going faster than ADP expected.
+    run = draft_state(
+        55,
+        my_team_id="t0",
+        picks=[DraftPick(overall=52, round=5, pick_in_round=4, team_id="t5", player_id="rb0")],
+    )
+
+    curves_no_run, _ = survival_curves(context, no_run, candidates=["rb_target"])
+    curves_run, _ = survival_curves(context, run, candidates=["rb_target"])
+
+    point_no_run = curves_no_run[0].points[0]
+    point_run = curves_run[0].points[0]
+    assert point_no_run.pick == point_run.pick == 55  # same pick, isolating the shift's effect
+    assert point_run.survival < point_no_run.survival
