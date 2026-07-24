@@ -188,7 +188,9 @@ def survival_curves(
         chosen = sorted(available, key=lambda pid: context.mu[pid], reverse=True)
     else:
         available_set = set(available)
-        chosen = [pid for pid in candidates if pid in available_set]
+        # dict.fromkeys dedupes while preserving order — a malformed client sending the same id
+        # twice must not burn two of the SURVIVAL_CANDIDATES slots on identical curves.
+        chosen = [pid for pid in dict.fromkeys(candidates) if pid in available_set]
     chosen = [pid for pid in chosen if pid in context.adp_mean][:SURVIVAL_CANDIDATES]
 
     markers = _marker_picks(context, state)

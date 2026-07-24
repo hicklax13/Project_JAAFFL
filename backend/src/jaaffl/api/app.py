@@ -25,7 +25,7 @@ from jaaffl.engine.analytics import DraftAnalytics, build_analytics
 from jaaffl.engine.service import RecommendationEngine
 from jaaffl.ingest import DraftLog, IngestResult, handle_event, resolve_pick_ids
 from jaaffl.ingest.board import DraftBoardState, build_board_state
-from jaaffl.ingest.log import fold_state
+from jaaffl.ingest.log import LoggedEvent, fold_state
 from jaaffl.league.constitution import resolve_league_settings
 
 log = structlog.get_logger(__name__)
@@ -106,6 +106,22 @@ def create_app(
         return resolve_pick_ids(
             state, app.state.draft_log.events(league_id), app.state.crosswalk.resolve_name
         )
+
+    def _require_events(league_id: str) -> list[LoggedEvent]:
+        """The shared draft-state gate: 404 an unknown league, 409 a known one that hasn't
+        started. Shared by /recommendation, /state, and /analytics so the three never drift."""
+        events = app.state.draft_log.events(league_id)
+        if not events:
+            known = app.state.warehouse.latest_cbs_snapshot(league_id) is not None
+            raise HTTPException(
+                status_code=409 if known else 404,
+                detail=(
+                    f"draft not started for league '{league_id}'"
+                    if known
+                    else f"unknown league '{league_id}'"
+                ),
+            )
+        return events
 
     def publish_recommendation(event: DraftEvent, result: IngestResult) -> None:
         """On a state-advancing, non-deduped event, recompute and push to /recs/ws (§8.4 step 4).
@@ -226,16 +242,7 @@ def create_app(
         """The decomposed recommendation for the current pick (§8.3.3) — the pull twin of the
         /recs/ws push. Loads the folded DraftState and calls the stateless engine recompute."""
         require_allowed_origin(request)
-        if not app.state.draft_log.events(league_id):
-            known = app.state.warehouse.latest_cbs_snapshot(league_id) is not None
-            raise HTTPException(
-                status_code=409 if known else 404,
-                detail=(
-                    f"draft not started for league '{league_id}'"
-                    if known
-                    else f"unknown league '{league_id}'"
-                ),
-            )
+        _require_events(league_id)
         state = app.state.draft_log.state(league_id)
         if as_of_overall_pick is not None:
             # Audit a past pick: reconstruct the board as of then — drop picks at/after that pick
@@ -344,17 +351,7 @@ def create_app(
         allowlist (read-only; defense-in-depth so a widened allowlist still can't leak the board
         cross-origin). Reuses the one event read for both the gate and the fold."""
         require_allowed_origin(request)
-        events = app.state.draft_log.events(league_id)
-        if not events:
-            known = app.state.warehouse.latest_cbs_snapshot(league_id) is not None
-            raise HTTPException(
-                status_code=409 if known else 404,
-                detail=(
-                    f"draft not started for league '{league_id}'"
-                    if known
-                    else f"unknown league '{league_id}'"
-                ),
-            )
+        events = _require_events(league_id)
         state = _resolve_state(fold_state(events), league_id)
         return build_board_state(state, events)
 
@@ -373,17 +370,7 @@ def create_app(
         already holds from the WS push so the survival lines match the ranked picks on screen.
         """
         require_allowed_origin(request)
-        events = app.state.draft_log.events(league_id)
-        if not events:
-            known = app.state.warehouse.latest_cbs_snapshot(league_id) is not None
-            raise HTTPException(
-                status_code=409 if known else 404,
-                detail=(
-                    f"draft not started for league '{league_id}'"
-                    if known
-                    else f"unknown league '{league_id}'"
-                ),
-            )
+        events = _require_events(league_id)
         context = app.state.rec_engine.context_for(league_id)
         if context is None:
             raise HTTPException(

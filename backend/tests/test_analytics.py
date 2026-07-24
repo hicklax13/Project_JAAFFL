@@ -148,6 +148,13 @@ def test_explicit_candidates_are_honoured_in_order() -> None:
     assert [c.player_id for c in curves] == ["wr3", "rb7"]
 
 
+def test_duplicate_candidate_ids_yield_one_curve_each() -> None:
+    """A malformed client must not burn candidate slots on repeats of the same player."""
+    context = make_context(_specs())
+    curves, _ = survival_curves(context, draft_state(10), candidates=["wr1", "wr1", "wr2"])
+    assert [c.player_id for c in curves] == ["wr1", "wr2"]
+
+
 def test_unknown_and_drafted_candidate_ids_are_ignored_not_fatal() -> None:
     """A stale id from the client must degrade a line, never 500 the endpoint."""
     context = make_context(_specs())

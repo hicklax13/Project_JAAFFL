@@ -608,6 +608,7 @@ def test_analytics_returns_both_series_when_primed(tmp_path: Path) -> None:
     assert res.status_code == 200
     body = res.json()
     assert body["league_id"] == "L1"
+    assert body["value_curves"]
     assert {c["position"] for c in body["value_curves"]} <= {"QB", "RB", "WR", "TE"}
     assert body["survival_curves"]
     for curve in body["survival_curves"]:
