@@ -92,4 +92,42 @@ def test_settings_carry_stage_4_provider_fields() -> None:
     assert settings.jaaffl_ffc_scoring == "standard"
     # Mirrors the fixed 12-team league setting but never overrides config/league.json.
     assert settings.jaaffl_ffc_teams == 12
-    assert settings.jaaffl_engine_params_path == Path("./config/engine.json")
+    # Anchored to the repo root, not the CWD — see test_relative_path_settings_* below.
+    assert settings.jaaffl_engine_params_path == ENGINE_JSON
+
+
+def test_relative_path_settings_anchor_to_the_repo_root_not_the_cwd() -> None:
+    """State must land in ONE tree regardless of where the process was launched.
+
+    The service runs from ``backend/`` (pytest, the ``backend-dev`` target) and from the repo root
+    (scripts), so CWD-relative defaults split state across two trees. Concretely: record-mode
+    captures landed in ``backend/apps/extension/fixtures/cbs``, which is NOT covered by
+    .gitignore's root-anchored ``apps/extension/fixtures/cbs/`` rule — so raw frames carrying the
+    owner's league name became committable, exactly what the recording guide promises cannot happen.
+    """
+    settings = Settings()
+
+    assert settings.jaaffl_recordings_dir == REPO_ROOT / "apps" / "extension" / "fixtures" / "cbs"
+    assert settings.jaaffl_data_dir == REPO_ROOT / "data"
+    assert settings.jaaffl_engine_params_path == REPO_ROOT / "config" / "engine.json"
+
+
+def test_relative_path_settings_resolve_the_same_from_any_cwd(monkeypatch, tmp_path: Path) -> None:
+    """The whole point: chdir must not move where captures and the warehouse live."""
+    from_root = Settings().jaaffl_recordings_dir
+
+    monkeypatch.chdir(tmp_path)
+    assert Settings().jaaffl_recordings_dir == from_root
+
+
+def test_absolute_path_settings_pass_through_untouched(tmp_path: Path) -> None:
+    """Explicit absolute overrides (pytest's tmp_path, an owner override) must not be rewritten."""
+    settings = Settings(
+        jaaffl_data_dir=tmp_path / "data",
+        jaaffl_recordings_dir=tmp_path / "rec",
+        jaaffl_engine_params_path=tmp_path / "engine.json",
+    )
+
+    assert settings.jaaffl_data_dir == tmp_path / "data"
+    assert settings.jaaffl_recordings_dir == tmp_path / "rec"
+    assert settings.jaaffl_engine_params_path == tmp_path / "engine.json"

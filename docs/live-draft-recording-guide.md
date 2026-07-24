@@ -153,12 +153,23 @@ badge in Step 8, see [Troubleshooting](#12-troubleshooting).
 
 ## 6. Start the JAAFFL backend (each session)
 
-The extension streams what it records to a small local service. Start it from the project root in
-its **own terminal window** and leave it running:
+The extension streams what it records to a small local service. Start it in its **own terminal
+window** and leave it running:
 
 ```bash
 make backend-dev
 ```
+
+> **Windows / no `make`:** `make` is not installed on the owner's Windows setup, so the line above
+> fails with "command not found". Run the underlying command directly from the **repo root**
+> instead — this is the verified-working invocation:
+>
+> ```bash
+> cd backend && ../.venv/Scripts/python.exe -m jaaffl.api
+> ```
+>
+> Where you launch it from no longer affects where captures land (paths are anchored to the repo
+> root, not the working directory), but the command above is the one that has been tested.
 
 You should see it come up on **`127.0.0.1:8788`**. Confirm it's healthy in a second terminal (or
 your browser):
@@ -299,6 +310,19 @@ pnpm --filter @jaaffl/extension build      # → apps/extension/dist/  (load unp
 make backend-dev                            # start the local service on 127.0.0.1:8788
 curl http://127.0.0.1:8788/health           # verify it's up
 ls -la apps/extension/fixtures/cbs/         # watch captures land while REC is on
+```
+
+**Windows (no `make`) — the verified equivalents:**
+
+```bash
+# Each session: start the backend (from the repo root)
+cd backend && ../.venv/Scripts/python.exe -m jaaffl.api
+```
+
+Verify it's healthy and that the capture sink really writes, in a second terminal:
+
+```bash
+curl http://127.0.0.1:8788/health
 ```
 
 **The one button:** click the pinned **JAAFFL toolbar icon** to start recording (red `REC` badge),

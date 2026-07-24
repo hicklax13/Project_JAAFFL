@@ -10,8 +10,11 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# backend/src/jaaffl/config.py → the repo root is parents[3].
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class EngineParams(BaseModel):
@@ -107,6 +110,25 @@ class Settings(BaseSettings):
     # curation. Git-ignored — raw recordings may carry league names; only redacted
     # goldens are committed (plan §5.10).
     jaaffl_recordings_dir: Path = Path("./apps/extension/fixtures/cbs")
+
+    @field_validator("jaaffl_data_dir", "jaaffl_engine_params_path", "jaaffl_recordings_dir")
+    @classmethod
+    def _anchor_to_repo_root(cls, value: Path) -> Path:
+        """Resolve a RELATIVE configured path against the repo root, never the process CWD.
+
+        The service legitimately runs from more than one directory — ``backend/`` for pytest and
+        the ``backend-dev`` target, the repo root for scripts — so CWD-relative defaults silently
+        split state across two trees. That was not cosmetic: record-mode captures landed in
+        ``backend/apps/extension/fixtures/cbs``, which .gitignore does NOT cover (its
+        ``apps/extension/fixtures/cbs/`` rule contains a slash and is therefore anchored to the
+        repo root). Raw frames carry the owner's league name, so they became committable — exactly
+        what docs/live-draft-recording-guide.md promises cannot happen. The warehouse split the
+        same way, producing a second ``backend/data/app.sqlite``.
+
+        Absolute values pass through untouched, so pytest's ``tmp_path`` fixtures and a deliberate
+        owner override still win.
+        """
+        return value if value.is_absolute() else (_REPO_ROOT / value).resolve()
 
     # FantasyFootballCalculator ADP ($0 tier; stage 4). scoring/teams MIRROR the immutable
     # config/league.json ("Standard"/12) — surfaced (never silently changed) if they diverge.
