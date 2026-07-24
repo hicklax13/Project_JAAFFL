@@ -190,9 +190,7 @@ def optimize_roster(
     players = list(player_values)
     model = cp_model.CpModel()
     assign = {
-        (pid, s): model.new_bool_var(f"x_{pid}_{s}")
-        for pid in players
-        for s in range(len(slots))
+        (pid, s): model.new_bool_var(f"x_{pid}_{s}") for pid in players for s in range(len(slots))
     }
     for pid in players:
         pos = str(player_positions.get(pid, ""))
@@ -221,7 +219,5 @@ def optimize_roster(
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return sorted(forced)  # infeasible — best effort (should not happen with the ≤1 relaxation)
     return [
-        pid
-        for pid in players
-        if any(solver.value(assign[(pid, s)]) for s in range(len(slots)))
+        pid for pid in players if any(solver.value(assign[(pid, s)]) for s in range(len(slots)))
     ]
