@@ -319,4 +319,15 @@ describe("fetchAnalytics", () => {
     await fetchAnalytics("L1", ["a", "b"]);
     expect(spy.mock.calls[0]![0]).toContain("candidates=a%2Cb");
   });
+
+  it("omits the candidates param entirely for an empty list", async () => {
+    // An empty array must behave like `undefined` — sending `candidates=` would make the backend
+    // parse an empty id list instead of falling back to its own top-6 by projection.
+    const spy = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ nope: true }) });
+    vi.stubGlobal("fetch", spy);
+    await fetchAnalytics("L1", []);
+    expect(spy.mock.calls[0]![0]).not.toContain("candidates");
+  });
 });
