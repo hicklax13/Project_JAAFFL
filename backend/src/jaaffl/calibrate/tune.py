@@ -12,6 +12,8 @@ Objective + gate are pure/scipy (base install); ``run_study`` needs the ``engine
 
 from __future__ import annotations
 
+import dataclasses
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from statistics import mean
 from typing import TYPE_CHECKING
@@ -42,6 +44,32 @@ def sim_context_from_draft_context(dc: DraftContext) -> SimContext:
         adp_stdev=dict(dc.adp_sd),
         sigma={pid: proj.sigma for pid, proj in dc.projections.items()},
         cliff_bonus=dict(dc.cliff_bonus),
+    )
+
+
+def cap_sim_pool(ctx: SimContext, cap: int, *, per_position: int = 20) -> SimContext:
+    """Trim a (real) pool to the top ``cap`` by value PLUS the top ``per_position`` of EACH
+    position. A plain value cap drops K/DST (low μ), but the sim needs them to fill K/DST slots and
+    for reliability shrinkage to bite — this keep-back preserves every rosterable position."""
+    by_value = sorted(ctx.value, key=lambda pid: ctx.value[pid], reverse=True)
+    keep = set(by_value[:cap])
+    by_position: dict = defaultdict(list)
+    for pid in by_value:
+        by_position[ctx.position[pid]].append(pid)
+    for players in by_position.values():
+        keep.update(players[:per_position])
+
+    def trim(mapping: Mapping) -> dict:
+        return {pid: value for pid, value in mapping.items() if pid in keep}
+
+    return dataclasses.replace(
+        ctx,
+        value=trim(ctx.value),
+        position=trim(ctx.position),
+        adp=trim(ctx.adp),
+        adp_stdev=trim(ctx.adp_stdev),
+        sigma=trim(ctx.sigma),
+        cliff_bonus=trim(ctx.cliff_bonus),
     )
 
 
@@ -176,9 +204,11 @@ def params_from_trial(
     modifier_cap: float,
     *,
     base: EngineParams,
+    reliability: Mapping[str, float] | None = None,
 ) -> EngineParams:
-    """Build an :class:`EngineParams` from a trial's (κ, α, λ-per-band, cap), carrying every other
-    field from ``base`` (so a tuned vector is a minimal, valid edit of the current config)."""
+    """Build an :class:`EngineParams` from a trial's (κ, α, λ-per-band, cap, and optional
+    per-position ``reliability`` shrinkage), carrying every other field from ``base`` (so a tuned
+    vector is a minimal, valid edit of the current config)."""
     lambda_schedule = [
         {"rounds": list(rounds), "lambda": lam}
         for (rounds, _range), lam in zip(LAMBDA_BANDS, lam_values, strict=True)
@@ -187,6 +217,11 @@ def params_from_trial(
     caps = dict(data.get("caps") or {})
     caps["modifier_abs_max"] = modifier_cap
     data.update(kappa=kappa, alpha=alpha, lambda_schedule=lambda_schedule, caps=caps)
+    if reliability:
+        data["reliability_shrinkage"] = {
+            **(data.get("reliability_shrinkage") or {}),
+            **reliability,
+        }
     return EngineParams.model_validate(data)
 
 
@@ -215,11 +250,18 @@ def run_study(
             for i, (_rounds, (lo, hi)) in enumerate(LAMBDA_BANDS)
         ]
         cap = trial.suggest_float("modifier_cap", 3.0, 5.0)
-        params = params_from_trial(kappa, alpha, lam, cap, base=base)
+        reliability = {
+            "K": trial.suggest_float("reliability_k", 0.1, 1.0),
+            "DST": trial.suggest_float("reliability_dst", 0.1, 1.0),
+        }
+        params = params_from_trial(kappa, alpha, lam, cap, base=base, reliability=reliability)
         return objective_value(params, ctx, opponents=opponents, seeds=seeds, teams=teams)
 
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed))
     study.optimize(objective, n_trials=n_trials)
     best = study.best_params
     lam = [best.get(f"lam{i}", lo) for i, (_r, (lo, _hi)) in enumerate(LAMBDA_BANDS)]
-    return params_from_trial(best["kappa"], best["alpha"], lam, best["modifier_cap"], base=base)
+    reliability = {"K": best["reliability_k"], "DST": best["reliability_dst"]}
+    return params_from_trial(
+        best["kappa"], best["alpha"], lam, best["modifier_cap"], base=base, reliability=reliability
+    )

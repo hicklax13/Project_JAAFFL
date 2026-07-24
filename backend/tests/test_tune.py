@@ -133,6 +133,41 @@ def test_run_tournament_ranks_our_agent_against_baselines() -> None:
         assert {"p_value", "mean_diff", "min_slot_diff", "beats"} <= comparison.keys()
 
 
+def test_cap_sim_pool_keeps_low_value_positions() -> None:
+    """A plain top-N value cap drops K/DST (low μ) — but the sim needs them to fill K/DST slots and
+    for reliability shrinkage to bite. Per-position keep-back preserves them."""
+    from jaaffl.calibrate.tune import cap_sim_pool
+
+    value = {f"rb{i}": float(300 - i) for i in range(30)}
+    value.update({f"dst{i}": float(50 - i) for i in range(3)})
+    position = {p: (Position.RB if p.startswith("rb") else Position.DST) for p in value}
+    ctx = SimContext(
+        value=value,
+        position=position,
+        baselines=dict.fromkeys(Position, 40.0),
+        slots=[],
+        roster_size=17,
+    )
+    capped = cap_sim_pool(ctx, 2, per_position=2)
+    assert {"rb0", "rb1", "dst0", "dst1"} <= set(capped.value)  # a low-value DST survives the cap
+
+
+def test_params_from_trial_sets_reliability_shrinkage() -> None:
+    from jaaffl.calibrate.tune import params_from_trial
+
+    p = params_from_trial(
+        0.6,
+        0.4,
+        [0.3, 0.2, 0.0, -0.3, -0.4],
+        4.0,
+        reliability={"K": 0.5, "DST": 0.3},
+        base=EngineParams(),
+    )
+    assert p.reliability_shrinkage["K"] == 0.5
+    assert p.reliability_shrinkage["DST"] == 0.3
+    assert p.kappa == 0.6  # the other tuned fields are still set
+
+
 def test_sim_context_from_draft_context_maps_the_fields() -> None:
     """The DraftContext -> SimContext adapter that lets the E2 study run on real precompute data."""
     from types import SimpleNamespace

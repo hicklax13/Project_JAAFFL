@@ -162,6 +162,29 @@ def test_score_agent_vona_prefers_the_scarcer_position() -> None:
     assert ScoreAgent(no_vona).pick(["wr_a", "rb_a"], [], ctx) in {"wr_a", "rb_a"}
 
 
+def test_score_agent_reliability_shrinkage_defers_a_high_variance_dst() -> None:
+    from jaaffl.engine.optimize import expand_starting_slots
+
+    # A DST outvalues an RB on raw μ, but reliability shrinkage (R1) pulls the noisy DST toward its
+    # replacement so our agent takes the RB and defers the DST (the "don't draft K/DST early" fix).
+    ctx = SimContext(
+        value={"rb_a": 190.0, "dst_a": 200.0},
+        position={"rb_a": Position.RB, "dst_a": Position.DST},
+        baselines=dict.fromkeys(Position, 50.0),
+        slots=expand_starting_slots(_settings()),
+        roster_size=17,
+    )
+    no_rel = EngineParams(kappa=0.0, alpha=0.0, lambda_schedule=[], reliability_shrinkage={})
+    assert (
+        ScoreAgent(no_rel).pick(["rb_a", "dst_a"], [], ctx) == "dst_a"
+    )  # DST MLV 150 > RB MLV 140
+    shrink = EngineParams(
+        kappa=0.0, alpha=0.0, lambda_schedule=[], reliability_shrinkage={"DST": 0.1}
+    )
+    # DST eff = 50 + 0.1·(200−50) = 65 → MLV 15 << RB MLV 140.
+    assert ScoreAgent(shrink).pick(["rb_a", "dst_a"], [], ctx) == "rb_a"
+
+
 def test_simulate_draft_produces_twelve_complete_disjoint_rosters() -> None:
     ctx = _big_ctx()
     rosters = simulate_draft(
