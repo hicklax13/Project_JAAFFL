@@ -32,7 +32,12 @@ from jaaffl.calibrate.tune import (
 from jaaffl.config import EngineParams, get_settings
 from jaaffl.domain import LeagueSettings, Position, RosterSlot
 from jaaffl.engine.optimize import expand_starting_slots
-from jaaffl.engine.simulate import AdpNoiseAgent, NeedBasedAgent, SimContext, VbdOnlyAgent
+from jaaffl.engine.simulate import (
+    AdpNoiseAgent,
+    NeedBasedAgent,
+    SimContext,
+    VbdOnlyAgent,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,7 +51,10 @@ def _demo_settings() -> LeagueSettings:
             RosterSlot(slot="RB", eligible_positions=[Position.RB], count=1, starting=True),
             RosterSlot(slot="WR", eligible_positions=[Position.WR], count=2, starting=True),
             RosterSlot(
-                slot="WR/RB", eligible_positions=[Position.WR, Position.RB], count=1, starting=True
+                slot="WR/RB",
+                eligible_positions=[Position.WR, Position.RB],
+                count=1,
+                starting=True,
             ),
             RosterSlot(slot="TE", eligible_positions=[Position.TE], count=1, starting=True),
             RosterSlot(
@@ -114,16 +122,25 @@ def _real_context(cap: int) -> SimContext:
         raise SystemExit("[E2] set jaaffl_season for --real")
     warehouse = Warehouse(settings.jaaffl_data_dir)
     crosswalk = Crosswalk(warehouse.app_sqlite)
-    print("[E2] seeding nflverse universe + building the real DraftContext ...", file=sys.stderr)
+    print(
+        "[E2] seeding nflverse universe + building the real DraftContext ...",
+        file=sys.stderr,
+    )
     NflreadpyProvider(crosswalk=crosswalk).seed_crosswalk()
     source = build_registry_context_source(
-        settings, warehouse=warehouse, crosswalk=crosswalk, season=settings.jaaffl_season
+        settings,
+        warehouse=warehouse,
+        crosswalk=crosswalk,
+        season=settings.jaaffl_season,
     )
     dc = source(settings.jaaffl_league_id)
     if dc is None:
         raise SystemExit("[E2] precompute returned no context (empty universe/projections)")
     ctx = sim_context_from_draft_context(dc)
-    print(f"[E2] real pool: {len(ctx.value)} players -> capped to top {cap}", file=sys.stderr)
+    print(
+        f"[E2] real pool: {len(ctx.value)} players -> capped to top {cap}",
+        file=sys.stderr,
+    )
     return _cap_pool(ctx, cap)
 
 
@@ -144,9 +161,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--trials", type=int, default=15, help="Optuna trials.")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--train-seeds",
+        type=int,
+        default=2,
+        help="Draft seeds/trial (study cost scales with this).",
+    )
+    parser.add_argument(
+        "--eval-seeds",
+        type=int,
+        default=2,
+        help="Held-out seeds — gate power (one-shot, cheap).",
+    )
     parser.add_argument("--pool-cap", type=int, default=300, help="Top-N players (--real).")
     parser.add_argument(
-        "--write", action="store_true", help="Persist to config/engine.json IF promoted (--real)."
+        "--write",
+        action="store_true",
+        help="Persist to config/engine.json IF promoted (--real).",
     )
     parser.add_argument("--config", type=Path, default=_REPO_ROOT / "config" / "engine.json")
     args = parser.parse_args(argv)
@@ -156,11 +187,20 @@ def main(argv: list[str] | None = None) -> int:
     baseline = EngineParams()  # the frozen §10.3 defaults
     train_opponents = [AdpNoiseAgent(), VbdOnlyAgent()]
     heldout_opponents = [NeedBasedAgent()]  # held-out opponent — never the training mix
-    train_seeds, heldout_seeds = [1, 2], [7, 8]  # held-out seeds too
+    train_seeds = list(range(1, args.train_seeds + 1))
+    heldout_seeds = list(range(1001, 1001 + args.eval_seeds))  # disjoint from the training seeds
 
-    print(f"[E2] Optuna study: {args.trials} trials, seed {args.seed} ...", file=sys.stderr)
+    print(
+        f"[E2] study: {args.trials} trials, seed {args.seed}, "
+        f"{len(train_seeds)}x train / {len(heldout_seeds)}x eval seeds ...",
+        file=sys.stderr,
+    )
     tuned = run_study(
-        ctx, n_trials=args.trials, seed=args.seed, opponents=train_opponents, seeds=train_seeds
+        ctx,
+        n_trials=args.trials,
+        seed=args.seed,
+        opponents=train_opponents,
+        seeds=train_seeds,
     )
 
     tuned_slots = evaluate_params(tuned, ctx, opponents=heldout_opponents, seeds=heldout_seeds)
