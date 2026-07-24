@@ -1390,7 +1390,12 @@ const BOX = { width: 320, height: 120 };
 /** Describe the curve in words — the chart's accessible name, never colour-alone (WCAG 1.4.1). */
 function describe(curve: PositionCurve): string {
   const best = curve.remaining[0];
-  const taken = curve.full.length - curve.remaining.length;
+  // CORRECTED post-review: `remaining` is NOT a subset of `full` — the backend caps BOTH
+  // independently at CURVE_DEPTH (36), so once a position pool exceeds 36 (RB/WR always do),
+  // drafting the top players just backfills `remaining` from rank 37+. Subtracting lengths then
+  // reports ~0 taken no matter how many are gone. Count by identity instead.
+  const remainingIds = new Set(curve.remaining.map((p) => p.player_id));
+  const taken = curve.full.filter((p) => !remainingIds.has(p.player_id)).length;
   if (!best) return `${curve.position} value curve: every charted player is drafted.`;
   const cliff = curve.remaining[1] ? best.vor - curve.remaining[1].vor : 0;
   return (
