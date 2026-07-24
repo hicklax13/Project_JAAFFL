@@ -13,7 +13,7 @@ import {
   type Recommendation,
 } from "@jaaffl/shared";
 
-import type { RecsHandlers, RecommendationResult, StateResult } from "../lib/api";
+import type { AnalyticsResult, RecsHandlers, RecommendationResult, StateResult } from "../lib/api";
 import { Dashboard } from "./dashboard";
 import type { DraftRoomApi } from "./use-recs";
 
@@ -66,7 +66,12 @@ const LEAGUE: LeagueSettings = LeagueSettingsSchema.parse({
 });
 
 function fakeApi(
-  opts: { recResult?: RecommendationResult; league?: LeagueSettings; stateResult?: StateResult } = {},
+  opts: {
+    recResult?: RecommendationResult;
+    league?: LeagueSettings;
+    stateResult?: StateResult;
+    analyticsResult?: AnalyticsResult;
+  } = {},
 ): {
   api: Partial<DraftRoomApi>;
   captured: { handlers?: RecsHandlers };
@@ -76,6 +81,9 @@ function fakeApi(
     getRecommendation: async () => opts.recResult ?? { status: 200, recommendation: null },
     fetchLeague: async () => opts.league ?? null,
     fetchState: async () => opts.stateResult ?? { status: 200, state: null },
+    // Default to the honest "engine warming" shape — never a real fetch, so the suite stays
+    // hermetic (network-free) whether or not a backend happens to be listening on 127.0.0.1:8788.
+    fetchAnalytics: async () => opts.analyticsResult ?? { status: 503, analytics: null },
     subscribeRecs: (_id, handlers) => {
       captured.handlers = handlers;
       handlers.onStatus?.("live");
