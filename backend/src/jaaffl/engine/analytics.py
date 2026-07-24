@@ -18,7 +18,7 @@ from collections.abc import Iterable, Sequence
 
 from pydantic import BaseModel, Field
 
-from jaaffl.domain import DraftState, Position
+from jaaffl.domain import DraftState, LeagueSettings, Position
 from jaaffl.engine.context import DraftContext
 from jaaffl.engine.opponents import (
     board_adp_shift,
@@ -41,9 +41,22 @@ SURVIVAL_CANDIDATES = 6
 # Picks charted beyond your second upcoming pick, so the curve continues past the marker.
 SURVIVAL_TAIL = 6
 
-# Hard bound on the charted span. next_overall_pick returns a far-future sentinel once you have no
-# picks left; without this the domain could balloon to thousands of samples.
+# Backstop on the charted width (e.g. when the draft order/team slot is unknown and end-of-draft
+# clamping in survival_curves has nothing to clamp against). The real no-picks-left guard is
+# _total_picks below — see _marker_picks and survival_curves.
 SURVIVAL_MAX_SPAN = 60
+
+# Mirrors opponents._draft_rounds: rounds = total roster slots, falling back to the JAAFFL
+# constitution's 17. Duplicated (not imported) because opponents.py is frozen and exposes no
+# public accessor.
+_DEFAULT_ROUNDS = 17
+
+
+def _total_picks(settings: LeagueSettings) -> int:
+    """The last valid overall pick. ``next_overall_pick`` returns this + 1 as its no-picks-left
+    sentinel, so any marker beyond it is not a real pick."""
+    rounds = sum(slot.count for slot in settings.roster_slots) or _DEFAULT_ROUNDS
+    return rounds * len(settings.draft_order or [])
 
 
 class CurvePoint(BaseModel):
@@ -140,16 +153,15 @@ def _marker_picks(context: DraftContext, state: DraftState) -> list[int]:
     and entered into CBS — so these MUST come from ``next_overall_pick``. Degrades to ``[]`` when
     the order or our team slot is not known yet (pre-draft), rather than raising.
     """
+    total = _total_picks(context.settings)
     markers: list[int] = []
     for horizon in (1, 2):
         try:
             pick = next_overall_pick(context.settings, state, horizon=horizon)
         except ValueError:
             return []
-        if (
-            pick <= state.current_overall_pick
-            or pick > state.current_overall_pick + SURVIVAL_MAX_SPAN
-        ):
+        # Beyond the last pick of the draft = the no-picks-left sentinel, not a real upcoming pick.
+        if pick <= state.current_overall_pick or (total and pick > total):
             break
         markers.append(pick)
     return markers
@@ -180,9 +192,12 @@ def survival_curves(
     markers = _marker_picks(context, state)
     start = state.current_overall_pick
     end = min((markers[-1] if markers else start) + SURVIVAL_TAIL, start + SURVIVAL_MAX_SPAN)
+    total = _total_picks(context.settings)
+    if total:
+        end = min(end, total)
     picks = list(range(start, end + 1))
 
-    if not chosen:
+    if not chosen or not picks:
         return [], markers
 
     # Board-conditioned effective ADP (R3), mirroring recommend(): a position going faster than ADP

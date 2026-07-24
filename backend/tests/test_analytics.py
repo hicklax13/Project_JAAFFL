@@ -178,3 +178,14 @@ def test_survival_degrades_when_draft_order_is_unknown() -> None:
     curves, markers = survival_curves(context, state)
     assert markers == []
     assert curves  # curves still render over the fallback span
+
+
+def test_markers_are_empty_once_my_picks_are_exhausted() -> None:
+    """next_overall_pick returns a far-future sentinel when you have no picks left; charting it
+    would draw markers and points past the literal end of the draft."""
+    context = make_context(_specs())
+    state = draft_state(200, my_team_id="t0")  # t0's last pick is overall 193
+    curves, markers = survival_curves(context, state)
+
+    assert markers == []
+    assert all(point.pick <= 204 for curve in curves for point in curve.points)
