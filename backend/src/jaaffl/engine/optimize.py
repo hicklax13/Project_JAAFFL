@@ -20,7 +20,7 @@ a 2nd QB behind a starter ⇒ MLV ≈ 0 (need is automatic, no hand-tuned multip
 cracks no starting slot ⇒ MLV = 0 (its value is carried by the ceiling tilt + VONA, not MLV).
 
 The CP-SAT ``optimize_roster`` below is the STRETCH end-of-season/season-simulator ILP (§3.9) —
-never on the per-pick hot path — and stays a stub.
+never on the per-pick hot path — and needs the ``engine-stretch`` extra (ortools).
 """
 
 from __future__ import annotations
@@ -170,8 +170,54 @@ def optimize_roster(
 ) -> list[str]:
     """Return the value-maximizing set of ``player_id``s that fills the roster legally.
 
-    STRETCH (§3.9): the end-state / season-simulator ILP (OR-Tools CP-SAT) — binary pick vars,
-    slot-eligibility constraints (incl. flex/superflex), and roster-size caps. Reserved for the
-    rest-of-season simulator; **never** the per-pick path (that is ``marginal_lineup_value``).
+    STRETCH (§3.9): the end-state / season-simulator ILP (OR-Tools CP-SAT) — binary assignment
+    vars, slot-eligibility constraints (incl. the WR/RB flex), and roster-size caps. Reserved for
+    the rest-of-season simulator; **never** the per-pick path (that is ``marginal_lineup_value``).
+
+    Formulation: assign players to the flat roster slots (starting + bench, expanded by ``count``),
+    each slot holding ≤ 1 eligible player and each player ≤ 1 slot, maximizing assigned value.
+    ``already_rostered`` players are forced into an eligible slot. A slot with no eligible player is
+    left empty (degrades gracefully rather than turning infeasible). Values are scaled to integers
+    (CP-SAT is integer-objective). Returns the assigned ``player_id``s (order not significant).
     """
-    raise NotImplementedError("stretch (§3.9): CP-SAT roster optimization")
+    from ortools.sat.python import cp_model
+
+    slots: list[frozenset[str]] = []
+    for roster_slot in settings.roster_slots:
+        eligible = frozenset(str(pos) for pos in roster_slot.eligible_positions)
+        slots.extend(eligible for _ in range(roster_slot.count))
+
+    players = list(player_values)
+    model = cp_model.CpModel()
+    assign = {
+        (pid, s): model.new_bool_var(f"x_{pid}_{s}") for pid in players for s in range(len(slots))
+    }
+    for pid in players:
+        pos = str(player_positions.get(pid, ""))
+        for s, eligible in enumerate(slots):
+            if pos not in eligible:
+                model.add(assign[(pid, s)] == 0)
+    for s in range(len(slots)):  # each slot holds at most one player
+        model.add(sum(assign[(pid, s)] for pid in players) <= 1)
+    for pid in players:  # each player fills at most one slot
+        model.add(sum(assign[(pid, s)] for s in range(len(slots))) <= 1)
+    forced = set(already_rostered or []) & set(players)
+    for pid in forced:  # a player already on the roster must be placed (if eligible anywhere)
+        if any(str(player_positions.get(pid, "")) in eligible for eligible in slots):
+            model.add(sum(assign[(pid, s)] for s in range(len(slots))) == 1)
+
+    scale = 1000
+    model.maximize(
+        sum(
+            round(player_values[pid] * scale) * assign[(pid, s)]
+            for pid in players
+            for s in range(len(slots))
+        )
+    )
+    solver = cp_model.CpSolver()
+    status = solver.solve(model)
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return sorted(forced)  # infeasible — best effort (should not happen with the ≤1 relaxation)
+    return [
+        pid for pid in players if any(solver.value(assign[(pid, s)]) for s in range(len(slots)))
+    ]
