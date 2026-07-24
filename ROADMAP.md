@@ -25,11 +25,16 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 > flex-split** and **E3 projection-validation** calibration tooling (both run live — E1 measured
 > RB 12 / WR 0 for 2026, kept as dry-run per owner; E3 persistence 2023→2024 Spearman 0.59).
 >
+> The stretch **simulation + tuning** subsystem is done too (`engine-stretch` extra): CP-SAT
+> `optimize_roster`, the `simulate_draft`/agents/MC-VONA simulator, **E2** tuning (Optuna study +
+> no-regression gate, run live on real 2026 data — kept the priors), and the **E6** efficacy
+> tournament (our agent beats VBD-only + ADP-only baselines on the fixture pool, p=0.0002).
+>
 > What remains: the **OpenAI Responses API loop** (needs an owner key), remaining **analytics panels**
-> (value curves / survival / manager tendencies), **E2 param tuning** (needs `optuna`), and the
-> **stretch** items (MC-VONA `simulate_drafts`, CP-SAT `optimize_roster` — needs `ortools`, XGBoost,
-> per-manager modeling, E6 tournament). The only hard gate on *real CBS data* is the owner's one
-> record-mode capture session. Owner-only tasks: [`docs/owner-manual-todo.md`](docs/owner-manual-todo.md).
+> (value curves / survival / manager tendencies), and the deeper **stretch** items (XGBoost residual
+> projections, per-manager tendency modeling, a large offline real-data E2 study). The only hard gate
+> on *real CBS data* is the owner's one record-mode capture session. Owner-only tasks:
+> [`docs/owner-manual-todo.md`](docs/owner-manual-todo.md).
 
 ## Stage 1 — CBS sync layer
 
@@ -108,7 +113,9 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 
 - [~] **Calibration (Track J)** — `jaaffl.calibrate` + `scripts/`: **E1** flex-split
       (`calibrate_flex_split.py`), **E3** projection-validation (`validate_projections.py`), and
-      **E2** param tuning (`tune_engine_params.py` — Optuna study + no-regression promotion gate)
-      all done + run live; the **E6** efficacy tournament (full agent-vs-baseline league) still pending
+      **E2** param tuning (`tune_engine_params.py` — Optuna study + no-regression gate; `--real`
+      builds a precompute-backed pool), and the **E6** efficacy tournament (`run_tournament.py` —
+      our agent vs VBD-only / ADP-only baselines) all done + run live. A large offline real-data E2
+      study (many trials/seeds) is the remaining calibration follow-up
 - [ ] Playwright kept for testing / emergency draft-room recovery (not the production path)
 - [~] Compliance guardrails enforced in code & docs (see `docs/legal-and-compliance.md`)
