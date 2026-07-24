@@ -16,7 +16,7 @@ from jaaffl.calibrate.tune import evaluate_params, objective_value, promotion_de
 from jaaffl.config import EngineParams
 from jaaffl.domain import LeagueSettings, Position, RosterSlot
 from jaaffl.engine.optimize import expand_starting_slots
-from jaaffl.engine.simulate import AdpNoiseAgent, SimContext, VbdOnlyAgent
+from jaaffl.engine.simulate import AdpNoiseAgent, ScoreAgent, SimContext, VbdOnlyAgent
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -100,6 +100,37 @@ def test_promotion_decision_refuses_on_a_single_slot_regression() -> None:
 def test_committed_engine_json_validates_against_engine_params() -> None:
     payload = json.loads((_REPO_ROOT / "config" / "engine.json").read_text(encoding="utf-8"))
     EngineParams.model_validate(payload)  # the committed artifact must always load
+
+
+def test_evaluate_agent_scores_any_agent_across_slots() -> None:
+    from jaaffl.calibrate.tune import evaluate_agent
+
+    per_slot = evaluate_agent(VbdOnlyAgent(), _small_ctx(), opponents=[VbdOnlyAgent()], seeds=[1])
+    assert len(per_slot) == 12
+    assert all(v > 0 for v in per_slot)
+
+
+def test_run_tournament_ranks_our_agent_against_baselines() -> None:
+    """E6 (efficacy): our ScoreAgent vs VBD-only and ADP-only baselines, each at every slot vs a
+    common field, compared per-slot. Structure + Wilcoxon, not a fixture-pool win claim."""
+    from jaaffl.calibrate.tune import run_tournament
+
+    contenders = {
+        "score": ScoreAgent(EngineParams()),
+        "vbd": VbdOnlyAgent(),
+        "adp": AdpNoiseAgent(),
+    }
+    report = run_tournament(
+        _small_ctx(),
+        contenders=contenders,
+        opponents=[VbdOnlyAgent(), AdpNoiseAgent()],
+        seeds=[1, 2],
+    )
+    assert set(report["mean"]) == {"score", "vbd", "adp"}
+    assert report["reference"] == "score"
+    assert set(report["vs_baselines"]) == {"vbd", "adp"}
+    for comparison in report["vs_baselines"].values():
+        assert {"p_value", "mean_diff", "min_slot_diff", "beats"} <= comparison.keys()
 
 
 def test_smoke_study_returns_a_valid_in_range_param_vector() -> None:

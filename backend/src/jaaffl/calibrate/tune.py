@@ -12,7 +12,7 @@ Objective + gate are pure/scipy (base install); ``run_study`` needs the ``engine
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from statistics import mean
 
 from jaaffl.config import EngineParams
@@ -34,17 +34,16 @@ LAMBDA_BANDS: list[tuple[tuple[int, int], tuple[float, float]]] = [
 ]
 
 
-def evaluate_params(
-    params: EngineParams,
+def evaluate_agent(
+    agent: DraftAgent,
     ctx: SimContext,
     *,
     opponents: Sequence[DraftAgent],
     seeds: Sequence[int],
     teams: int = 12,
 ) -> list[float]:
-    """Per-slot mean optimal starting-lineup value of a ``ScoreAgent(params)`` across ``seeds`` —
-    one entry per draft slot. Placing our agent at each seat avoids slot-specific overfit."""
-    agent = ScoreAgent(params)
+    """Per-slot mean optimal starting-lineup value of ``agent`` across ``seeds`` — one entry per
+    draft slot. Placing the agent at each seat in turn avoids slot-specific overfit."""
     per_slot: list[float] = []
     for slot in range(teams):
         values = [
@@ -58,6 +57,18 @@ def evaluate_params(
         ]
         per_slot.append(mean(values))
     return per_slot
+
+
+def evaluate_params(
+    params: EngineParams,
+    ctx: SimContext,
+    *,
+    opponents: Sequence[DraftAgent],
+    seeds: Sequence[int],
+    teams: int = 12,
+) -> list[float]:
+    """Per-slot evaluation of a ``ScoreAgent(params)`` — the E2 objective input."""
+    return evaluate_agent(ScoreAgent(params), ctx, opponents=opponents, seeds=seeds, teams=teams)
 
 
 def objective_value(
@@ -96,6 +107,44 @@ def promotion_decision(
         "p_value": p_value,
         "min_slot_diff": min_diff,
         "mean_diff": mean(diffs),
+    }
+
+
+def run_tournament(
+    ctx: SimContext,
+    *,
+    contenders: Mapping[str, DraftAgent],
+    opponents: Sequence[DraftAgent],
+    seeds: Sequence[int],
+    teams: int = 12,
+    reference: str | None = None,
+) -> dict:
+    """E6 efficacy proof (design §9.3 / §3.9): evaluate each named contender across all 12 slots vs
+    a common opponent field, then compare each other contender to the ``reference`` (default: the
+    first — our agent) via the one-sided Wilcoxon gate. The project's OWN validation (our agent vs
+    VBD-only and ADP-only baselines), never a vendor/literature claim. ``beats`` = the reference is
+    significantly >= that baseline AND non-negative at every slot."""
+    per_slot = {
+        name: evaluate_agent(agent, ctx, opponents=opponents, seeds=seeds, teams=teams)
+        for name, agent in contenders.items()
+    }
+    ref = reference or next(iter(contenders))
+    vs_baselines = {}
+    for name, values in per_slot.items():
+        if name == ref:
+            continue
+        decision = promotion_decision(per_slot[ref], values)
+        vs_baselines[name] = {
+            "mean_diff": decision["mean_diff"],
+            "min_slot_diff": decision["min_slot_diff"],
+            "p_value": decision["p_value"],
+            "beats": decision["promote"],
+        }
+    return {
+        "per_slot": per_slot,
+        "mean": {name: mean(values) for name, values in per_slot.items()},
+        "reference": ref,
+        "vs_baselines": vs_baselines,
     }
 
 
