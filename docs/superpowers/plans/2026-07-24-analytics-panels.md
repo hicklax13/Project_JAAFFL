@@ -374,7 +374,23 @@ def test_survival_degrades_when_draft_order_is_unknown() -> None:
     curves, markers = survival_curves(context, state)
     assert markers == []
     assert curves  # curves still render over the fallback span
+
+
+def test_markers_are_empty_once_my_picks_are_exhausted() -> None:
+    """next_overall_pick returns a far-future sentinel when you have no picks left; charting it
+    would draw markers and points past the literal end of the draft."""
+    context = make_context(_specs())
+    state = draft_state(200, my_team_id="t0")  # t0's last pick is overall 193
+
+    curves, markers = survival_curves(context, state)
+
+    assert markers == []
+    assert all(point.pick <= 204 for curve in curves for point in curve.points)
 ```
+
+Note this is a DIFFERENT code path from `test_survival_degrades_when_draft_order_is_unknown`: that
+one raises inside `_my_overall_picks` before a sentinel is ever computed. This one has a perfectly
+valid draft order and simply has no picks left — which is what the sentinel exists for.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -404,10 +420,23 @@ SURVIVAL_CANDIDATES = 6
 # Picks charted beyond your second upcoming pick, so the curve continues past the marker.
 SURVIVAL_TAIL = 6
 
-# Hard bound on the charted span. next_overall_pick returns a far-future sentinel once you have no
-# picks left; without this the domain could balloon to thousands of samples.
+# Hard bound on the charted span, so a very deep board cannot balloon the payload.
 SURVIVAL_MAX_SPAN = 60
+
+# Mirrors opponents._draft_rounds: rounds = total roster slots, falling back to the JAAFFL
+# constitution's 17. Duplicated (not imported) because opponents.py is frozen and exposes no
+# public accessor.
+_DEFAULT_ROUNDS = 17
 ```
+
+> **CORRECTED 2026-07-24 (post-review).** An earlier draft of this task guarded the no-picks-left
+> sentinel with `pick > current + SURVIVAL_MAX_SPAN`. That is structurally incapable of catching it:
+> `next_overall_pick` returns `rounds × teams + 1` (= 205 here, vs a last real pick of 204), and once
+> your picks are exhausted the sentinel is only ever `team_count − 1` (≤ 11) picks ahead of the
+> current pick — always far below `SURVIVAL_MAX_SPAN` (60), and always greater than it. Neither
+> clause could fire, so the final ~11 picks of every real draft charted markers and points past the
+> end of the draft. The correct invariant is **end-of-draft**, not span. Fixed in `7f6d6e4`; the code
+> below reflects the corrected version.
 
 Append the models and builder:
 
@@ -428,6 +457,13 @@ class SurvivalCurve(BaseModel):
     points: list[SurvivalPoint] = Field(default_factory=list)
 
 
+def _total_picks(settings: LeagueSettings) -> int:
+    """The last valid overall pick. ``next_overall_pick`` returns this + 1 as its no-picks-left
+    sentinel, so any marker beyond it is not a real pick."""
+    rounds = sum(slot.count for slot in settings.roster_slots) or _DEFAULT_ROUNDS
+    return rounds * len(settings.draft_order or [])
+
+
 def _marker_picks(context: DraftContext, state: DraftState) -> list[int]:
     """Your next two upcoming picks, read from the REAL entered draft order.
 
@@ -436,12 +472,14 @@ def _marker_picks(context: DraftContext, state: DraftState) -> list[int]:
     the order or our team slot is not known yet (pre-draft), rather than raising.
     """
     markers: list[int] = []
+    total = _total_picks(context.settings)
     for horizon in (1, 2):
         try:
             pick = next_overall_pick(context.settings, state, horizon=horizon)
         except ValueError:
             return []
-        if pick <= state.current_overall_pick or pick > state.current_overall_pick + SURVIVAL_MAX_SPAN:
+        # Beyond the last pick of the draft = the no-picks-left sentinel, not a real upcoming pick.
+        if pick <= state.current_overall_pick or (total and pick > total):
             break
         markers.append(pick)
     return markers
@@ -470,11 +508,14 @@ def survival_curves(
     chosen = [pid for pid in chosen[:SURVIVAL_CANDIDATES] if pid in context.adp_mean]
 
     markers = _marker_picks(context, state)
+    total = _total_picks(context.settings)
     start = state.current_overall_pick
     end = min((markers[-1] if markers else start) + SURVIVAL_TAIL, start + SURVIVAL_MAX_SPAN)
+    if total:
+        end = min(end, total)  # never chart a pick past the end of the draft
     picks = list(range(start, end + 1))
 
-    if not chosen:
+    if not chosen or not picks:
         return [], markers
 
     # Board-conditioned effective ADP (R3), mirroring recommend(): a position going faster than ADP
