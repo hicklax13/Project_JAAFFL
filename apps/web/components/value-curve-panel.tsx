@@ -11,13 +11,23 @@ const BOX = { width: 320, height: 120 };
 /** Describe the curve in words — the chart's accessible name, never colour-alone (WCAG 1.4.1). */
 function describe(curve: PositionCurve): string {
   const best = curve.remaining[0];
-  const taken = curve.full.length - curve.remaining.length;
+  // `remaining` is NOT a suffix/subset of `full`: the backend caps both arrays independently at
+  // CURVE_DEPTH, so once more than CURVE_DEPTH players exist at a position (RB/WR, always, in the
+  // real nflverse universe), drafting players backfills `remaining` from beyond the original
+  // top-CURVE_DEPTH board rather than shrinking it. `full.length - remaining.length` is then ~0
+  // regardless of how many were actually drafted. Count by id instead: a `full` entry no longer
+  // present in `remaining` was drafted, however `remaining` was backfilled.
+  const remainingIds = new Set(curve.remaining.map((p) => p.player_id));
+  const taken = curve.full.filter((p) => !remainingIds.has(p.player_id)).length;
   if (!best) return `${curve.position} value curve: every charted player is drafted.`;
   const cliff = curve.remaining[1] ? best.vor - curve.remaining[1].vor : 0;
   return (
     `${curve.position} value curve: best remaining ${best.name ?? best.player_id} at ` +
     `${best.vor.toFixed(0)} points over replacement, ` +
-    `${cliff.toFixed(0)} ahead of the next, ${taken} of ${curve.full.length} taken.`
+    // "of the top N", not "of N": curve.full.length is the CURVE_DEPTH display cap, not the real
+    // position pool size (RB/WR pools run well past it) — the payload never carries the true pool
+    // size, so this is the most honest phrasing available client-side.
+    `${cliff.toFixed(0)} ahead of the next, ${taken} of the top ${curve.full.length} taken.`
   );
 }
 

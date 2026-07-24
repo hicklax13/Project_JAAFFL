@@ -34,6 +34,36 @@ const ANALYTICS: DraftAnalytics = {
   survival_curves: [],
 };
 
+const CURVE_DEPTH = 36; // backend/src/jaaffl/engine/analytics.py CURVE_DEPTH
+const DRAFTED_COUNT = 10;
+
+/** `count` distinct synthetic players numbered from `startingAt`, ranked 1..count, VOR descending. */
+function makeCurvePoints(count: number, startingAt: number) {
+  return Array.from({ length: count }, (_, i) => {
+    const n = startingAt + i;
+    return { rank: i + 1, vor: 500 - n, player_id: `rb${n}`, name: `Runner ${n}` };
+  });
+}
+
+// A position with MORE than CURVE_DEPTH draftable players (RB/WR always, in the real nflverse
+// universe): the backend caps `full` AND `remaining` at CURVE_DEPTH independently, so drafting the
+// top 10 backfills `remaining` from players ranked 37-46 instead of shrinking it. Both arrays stay
+// at length 36, overlapping only on players 11-36 — `full.length - remaining.length` reads this as
+// "0 taken" when the true count is 10 (see describe() in value-curve-panel.tsx).
+const OVERFLOW_ANALYTICS: DraftAnalytics = {
+  league_id: "L1",
+  current_overall_pick: DRAFTED_COUNT + 1,
+  my_next_picks: [],
+  value_curves: [
+    {
+      position: "RB",
+      full: makeCurvePoints(CURVE_DEPTH, 1), // players 1-36 (the original top-36 board)
+      remaining: makeCurvePoints(CURVE_DEPTH, DRAFTED_COUNT + 1), // players 11-46 (backfilled)
+    },
+  ],
+  survival_curves: [],
+};
+
 describe("ValueCurvePanel", () => {
   it("renders a toggle button per charted position", () => {
     render(<ValueCurvePanel analytics={ANALYTICS} />);
@@ -57,7 +87,16 @@ describe("ValueCurvePanel", () => {
   it("describes the curve for screen readers, never colour-alone", () => {
     render(<ValueCurvePanel analytics={ANALYTICS} />);
     const chart = screen.getByRole("img", { name: /RB value curve/i });
-    expect(chart).toHaveAccessibleName(/1 of 2 taken/i);
+    expect(chart).toHaveAccessibleName(/1 of the top 2 taken/i);
+  });
+
+  it("counts drafted players correctly when a position exceeds the curve cap and remaining backfills past it", () => {
+    render(<ValueCurvePanel analytics={OVERFLOW_ANALYTICS} />);
+    const chart = screen.getByRole("img", { name: /RB value curve/i });
+    // full.length (36) - remaining.length (36) would say "0 of the top 36 taken" — but 10 real
+    // players (rb1..rb10) are gone from `remaining`, backfilled by rb37..rb46. This is the count
+    // of full-entries no longer present in remaining, i.e. the true number drafted.
+    expect(chart).toHaveAccessibleName(/10 of the top 36 taken/i);
   });
 
   it("shows an honest empty state when the engine is still warming", () => {

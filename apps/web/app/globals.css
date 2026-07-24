@@ -644,3 +644,13 @@ a {
   border-radius: 2px;
   display: inline-block;
 }
+
+.sc-name {
+  /* .sc-legend-row is a flex row (not a grid with a 1fr track like .surv-row/.tier-player), so
+     the ellipsis trio alone has no bounded width to truncate against — same situation as
+     .board-grid .cell .nm above, which pairs them with an explicit max-width for the same reason. */
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

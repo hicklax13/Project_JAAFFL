@@ -181,6 +181,18 @@ def survival_curves(
     ranked picks rendered above them; unknown or already-drafted ids are skipped rather than
     raising. Omitted, it falls back to the best available by projected points so the endpoint is
     useful (and testable) on its own.
+
+    KNOWN ASYMMETRY: both paths end with the same ``pid in context.adp_mean`` filter before the
+    ``[:SURVIVAL_CANDIDATES]`` cap, but only the omitted-``candidates`` path can BACKFILL past a
+    missing-ADP id — it sorts the whole ``available`` pool first, so a dropped id is simply replaced
+    by the next-best pid still in that pool, reliably landing on ``SURVIVAL_CANDIDATES`` (6) curves
+    whenever the pool allows. The explicit-``candidates`` path (what the dashboard actually calls,
+    passing the ranked picks it already rendered) has no larger pool to draw a replacement from, so
+    it can only SHRINK the caller's list. Net effect: if one of the dashboard's top-6 ranked picks
+    has no ``adp_mean`` entry, this function silently returns fewer than 6 curves — even though the
+    scalar next-turn panel above it (``next_turn_availability``, computed independently of
+    ``adp_mean``) still lists that player. A narrow, known exception to "both survival surfaces show
+    the same players": do not assume backfill happens on both paths.
     """
     drafted = _drafted_ids(state)
     available = [pid for pid in context.mu if pid not in drafted]
