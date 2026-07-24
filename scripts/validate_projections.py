@@ -6,11 +6,11 @@ nflverse weekly stats, then scores a projection against them with ``jaaffl.calib
 (MAE / RMSE / Spearman — the pure toolkit is unit-tested offline).
 
 The $0 tier archives no past multi-source projections, so this runs the honest baseline free data
-allows: a PERSISTENCE projection (a player's prior-year points predict this year's). It exercises the
+allows: a PERSISTENCE projection (prior-year points predict this year's). It exercises the
 validation toolkit end-to-end and sets the bar any real blend must clear; feed archived projections
 into ``compare_projection_sources`` once they exist.
 
-NETWORK step: pulls two seasons of nflverse weekly player stats. Skill positions (QB/RB/WR/TE) only —
+NETWORK step: pulls two seasons of nflverse weekly stats. Skill positions (QB/RB/WR/TE) only —
 K/DST are streamed and out of scope for projection validation.
 
 Usage (from the repo root, via the backend venv)::
@@ -64,9 +64,7 @@ def season_points(provider: NflreadpyProvider, season: int, rules) -> tuple[dict
         if pos not in _SKILL:
             continue
         stat_line = {
-            jkey: float(row.get(ncol) or 0.0)
-            for ncol, jkey in _STAT_MAP.items()
-            if ncol in row
+            jkey: float(row.get(ncol) or 0.0) for ncol, jkey in _STAT_MAP.items() if ncol in row
         }
         two_point = sum(float(row.get(c) or 0.0) for c in _TWO_POINT_COLS if c in row)
         if two_point:
@@ -80,9 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="E3: validate a projection vs realized JAAFFL points."
     )
-    parser.add_argument(
-        "--season", type=int, required=True, help="Target (realized) season."
-    )
+    parser.add_argument("--season", type=int, required=True, help="Target (realized) season.")
     parser.add_argument(
         "--min-points",
         type=float,
@@ -102,9 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     prior, _ = season_points(provider, args.season - 1, rules)
     actual, positions = season_points(provider, args.season, rules)
 
-    projection = {
-        p: pts for p, pts in prior.items() if pts >= args.min_points and p in actual
-    }
+    projection = {p: pts for p, pts in prior.items() if pts >= args.min_points and p in actual}
     if not projection:
         print("[E3] no overlapping players above the floor", file=sys.stderr)
         return 1

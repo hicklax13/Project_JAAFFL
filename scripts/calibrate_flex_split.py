@@ -35,7 +35,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def _dedicated_counts(league: LeagueSettings) -> tuple[int, int, int]:
     """Derive the league-wide dedicated RB / WR / flex slot counts from the (immutable) roster:
-    ``team_count × per-team slot count``. For this league: 12·RB1 = 12, 12·WR3 = 36, 12·flex1 = 12."""
+    ``team_count × per-team slot count`` — for this league 12 RB, 36 WR, 12 flex."""
     slots = {s.slot: s.count for s in league.roster_slots}
     n = league.team_count
     return n * slots.get("RB", 1), n * slots.get("WR", 3), n * slots.get("WR/RB", 1)
@@ -45,30 +45,22 @@ def _write_flex_split(config_path: Path, split: dict[str, int]) -> None:
     """Replace only the ``flex_split`` value in engine.json, leaving the rest byte-for-byte."""
     text = config_path.read_text(encoding="utf-8")
     replacement = f'"flex_split": {{ "RB": {split["RB"]}, "WR": {split["WR"]} }}'
-    new_text, count = re.subn(
-        r'"flex_split"\s*:\s*\{[^}]*\}', replacement, text, count=1
-    )
+    new_text, count = re.subn(r'"flex_split"\s*:\s*\{[^}]*\}', replacement, text, count=1)
     if count != 1:
         raise SystemExit(f"could not locate a flex_split entry in {config_path}")
     config_path.write_text(new_text, encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="E1: measure the RB/WR flex split from FFC ADP."
-    )
+    parser = argparse.ArgumentParser(description="E1: measure the RB/WR flex split from FFC ADP.")
     parser.add_argument(
         "--season",
         type=int,
         default=None,
         help="Draft season (default: jaaffl_season).",
     )
-    parser.add_argument(
-        "--league-id", default=None, help="League id (default: jaaffl_league_id)."
-    )
-    parser.add_argument(
-        "--config", type=Path, default=_REPO_ROOT / "config" / "engine.json"
-    )
+    parser.add_argument("--league-id", default=None, help="League id (default: jaaffl_league_id).")
+    parser.add_argument("--config", type=Path, default=_REPO_ROOT / "config" / "engine.json")
     parser.add_argument(
         "--write",
         action="store_true",
@@ -98,9 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     print("[E1] pulling FFC ADP (non-PPR, 12-team) ...", file=sys.stderr)
     ffc = FantasyFootballCalculatorProvider(settings, crosswalk)
     adp = ffc.adp(season)
-    print(
-        f"[E1] FFC ADP resolved to canonical ids: {len(adp)} players", file=sys.stderr
-    )
+    print(f"[E1] FFC ADP resolved to canonical ids: {len(adp)} players", file=sys.stderr)
 
     rows = [
         (universe[cid].position, rec.adp)
