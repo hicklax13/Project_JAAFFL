@@ -13,17 +13,23 @@ order — later stages assume the earlier contracts exist.
 
 Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` done
 
-> ## 📍 Status — 2026-07-23 (verified against code + merged PRs #1–#17)
+> ## 📍 Status — 2026-07-23 (verified against code; branch `feat/post-v1-unblocked`)
 >
-> **Stages 0–6 core are built, merged, and green** (backend + JS test suites pass). The live
-> **$0 recommendation path works end-to-end**: real nflverse player universe → transparent engine
-> → decomposed pick pushed to the overlay over `WS /recs/ws`. What remains is the **Stage 7 AI
-> assistant** (OpenAI wiring needs an owner key), the **dashboard analytics panels** (`GET /state`
-> + board/pick-log/curves), the **calibration scripts** (E1/E2/E3 — the engine ships on priors
-> without them), and the clearly-deferred **stretch** items (MC-VONA, CP-SAT season sim, XGBoost,
-> per-manager modeling, E6 efficacy tournament). The only hard gate on *real CBS data* is the
-> owner's one record-mode capture session — everything today runs on synthetic fixtures + the
-> manual-paste fallback. Owner-only tasks: [`docs/owner-manual-todo.md`](docs/owner-manual-todo.md).
+> **Stages 0–6 core are built and green** (backend + JS suites pass). The live **$0 recommendation
+> path works end-to-end**: real nflverse player universe → transparent engine → decomposed pick
+> pushed to the overlay over `WS /recs/ws`.
+>
+> The `feat/post-v1-unblocked` branch adds, all TDD'd + verified: the **`GET /state` board +
+> pick-log** endpoint and its **dashboard panels**; the **Stage 7 assistant key-free core**
+> (`explain_recommendation` prose over `ScoreComponents` + wired tool `dispatch`); and the **E1
+> flex-split** and **E3 projection-validation** calibration tooling (both run live — E1 measured
+> RB 12 / WR 0 for 2026, kept as dry-run per owner; E3 persistence 2023→2024 Spearman 0.59).
+>
+> What remains: the **OpenAI Responses API loop** (needs an owner key), remaining **analytics panels**
+> (value curves / survival / manager tendencies), **E2 param tuning** (needs `optuna`), and the
+> **stretch** items (MC-VONA `simulate_drafts`, CP-SAT `optimize_roster` — needs `ortools`, XGBoost,
+> per-manager modeling, E6 tournament). The only hard gate on *real CBS data* is the owner's one
+> record-mode capture session. Owner-only tasks: [`docs/owner-manual-todo.md`](docs/owner-manual-todo.md).
 
 ## Stage 1 — CBS sync layer
 
@@ -81,20 +87,25 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 
 - [x] Thin in-page overlay: best pick / next-turn risk / why (`apps/extension` overlay)
 - [~] Next.js dashboard: board analytics, manager tendencies, scenarios (`apps/web`) *(live
-      recommendation feed wired; board / pick-log / value-curve / survival panels pending — this
-      backlog)*
+      recommendation feed + **draft board & pick-log** done, via `GET /state`; value-curve /
+      survival / manager-tendency panels still pending)*
 - [ ] **AG Grid removed by design** (deep-research: overkill for a 204-cell static board);
       **ECharts** distributions/trends/scenarios still pending
 
 ## Stage 7 — AI assistant (wire early, integrate last)
 
-- [~] Typed function tools for DB queries, league-state summaries, news lookups (`jaaffl.assistant`)
-      *(tool schemas exist; `dispatch` is a stub — being wired now for the non-OpenAI parts)*
-- [ ] OpenAI Responses API: function calling + file search + optional web search *(needs an owner
-      `OPENAI_API_KEY`)*
+- [x] Typed function tools for DB queries, league-state summaries, news lookups (`jaaffl.assistant`)
+      *(dispatch wired: `explain_recommendation` renders `ScoreComponents` prose via
+      `explain_pick`, `league_summary` folds settings+state; `query_warehouse`/`player_news` stay
+      NotImplementedError until the LLM loop)*
+- [ ] OpenAI Responses API: function calling + file search + optional web search *(the only
+      key-gated piece — needs an owner `OPENAI_API_KEY`)*
 - [ ] **Text-only.** Voice / Realtime is explicitly out of scope for the prototype (see ADR 0003)
 
 ## Cross-cutting
 
+- [~] **Calibration (Track J)** — `jaaffl.calibrate` + `scripts/`: **E1** flex-split (`calibrate_flex_split.py`,
+      dry-run) and **E3** projection-validation (`validate_projections.py`) tooling done + run live;
+      **E2** param tuning (`optuna`) and the **E6** efficacy tournament still pending
 - [ ] Playwright kept for testing / emergency draft-room recovery (not the production path)
 - [~] Compliance guardrails enforced in code & docs (see `docs/legal-and-compliance.md`)

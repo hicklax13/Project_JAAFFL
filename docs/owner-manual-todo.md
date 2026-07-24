@@ -68,11 +68,11 @@ live. Three items are opt-in / follow-up, none block the UI:
   serves `GET /recommendation` **503→200** on the $0 tier with **no fixture injection**.
   `ingest/resolve.resolve_pick_ids` masks name-only manual-paste picks upstream of the frozen
   `recommend()`; recorded fixtures keep CI offline. *(This was the former `[BLOCKER]`; it is done.)*
-- **Draft board + pick-log panels**  `[WHEN YOU WANT IT]`. Deferred: they need a `GET /state`
-  endpoint (folded `DraftState`) plus drafted-player name resolution (picks carry `player_id`; the
-  board wants names). The mockups render these as a table + ticker; the deep-research found AG Grid
-  is overkill for a 204-cell static board, so the AG Grid deps were removed to avoid shipping unused
-  weight. Say the word and Claude adds the board (semantic table or AG Grid — your call).
+- **Draft board + pick-log panels**  `[DONE — branch feat/post-v1-unblocked]`. Shipped: `GET /state`
+  (folded `DraftState` + drafted-player name resolution) and the dashboard **board (round × team
+  grid, self-ordering to draft slots) + pick-log ticker** (`apps/web` `BoardPanel`), rendered as the
+  mockups' table + ticker (semantic table; AG Grid stays removed as overkill). Value-curve / survival
+  / manager-tendency panels remain the follow-up analytics.
 - **Vercel deploy auth**  `[WHEN YOU WANT IT — otherwise it's localhost]`. The dashboard runs
   local-first at `127.0.0.1`. Hosting it on Vercel is opt-in and needs your Vercel auth; not done.
 - **Status-pill text contrast (WCAG AA) — design-palette decision**  `[WHEN YOU WANT IT]`. The
