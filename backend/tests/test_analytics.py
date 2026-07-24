@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 from jaaffl.domain import DraftPick, Position
-from jaaffl.engine.analytics import CURVE_DEPTH, SURVIVAL_CANDIDATES, survival_curves, value_curves
-from tests.engine_fixtures import draft_state, jaaffl_settings, make_context
+from jaaffl.engine.analytics import (
+    CURVE_DEPTH,
+    SURVIVAL_CANDIDATES,
+    _total_picks,
+    survival_curves,
+    value_curves,
+)
+from jaaffl.engine.opponents import next_overall_pick
+from tests.engine_fixtures import draft_state, jaaffl_settings, make_context, teams
 
 
 def _specs() -> list[dict]:
@@ -189,3 +196,12 @@ def test_markers_are_empty_once_my_picks_are_exhausted() -> None:
 
     assert markers == []
     assert all(point.pick <= 204 for curve in curves for point in curve.points)
+
+
+def test_total_picks_mirrors_the_sentinel_opponents_returns() -> None:
+    """_total_picks duplicates opponents' private rounds formula (frozen, no public accessor).
+    Pin it against the real sentinel so drift fails loudly instead of silently."""
+    settings = jaaffl_settings(draft_order=teams(12))
+    state = draft_state(204, my_team_id="t0")  # t0 has no picks left by the end of the draft
+    sentinel = next_overall_pick(settings, state, horizon=1)
+    assert _total_picks(settings) == sentinel - 1
