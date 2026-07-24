@@ -261,7 +261,15 @@ def build_analytics(
     *,
     candidates: Sequence[str] | None = None,
 ) -> DraftAnalytics:
-    """Assemble the full analytics payload for one league state."""
+    """Assemble the payload both panels render: one ``survival_curves`` call (curves + the pick
+    markers that anchor them) plus ``value_curves``, folded with the state's identity.
+
+    NOTE: the model's ``value_curves`` / ``survival_curves`` FIELDS share names with the
+    module-level FUNCTIONS. That is safe here — a keyword-argument label is not a name binding — but
+    do NOT introduce a local of either name in this function (e.g. ``value_curves =
+    value_curves(...)``): Python decides locality for the whole body at compile time, so that would
+    turn the calls below into ``UnboundLocalError``.
+    """
     curves, markers = survival_curves(context, state, candidates=candidates)
     return DraftAnalytics(
         league_id=state.league_id,
