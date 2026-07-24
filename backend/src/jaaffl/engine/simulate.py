@@ -126,19 +126,43 @@ class ScoreAgent:
     params (design §10.3). VONA is a tractable within-position cliff — ``MLV(p)`` minus the best
     OTHER same-position candidate's MLV — the "take the scarce one now" proxy. Candidates are capped
     to the top ``candidate_cap`` available by value so a full-draft rollout stays tractable.
-    ``σ`` / ``cliff`` come from the context (0 for the behavioral-opponent pools that omit them)."""
+    ``σ`` / ``cliff`` come from the context (0 for the behavioral-opponent pools that omit them).
+
+    **Reliability shrinkage (§3.10 R1):** MLV is computed on ``μ`` pulled toward each position's
+    replacement by ``params.reliability_shrinkage`` (K/DST are noisy → deferred), so our DECISIONS
+    defer high-variance positions while the OBJECTIVE scores raw μ — a real E2 tuning lever."""
 
     def __init__(self, params: EngineParams, *, candidate_cap: int = 50) -> None:
         self._params = params
         self._cap = candidate_cap
+        self._eff_cache_id: int | None = None
+        self._eff_cache: Mapping[str, float] = {}
+
+    def _effective_value(self, ctx: SimContext) -> Mapping[str, float]:
+        """``μ`` with reliability shrinkage applied (``base + factor·(μ − base)``; factor 1.0 = no
+        shrink). Cached per context — one context is reused across a whole evaluation."""
+        if self._eff_cache_id == id(ctx):
+            return self._eff_cache
+        shrink = self._params.reliability_shrinkage or {}
+        if not shrink or all(factor >= 1.0 for factor in shrink.values()):
+            eff: Mapping[str, float] = ctx.value
+        else:
+            eff = {}
+            for pid, mu in ctx.value.items():
+                factor = shrink.get(ctx.position[pid].value, 1.0)
+                base = ctx.baselines.get(ctx.position[pid], 0.0)
+                eff[pid] = mu if factor >= 1.0 else base + factor * (mu - base)
+        self._eff_cache_id, self._eff_cache = id(ctx), eff
+        return eff
 
     def pick(self, available, my_roster, ctx, rng=None) -> str:
         params = self._params
-        base = lineup_value(list(my_roster), ctx.value, ctx.position, ctx.baselines, ctx.slots)
-        candidates = sorted(available, key=lambda p: ctx.value[p], reverse=True)[: self._cap]
+        value = self._effective_value(ctx)
+        base = lineup_value(list(my_roster), value, ctx.position, ctx.baselines, ctx.slots)
+        candidates = sorted(available, key=lambda p: value[p], reverse=True)[: self._cap]
         mlv = {
             p: marginal_lineup_value(
-                p, my_roster, ctx.value, ctx.position, ctx.baselines, ctx.slots, base_value=base
+                p, my_roster, value, ctx.position, ctx.baselines, ctx.slots, base_value=base
             )
             for p in candidates
         }

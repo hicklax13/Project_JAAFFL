@@ -19,11 +19,11 @@ Usage (from the repo root, via the backend venv)::
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import sys
 from pathlib import Path
 
 from jaaffl.calibrate.tune import (
+    cap_sim_pool,
     evaluate_params,
     promotion_decision,
     run_study,
@@ -96,19 +96,8 @@ def _demo_context() -> SimContext:
 
 
 def _cap_pool(ctx: SimContext, cap: int) -> SimContext:
-    """Keep the top-``cap`` players by value. A real universe is thousands deep, but only the
-    draftable top matters for a 12×17 sim (K/DST fall out and are phantom-filled uniformly)."""
-    keep = set(sorted(ctx.value, key=lambda p: ctx.value[p], reverse=True)[:cap])
-    trim = lambda mapping: {p: v for p, v in mapping.items() if p in keep}  # noqa: E731
-    return dataclasses.replace(
-        ctx,
-        value=trim(ctx.value),
-        position=trim(ctx.position),
-        adp=trim(ctx.adp),
-        adp_stdev=trim(ctx.adp_stdev),
-        sigma=trim(ctx.sigma),
-        cliff_bonus=trim(ctx.cliff_bonus),
-    )
+    """Trim to the draftable pool, keeping K/DST (needed for reliability + K/DST slots)."""
+    return cap_sim_pool(ctx, cap)
 
 
 def _real_context(cap: int) -> SimContext:
@@ -208,7 +197,9 @@ def main(argv: list[str] | None = None) -> int:
     decision = promotion_decision(tuned_slots, base_slots)
 
     lam = [round(entry["lambda"], 3) for entry in tuned.lambda_schedule]
+    rel = {k: round(v, 3) for k, v in tuned.reliability_shrinkage.items()}
     print(f"[E2] tuned:    kappa={tuned.kappa:.3f} alpha={tuned.alpha:.3f} lambda={lam}")
+    print(f"[E2] tuned:    reliability_shrinkage={rel}")
     print(
         f"[E2] held-out: mean_diff={decision['mean_diff']:+.2f} pts/slot  "
         f"min_slot_diff={decision['min_slot_diff']:+.2f}  p={decision['p_value']:.4f}"
