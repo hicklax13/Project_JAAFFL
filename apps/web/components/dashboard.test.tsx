@@ -7,6 +7,7 @@ import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import {
+  type DraftAnalytics,
   type DraftBoardState,
   type LeagueSettings,
   LeagueSettingsSchema,
@@ -64,6 +65,37 @@ const LEAGUE: LeagueSettings = LeagueSettingsSchema.parse({
     { slot: "BENCH", eligible_positions: ["QB", "RB", "WR", "TE"], count: 8, starting: false },
   ],
 });
+
+// Populated value + survival series (mirrors the fixtures in value-curve-panel.test.tsx /
+// survival-curve-panel.test.tsx) so the wiring test proves live data reaches both panels, not
+// just their empty/warming-up shells.
+const ANALYTICS: DraftAnalytics = {
+  league_id: "cbs-local",
+  current_overall_pick: 10,
+  my_next_picks: [14, 26],
+  value_curves: [
+    {
+      position: "RB",
+      full: [
+        { rank: 1, vor: 90, player_id: "rb0", name: "Bijan" },
+        { rank: 2, vor: 40, player_id: "rb1", name: "Breece" },
+      ],
+      remaining: [{ rank: 1, vor: 40, player_id: "rb1", name: "Breece" }],
+    },
+  ],
+  survival_curves: [
+    {
+      player_id: "wr0",
+      name: "Ja'Marr",
+      position: "WR",
+      points: [
+        { pick: 10, survival: 1 },
+        { pick: 14, survival: 0.82 },
+        { pick: 26, survival: 0.2 },
+      ],
+    },
+  ],
+};
 
 function fakeApi(
   opts: {
@@ -154,5 +186,22 @@ describe("Dashboard", () => {
     render(<Dashboard leagueId="cbs-local" api={api} />);
     expect(await screen.findByLabelText("Pick log")).toBeInTheDocument();
     expect(screen.getAllByText("Christian McCaffrey").length).toBeGreaterThan(0);
+  });
+
+  it("renders both analytics panels from the live analytics feed", async () => {
+    const { api } = fakeApi({ analyticsResult: { status: 200, analytics: ANALYTICS } });
+    render(<Dashboard leagueId="cbs-local" api={api} />);
+
+    // ValueCurvePanel: the RB chip only exists once analytics.value_curves is populated — the
+    // "warm up with the engine" empty state renders no buttons at all — so finding it proves the
+    // live payload (not just the panel shell) reached this component.
+    expect(await screen.findByRole("button", { name: /RB/ })).toBeInTheDocument();
+
+    // SurvivalCurvePanel: "Survival curves" is ALSO the empty-state heading (it renders before the
+    // draft starts too), so that text alone wouldn't prove data reached it. Pin the heading to
+    // confirm it's the right panel, then pin a fixture-only candidate name that appears solely in
+    // the populated legend — that's the part that can't render without state.analytics flowing in.
+    expect(await screen.findByRole("heading", { name: /Survival curves/i })).toBeInTheDocument();
+    expect(await screen.findByText("Ja'Marr")).toBeInTheDocument();
   });
 });
