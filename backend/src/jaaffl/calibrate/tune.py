@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from statistics import mean
+from typing import TYPE_CHECKING
 
 from jaaffl.config import EngineParams
 from jaaffl.engine.simulate import (
@@ -23,6 +24,26 @@ from jaaffl.engine.simulate import (
     optimal_lineup_value,
     simulate_draft,
 )
+
+if TYPE_CHECKING:
+    from jaaffl.engine.context import DraftContext
+
+
+def sim_context_from_draft_context(dc: DraftContext) -> SimContext:
+    """Adapt a precompute :class:`DraftContext` into a :class:`SimContext`, so E2 can tune on REAL
+    projections + FFC ADP. σ is read per-player from ``projections``; everything else maps 1:1."""
+    return SimContext(
+        value=dict(dc.mu),
+        position=dict(dc.position),
+        baselines=dict(dc.baselines),
+        slots=list(dc.starting_slots),
+        roster_size=sum(slot.count for slot in dc.settings.roster_slots),
+        adp=dict(dc.adp_mean),
+        adp_stdev=dict(dc.adp_sd),
+        sigma={pid: proj.sigma for pid, proj in dc.projections.items()},
+        cliff_bonus=dict(dc.cliff_bonus),
+    )
+
 
 # Canonical λ round-bands (§10.3): (round-range, (lo, hi)). A degenerate band (lo==hi) is fixed.
 LAMBDA_BANDS: list[tuple[tuple[int, int], tuple[float, float]]] = [

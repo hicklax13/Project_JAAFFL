@@ -133,6 +133,32 @@ def test_run_tournament_ranks_our_agent_against_baselines() -> None:
         assert {"p_value", "mean_diff", "min_slot_diff", "beats"} <= comparison.keys()
 
 
+def test_sim_context_from_draft_context_maps_the_fields() -> None:
+    """The DraftContext -> SimContext adapter that lets the E2 study run on real precompute data."""
+    from types import SimpleNamespace
+
+    from jaaffl.calibrate.tune import sim_context_from_draft_context
+
+    settings = _small_settings()
+    dc = SimpleNamespace(
+        settings=settings,
+        mu={"rb0": 200.0, "wr0": 180.0},
+        position={"rb0": Position.RB, "wr0": Position.WR},
+        baselines={Position.RB: 30.0, Position.WR: 28.0},
+        starting_slots=expand_starting_slots(settings),
+        adp_mean={"rb0": 1.0, "wr0": 3.0},
+        adp_sd={"rb0": 5.0, "wr0": 6.0},
+        cliff_bonus={"rb0": 4.0},
+        projections={"rb0": SimpleNamespace(sigma=40.0), "wr0": SimpleNamespace(sigma=35.0)},
+    )
+    sc = sim_context_from_draft_context(dc)
+    assert sc.value == {"rb0": 200.0, "wr0": 180.0}
+    assert sc.adp_stdev == {"rb0": 5.0, "wr0": 6.0}
+    assert sc.sigma == {"rb0": 40.0, "wr0": 35.0}
+    assert sc.cliff_bonus == {"rb0": 4.0}
+    assert sc.roster_size == sum(s.count for s in settings.roster_slots)
+
+
 def test_smoke_study_returns_a_valid_in_range_param_vector() -> None:
     pytest.importorskip("optuna")
     from jaaffl.calibrate.tune import run_study
