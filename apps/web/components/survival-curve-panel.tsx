@@ -1,5 +1,3 @@
-"use client";
-
 import type { ReactElement } from "react";
 
 import {
@@ -13,7 +11,13 @@ import { pickOffset, survivalPolyline } from "../lib/curve";
 
 const BOX = { width: 640, height: 180 };
 
-/** Survival at your next pick — the number the legend reports and the tier it maps to. */
+/**
+ * Survival at your next pick — the number the legend reports and the tier it maps to. Falls back
+ * to the LAST charted point when `pick` is unknown (no next pick yet, i.e. draft order not read),
+ * which silently changes what the number means (survival "at your next pick" vs "at the end of the
+ * charted span"). Every caller that surfaces this value MUST also surface which meaning applies —
+ * see `hasNextPick` / `chartLabel` in `SurvivalCurvePanel` below.
+ */
 function atPick(curve: SurvivalCurve, pick: number | undefined): number {
   if (pick == null) return curve.points[curve.points.length - 1]?.survival ?? 0;
   const exact = curve.points.find((p) => p.pick === pick);
@@ -57,6 +61,17 @@ export function SurvivalCurvePanel({
   const minPick = allPicks.length > 0 ? Math.min(...allPicks) : 0;
   const maxPick = allPicks.length > 0 ? Math.max(...allPicks) : 1;
   const nextPick = markers[0];
+  // Whether every percentage below genuinely means "at your next pick" (true) or has fallen back
+  // to "at the end of the charted span" (false) — see the `atPick` docstring. Both the visible
+  // panel note and the chart's accessible name must say so; a bare percentage must never silently
+  // change meaning (this project's honesty bar, not just a WCAG nicety).
+  const hasNextPick = nextPick != null;
+  const perCandidate = curves
+    .map((c) => `${c.name ?? c.player_id} ${formatPct(atPick(c, nextPick))}`)
+    .join(", ");
+  const chartLabel = hasNextPick
+    ? `Survival to each upcoming pick for ${perCandidate}`
+    : `Survival across the charted picks (draft order not yet known) for ${perCandidate}`;
 
   return (
     <section className="panel card sc-panel" aria-labelledby="sc-h">
@@ -65,7 +80,9 @@ export function SurvivalCurvePanel({
           Survival curves
         </h3>
         <span className="panel-note">
-          {markers.length > 0 ? `your picks: ${markers.join(", ")}` : "draft order unknown"}
+          {hasNextPick
+            ? `your picks: ${markers.join(", ")}`
+            : "draft order unknown — showing survival across the charted picks"}
         </span>
       </div>
 
@@ -73,9 +90,7 @@ export function SurvivalCurvePanel({
         className="sc-chart"
         viewBox={`0 0 ${BOX.width} ${BOX.height}`}
         role="img"
-        aria-label={`Survival to each upcoming pick for ${curves
-          .map((c) => `${c.name ?? c.player_id} ${formatPct(atPick(c, nextPick))}`)
-          .join(", ")}`}
+        aria-label={chartLabel}
         preserveAspectRatio="none"
       >
         {markers.map((pick) => {

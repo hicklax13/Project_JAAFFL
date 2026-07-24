@@ -53,13 +53,25 @@ describe("SurvivalCurvePanel", () => {
     expect(container.querySelectorAll(".sc-marker")).toHaveLength(2);
   });
 
-  it("gives the chart an accessible description", () => {
+  it("gives the chart an accessible description that embeds real candidate data", () => {
     render(<SurvivalCurvePanel analytics={ANALYTICS} />);
-    expect(screen.getByRole("img", { name: /survival/i })).toBeInTheDocument();
+    // my_next_picks[0] is 14, so this pins the actual computed per-candidate text, not just the
+    // static "survival" label prefix (which a chart with no data would also satisfy).
+    expect(screen.getByRole("img", { name: /survival/i })).toHaveAccessibleName(/Ja'Marr 82%/i);
   });
 
   it("shows an honest empty state before the draft starts", () => {
     render(<SurvivalCurvePanel analytics={null} />);
     expect(screen.getByText(/once the draft starts/i)).toBeInTheDocument();
+  });
+
+  it("flags survival percentages as spanning the whole chart, never silently, when the draft order is unknown", () => {
+    render(<SurvivalCurvePanel analytics={{ ...ANALYTICS, my_next_picks: [] }} />);
+    // The percentages fall back to the last charted point (not "at your next pick") once there is
+    // no next pick to anchor them — the accessible name must say so, not just the panel note.
+    expect(
+      screen.getByRole("img", { name: /draft order not yet known/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/draft order unknown/i)).toBeInTheDocument();
   });
 });
