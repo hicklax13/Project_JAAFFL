@@ -30,11 +30,12 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 > no-regression gate, run live on real 2026 data — kept the priors), and the **E6** efficacy
 > tournament (our agent beats VBD-only + ADP-only baselines on the fixture pool, p=0.0002).
 >
-> What remains: the **OpenAI Responses API loop** (needs an owner key), remaining **analytics panels**
-> (value curves / survival / manager tendencies), and the deeper **stretch** items (XGBoost residual
-> projections, per-manager tendency modeling, a large offline real-data E2 study). The only hard gate
-> on *real CBS data* is the owner's one record-mode capture session. Owner-only tasks:
-> [`docs/owner-manual-todo.md`](docs/owner-manual-todo.md).
+> What remains: the **OpenAI Responses API loop** (needs an owner key), the **manager-tendency
+> analytics panel** (value-curve + survival-curve panels are done; manager tendencies await ≥1
+> recorded draft to accrue `manager_tendencies` rows), and the deeper **stretch** items (XGBoost
+> residual projections, per-manager tendency modeling, a large offline real-data E2 study). The
+> only hard gate on *real CBS data* is the owner's one record-mode capture session. Owner-only
+> tasks: [`docs/owner-manual-todo.md`](docs/owner-manual-todo.md).
 
 ## Stage 1 — CBS sync layer
 
@@ -93,11 +94,12 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 ## Stage 6 — Two-surface UI
 
 - [x] Thin in-page overlay: best pick / next-turn risk / why (`apps/extension` overlay)
-- [~] Next.js dashboard: board analytics, manager tendencies, scenarios (`apps/web`) *(live
-      recommendation feed + **draft board & pick-log** done, via `GET /state`; value-curve /
-      survival / manager-tendency panels still pending)*
-- [ ] **AG Grid removed by design** (deep-research: overkill for a 204-cell static board);
-      **ECharts** distributions/trends/scenarios still pending
+- [x] Next.js dashboard: board analytics, manager tendencies, scenarios (`apps/web`) *(live
+      recommendation feed, **draft board & pick-log** via `GET /state`, and the **value-curve +
+      survival-curve** analytics panels via `GET /analytics` — all done; manager-tendency panel
+      deferred until ≥1 recorded draft accrues `manager_tendencies` rows)*
+- [x] **AG Grid removed by design** (deep-research: overkill for a 204-cell static board);
+      distributions/trends render as **bespoke accessible SVG** (no ECharts dependency)
 
 ## Stage 7 — AI assistant (wire early, integrate last)
 

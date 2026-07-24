@@ -7,8 +7,10 @@ import { BoardPanel } from "./board-panel";
 import { SurvivalPanel, TierLadder } from "./charts";
 import { ReasoningLine, RosterRail, ScoringPanel, SettingsBadges, StatusBanner } from "./league-panels";
 import { playerName, RecommendationBanner, TopFive } from "./recommendation-banner";
+import { SurvivalCurvePanel } from "./survival-curve-panel";
 import { ThemeToggle } from "./theme-toggle";
 import { type DraftRoomApi, useDraftRoom } from "./use-recs";
+import { ValueCurvePanel } from "./value-curve-panel";
 
 export interface DashboardProps {
   leagueId?: string;
@@ -84,11 +86,14 @@ export function Dashboard({ leagueId = DEFAULT_LEAGUE_ID, api }: DashboardProps)
         <aside className="dr-analytics" aria-label="Draft analytics">
           <SurvivalPanel ranked={rec?.ranked ?? []} />
           <TierLadder ranked={rec?.ranked ?? []} />
+          <ValueCurvePanel analytics={state.analytics} />
           <ScoringPanel league={state.league} />
         </aside>
       </div>
 
       <BoardPanel state={state.boardState} />
+
+      <SurvivalCurvePanel analytics={state.analytics} />
 
       <footer className="dr-foot">
         <span className="muted">

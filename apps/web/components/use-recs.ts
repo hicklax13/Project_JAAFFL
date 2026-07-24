@@ -2,9 +2,11 @@
 
 import { useEffect, useReducer, useRef } from "react";
 
-import type { DraftBoardState, LeagueSettings, Recommendation } from "@jaaffl/shared";
+import type { DraftAnalytics, DraftBoardState, LeagueSettings, Recommendation } from "@jaaffl/shared";
 
 import {
+  type AnalyticsResult,
+  fetchAnalytics as realFetchAnalytics,
   fetchLeague as realFetchLeague,
   fetchState as realFetchState,
   getRecommendation as realGetRecommendation,
@@ -21,6 +23,7 @@ export interface DraftRoomApi {
   getRecommendation: (leagueId: string) => Promise<RecommendationResult>;
   fetchLeague: (leagueId: string) => Promise<LeagueSettings | null>;
   fetchState: (leagueId: string) => Promise<StateResult>;
+  fetchAnalytics: (leagueId: string, candidates?: readonly string[]) => Promise<AnalyticsResult>;
 }
 
 const REAL_API: DraftRoomApi = {
@@ -28,12 +31,14 @@ const REAL_API: DraftRoomApi = {
   getRecommendation: realGetRecommendation,
   fetchLeague: realFetchLeague,
   fetchState: realFetchState,
+  fetchAnalytics: realFetchAnalytics,
 };
 
 export interface DraftRoomState {
   recommendation: Recommendation | null;
   league: LeagueSettings | null;
   boardState: DraftBoardState | null;
+  analytics: DraftAnalytics | null;
   socket: RecsSocketState;
   hydrateError: HydrateError;
   lastUpdated: number | null;
@@ -44,6 +49,7 @@ type Action =
   | { type: "hydrate"; result: RecommendationResult; at: number }
   | { type: "league"; league: LeagueSettings | null }
   | { type: "board"; boardState: DraftBoardState | null }
+  | { type: "analytics"; analytics: DraftAnalytics | null }
   | { type: "socket"; socket: RecsSocketState };
 
 function statusToError(status: number): HydrateError {
@@ -76,6 +82,10 @@ function reducer(state: DraftRoomState, action: Action): DraftRoomState {
       // Keep the last board on a null result (transient offline / parse miss) so a blip mid-draft
       // doesn't blank the board — mirrors how "hydrate" preserves the last recommendation.
       return { ...state, boardState: action.boardState ?? state.boardState };
+    case "analytics":
+      // Keep the last series on a null result (transient offline / warming engine) so the charts
+      // do not blank mid-draft — mirrors how "board" preserves the last board.
+      return { ...state, analytics: action.analytics ?? state.analytics };
     case "socket":
       return { ...state, socket: action.socket };
   }
@@ -85,6 +95,7 @@ const INITIAL: DraftRoomState = {
   recommendation: null,
   league: null,
   boardState: null,
+  analytics: null,
   socket: "connecting",
   hydrateError: null,
   lastUpdated: null,
@@ -110,6 +121,11 @@ export function useDraftRoom(leagueId: string, apiOverride?: Partial<DraftRoomAp
         if (active) dispatch({ type: "board", boardState: result.state });
       });
 
+    const refreshAnalytics = (candidates?: readonly string[]) =>
+      void api.fetchAnalytics(leagueId, candidates).then((result) => {
+        if (active) dispatch({ type: "analytics", analytics: result.analytics });
+      });
+
     void api.getRecommendation(leagueId).then((result) => {
       if (active) dispatch({ type: "hydrate", result, at: Date.now() });
     });
@@ -117,12 +133,14 @@ export function useDraftRoom(leagueId: string, apiOverride?: Partial<DraftRoomAp
       if (active) dispatch({ type: "league", league });
     });
     refreshBoard();
+    refreshAnalytics();
 
     const unsubscribe = api.subscribeRecs(leagueId, {
       onRecommendation: (recommendation) => {
         if (!active) return;
         dispatch({ type: "rec", recommendation, at: Date.now() });
         refreshBoard();
+        refreshAnalytics(recommendation.ranked.slice(0, 6).map((p) => p.player_id));
       },
       onStatus: (socket) => active && dispatch({ type: "socket", socket }),
     });

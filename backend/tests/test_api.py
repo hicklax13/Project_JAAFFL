@@ -577,3 +577,59 @@ def test_state_honours_origin_allowlist(client: TestClient) -> None:
         "/state", params={"league_id": "cbs-local"}, headers={"origin": "https://evil.example"}
     )
     assert res.status_code == 403
+
+
+def test_analytics_404_for_unknown_league(client: TestClient) -> None:
+    res = client.get("/analytics", params={"league_id": "never-seen"})
+    assert res.status_code == 404
+    assert "unknown" in res.json()["detail"].lower()
+
+
+def test_analytics_503_while_engine_context_is_warming(client: TestClient) -> None:
+    """The board only needs events; analytics needs a precomputed context. Different gates —
+    this is exactly why analytics is NOT folded into GET /state."""
+    client.post("/draft/events", json=_named_paste_pick(1, "T1", "Christian McCaffrey", "RB", "SF"))
+    res = client.get("/analytics", params={"league_id": "L1"})
+    assert res.status_code == 503
+
+    # ...and the board still renders from the same events.
+    assert client.get("/state", params={"league_id": "L1"}).status_code == 200
+
+
+def test_analytics_returns_both_series_when_primed(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(jaaffl_data_dir=tmp_path / "data", jaaffl_recordings_dir=tmp_path / "rec"),
+        rec_engine=_primed_engine(),
+    )
+    client = TestClient(app)
+    client.post("/draft/events", json=_named_paste_pick(1, "T1", "Christian McCaffrey", "RB", "SF"))
+
+    res = client.get("/analytics", params={"league_id": "L1"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["league_id"] == "L1"
+    assert body["value_curves"]
+    assert {c["position"] for c in body["value_curves"]} <= {"QB", "RB", "WR", "TE"}
+    assert body["survival_curves"]
+    for curve in body["survival_curves"]:
+        assert all(0.0 <= p["survival"] <= 1.0 for p in curve["points"])
+
+
+def test_analytics_accepts_explicit_candidates(tmp_path: Path) -> None:
+    app = create_app(
+        Settings(jaaffl_data_dir=tmp_path / "data", jaaffl_recordings_dir=tmp_path / "rec"),
+        rec_engine=_primed_engine(),
+    )
+    client = TestClient(app)
+    client.post("/draft/events", json=_named_paste_pick(1, "T1", "Christian McCaffrey", "RB", "SF"))
+
+    res = client.get("/analytics", params={"league_id": "L1", "candidates": "wr1,wr2"})
+    assert res.status_code == 200
+    assert [c["player_id"] for c in res.json()["survival_curves"]] == ["wr1", "wr2"]
+
+
+def test_analytics_honours_origin_allowlist(client: TestClient) -> None:
+    res = client.get(
+        "/analytics", params={"league_id": "cbs-local"}, headers={"origin": "https://evil.example"}
+    )
+    assert res.status_code == 403

@@ -1,5 +1,7 @@
 import {
   createRecsSocket,
+  type DraftAnalytics,
+  DraftAnalyticsSchema,
   type DraftBoardState,
   DraftBoardStateSchema,
   type LeagueSettings,
@@ -94,6 +96,39 @@ export async function fetchState(leagueId: string): Promise<StateResult> {
     return { status: 200, state: parsed.success ? parsed.data : null };
   } catch {
     return { status: 200, state: null }; // 200 but an unparseable body → empty board, not a throw
+  }
+}
+
+export interface AnalyticsResult {
+  /** HTTP status so panels can distinguish 404 / 409 / 503 (engine warming) from a 200.
+   * 0 means the fetch threw (backend down) — panels keep their last series, never throw. */
+  status: number;
+  analytics: DraftAnalytics | null;
+}
+
+/**
+ * Status-aware GET /analytics: the value + survival series for the war-room panels. Mirrors
+ * fetchState's honesty contract. `candidates` are the ids already on screen from the WS push, so
+ * the survival lines always match the ranked picks rendered above them.
+ */
+export async function fetchAnalytics(
+  leagueId: string,
+  candidates?: readonly string[],
+): Promise<AnalyticsResult> {
+  const params = new URLSearchParams({ league_id: leagueId });
+  if (candidates && candidates.length > 0) params.set("candidates", candidates.join(","));
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/analytics?${params.toString()}`, { cache: "no-store" });
+  } catch {
+    return { status: 0, analytics: null };
+  }
+  if (!res.ok) return { status: res.status, analytics: null };
+  try {
+    const parsed = DraftAnalyticsSchema.safeParse(await res.json());
+    return { status: 200, analytics: parsed.success ? parsed.data : null };
+  } catch {
+    return { status: 200, analytics: null }; // 200 but an unparseable body → no series, not a throw
   }
 }
 
