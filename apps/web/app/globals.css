@@ -447,3 +447,116 @@ a {
 .why-total-row b {
   justify-self: end;
 }
+
+/* ============================ Draft board + pick log ============================ */
+.board {
+  margin-top: clamp(14px, 1.8vw, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* Wide content scrolls inside its own container — the page body never scrolls sideways. */
+.board-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius, 10px);
+}
+.board-grid {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.board-grid th,
+.board-grid td {
+  border: 1px solid var(--hairline);
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+  min-width: 92px;
+}
+.board-grid thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  color: var(--ink-3);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.board-grid .rnd {
+  min-width: 2em;
+  text-align: center;
+  color: var(--ink-3);
+  background: var(--surface);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.board-grid thead th.on-clock {
+  color: var(--brass);
+  background: var(--brass-glow);
+}
+.board-grid thead th.mine::after {
+  content: " ★";
+  color: var(--brass);
+}
+.board-grid .cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.board-grid .cell .nm {
+  color: var(--ink);
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-grid .cell .ps {
+  color: var(--ink-3);
+  font-size: var(--fs-2xs, 0.68rem);
+  letter-spacing: 0.04em;
+}
+/* Subtle position tint (not the solid position chip) — a quant-terminal board, not loud blocks. */
+.board-grid td[data-pos="QB"] { background: color-mix(in srgb, var(--pos-qb) 12%, transparent); }
+.board-grid td[data-pos="RB"] { background: color-mix(in srgb, var(--pos-rb) 12%, transparent); }
+.board-grid td[data-pos="WR"] { background: color-mix(in srgb, var(--pos-wr) 12%, transparent); }
+.board-grid td[data-pos="TE"] { background: color-mix(in srgb, var(--pos-te) 12%, transparent); }
+.board-grid td[data-pos="K"]  { background: color-mix(in srgb, var(--pos-k)  12%, transparent); }
+.board-grid td[data-pos="DST"]{ background: color-mix(in srgb, var(--pos-dst) 12%, transparent); }
+
+.pick-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.pick-log li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: var(--fs-sm);
+}
+.pick-log .pk {
+  color: var(--ink-3);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  min-width: 4.2em;
+}
+.pick-log .tm {
+  color: var(--ink-3);
+  min-width: 3em;
+}
+.pick-log .nm {
+  color: var(--ink);
+  font-weight: 500;
+}
+.pick-log .ps {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  margin-left: auto;
+}

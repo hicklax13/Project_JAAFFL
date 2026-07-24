@@ -23,6 +23,8 @@ from jaaffl.data.warehouse import Warehouse, open_app_db
 from jaaffl.domain import DraftEvent, DraftEventType, DraftState, LeagueSettings, Recommendation
 from jaaffl.engine.service import RecommendationEngine
 from jaaffl.ingest import DraftLog, IngestResult, handle_event, resolve_pick_ids
+from jaaffl.ingest.board import DraftBoardState, build_board_state
+from jaaffl.ingest.log import fold_state
 from jaaffl.league.constitution import resolve_league_settings
 
 log = structlog.get_logger(__name__)
@@ -332,6 +334,28 @@ def create_app(
         if not known:
             raise HTTPException(status_code=404, detail=f"unknown league '{league_id}'")
         return resolve_league_settings(league_id, snapshot=snapshot)
+
+    @app.get("/state", response_model=DraftBoardState)
+    def board_state(request: Request, league_id: str) -> DraftBoardState:
+        """The folded draft board + pick-log for the dashboard (§6): every pick enriched with the
+        drafted player's name / position / team (joined from the raw pick events). Same state gate
+        as /recommendation — 404 unknown league, 409 known-but-not-started — and the same Origin
+        allowlist (read-only; defense-in-depth so a widened allowlist still can't leak the board
+        cross-origin). Reuses the one event read for both the gate and the fold."""
+        require_allowed_origin(request)
+        events = app.state.draft_log.events(league_id)
+        if not events:
+            known = app.state.warehouse.latest_cbs_snapshot(league_id) is not None
+            raise HTTPException(
+                status_code=409 if known else 404,
+                detail=(
+                    f"draft not started for league '{league_id}'"
+                    if known
+                    else f"unknown league '{league_id}'"
+                ),
+            )
+        state = _resolve_state(fold_state(events), league_id)
+        return build_board_state(state, events)
 
     return app
 

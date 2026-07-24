@@ -1,5 +1,7 @@
 import {
   createRecsSocket,
+  type DraftBoardState,
+  DraftBoardStateSchema,
   type LeagueSettings,
   LeagueSettingsSchema,
   type Recommendation,
@@ -61,6 +63,37 @@ export async function fetchLeague(leagueId: string): Promise<LeagueSettings | nu
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
+  }
+}
+
+export interface StateResult {
+  /** HTTP status so the board can distinguish 404 (unknown) / 409 (not started) from a 200.
+   * 0 means the fetch threw (backend down) — the board degrades to empty, never a rejection. */
+  status: number;
+  state: DraftBoardState | null;
+}
+
+/**
+ * Status-aware GET /state (§8.3.x): the folded board + pick-log with drafted-player names. Mirrors
+ * getRecommendation's honesty contract — 404/409 surface as a status with a null state, an
+ * unreachable backend as status 0 — so the board renders the §6.6 degraded states rather than
+ * throwing. Re-fetched on each /recs/ws push (a new pick changes the board).
+ */
+export async function fetchState(leagueId: string): Promise<StateResult> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/state?league_id=${encodeURIComponent(leagueId)}`, {
+      cache: "no-store",
+    });
+  } catch {
+    return { status: 0, state: null };
+  }
+  if (!res.ok) return { status: res.status, state: null };
+  try {
+    const parsed = DraftBoardStateSchema.safeParse(await res.json());
+    return { status: 200, state: parsed.success ? parsed.data : null };
+  } catch {
+    return { status: 200, state: null }; // 200 but an unparseable body → empty board, not a throw
   }
 }
 
