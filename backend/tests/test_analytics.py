@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from jaaffl.domain import DraftPick, Position
 from jaaffl.engine.analytics import CURVE_DEPTH, value_curves
-from tests.engine_fixtures import draft_state, make_context, teams
+from tests.engine_fixtures import draft_state, jaaffl_settings, make_context
 
 
 def _specs() -> list[dict]:
-    """A board with all four charted positions plus a K (which must NOT be charted)."""
+    """A board with all four charted positions plus a K and DST (neither must be charted)."""
     specs: list[dict] = []
     for i in range(40):
         specs.append(
@@ -51,6 +51,7 @@ def _specs() -> list[dict]:
             }
         )
     specs.append({"pid": "k0", "pos": Position.K, "mu": 130.0, "adp": 160.0, "sd": 6.0})
+    specs.append({"pid": "dst0", "pos": Position.DST, "mu": 90.0, "adp": 165.0, "sd": 6.0})
     return specs
 
 
@@ -105,8 +106,7 @@ def test_vor_is_mu_minus_positional_baseline() -> None:
     assert rb.full[0].vor == round(expected, 2)
 
 
-def test_draft_order_is_never_inferred_from_team_count() -> None:
-    """Guard: fixtures pass the REAL entered order; curves must not need one at all."""
-    context = make_context(_specs())
-    assert context.settings.draft_order == teams(12)
-    assert value_curves(context, draft_state(1))  # value curves are order-independent
+def test_value_curves_do_not_require_a_draft_order() -> None:
+    """Unlike survival/VONA, value curves are pure VOR math — no snake order needed at all."""
+    context = make_context(_specs(), settings=jaaffl_settings(draft_order=None))
+    assert value_curves(context, draft_state(1))

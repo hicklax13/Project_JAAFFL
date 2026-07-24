@@ -50,17 +50,26 @@ def _drafted_ids(state: DraftState) -> set[str]:
     return {pick.player_id for pick in state.picks if pick.player_id}
 
 
+def _vor(pid: str, context: DraftContext) -> float:
+    """Value over replacement: μ minus the replacement baseline for that player's position."""
+    return context.mu[pid] - context.baselines.get(context.position[pid], 0.0)
+
+
 def _curve(pids: Iterable[str], context: DraftContext) -> list[CurvePoint]:
-    """VOR-ranked points for one position, best-first, re-ranked from 1 and capped."""
-    ranked = sorted(pids, key=lambda pid: context.mu[pid], reverse=True)
+    """VOR-ranked points for one position, best-first, re-ranked from 1 and capped.
+
+    Ranks by VOR (not raw ``mu``) so the ordering is correct even if a caller ever passes
+    mixed-position ``pids`` — a single-position input would rank identically either way, since
+    the baseline is then constant, but nothing about this function's signature enforces that.
+    """
+    ranked = sorted(pids, key=lambda pid: _vor(pid, context), reverse=True)
     points: list[CurvePoint] = []
     for rank, pid in enumerate(ranked[:CURVE_DEPTH], start=1):
-        baseline = context.baselines.get(context.position[pid], 0.0)
         player = context.players.get(pid)
         points.append(
             CurvePoint(
                 rank=rank,
-                vor=round(context.mu[pid] - baseline, 2),
+                vor=round(_vor(pid, context), 2),
                 player_id=pid,
                 name=player.name if player is not None else None,
             )
