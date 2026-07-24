@@ -7,6 +7,7 @@ from jaaffl.engine.analytics import (
     CURVE_DEPTH,
     SURVIVAL_CANDIDATES,
     _total_picks,
+    build_analytics,
     survival_curves,
     value_curves,
 )
@@ -261,3 +262,22 @@ def test_board_conditioning_lowers_survival_through_the_public_surface() -> None
     point_run = curves_run[0].points[0]
     assert point_no_run.pick == point_run.pick == 55  # same pick, isolating the shift's effect
     assert point_run.survival < point_no_run.survival
+
+
+def test_build_analytics_folds_both_series_and_markers() -> None:
+    """One payload the panel layer can render without a second round-trip."""
+    context = make_context(_specs())
+    state = draft_state(5, league_id="L1", my_team_id="t0")
+    analytics = build_analytics(context, state)
+
+    assert analytics.league_id == "L1"
+    assert analytics.current_overall_pick == 5
+    assert len(analytics.my_next_picks) == 2
+    assert {c.position for c in analytics.value_curves} == {"QB", "RB", "WR", "TE"}
+    assert analytics.survival_curves
+
+
+def test_build_analytics_passes_candidates_through() -> None:
+    context = make_context(_specs())
+    analytics = build_analytics(context, draft_state(5), candidates=["wr2"])
+    assert [c.player_id for c in analytics.survival_curves] == ["wr2"]

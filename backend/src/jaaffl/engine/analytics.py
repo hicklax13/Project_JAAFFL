@@ -243,3 +243,30 @@ def survival_curves(
         for pid in chosen
     ]
     return curves, markers
+
+
+class DraftAnalytics(BaseModel):
+    """The dashboard analytics feed — both series plus the pick markers that anchor them."""
+
+    league_id: str
+    current_overall_pick: int = Field(ge=1)
+    my_next_picks: list[int] = Field(default_factory=list)
+    value_curves: list[PositionCurve] = Field(default_factory=list)
+    survival_curves: list[SurvivalCurve] = Field(default_factory=list)
+
+
+def build_analytics(
+    context: DraftContext,
+    state: DraftState,
+    *,
+    candidates: Sequence[str] | None = None,
+) -> DraftAnalytics:
+    """Assemble the full analytics payload for one league state."""
+    curves, markers = survival_curves(context, state, candidates=candidates)
+    return DraftAnalytics(
+        league_id=state.league_id,
+        current_overall_pick=state.current_overall_pick,
+        my_next_picks=markers,
+        value_curves=value_curves(context, state),
+        survival_curves=curves,
+    )
