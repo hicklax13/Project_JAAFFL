@@ -75,10 +75,12 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 - [x] Opponent pick-probability model — analytic survival (`jaaffl.engine.opponents`)
 - [x] Marginal Lineup Value via Hungarian assignment (`jaaffl.engine.optimize`) — the v1 flex-aware
       optimizer the engine actually uses
-- [~] **[stretch]** Monte Carlo end-of-draft roster simulation (`jaaffl.engine.simulate`) *(stubbed:
-      `NotImplementedError`; analytic VONA is the shipped v1 default)*
-- [~] **[stretch]** Constrained roster optimization via OR-Tools CP-SAT
-      (`jaaffl.engine.optimize::optimize_roster`) *(stubbed: `NotImplementedError`)*
+- [x] **[stretch]** Draft simulator + agents + MC-VONA (`jaaffl.engine.simulate`) — `simulate_draft`
+      (full snake to completion), the behavioral/Score agents, and `simulate_drafts` (E[best
+      available]); analytic VONA remains the shipped v1 hot-path default *(needs `engine-stretch`)*
+- [x] **[stretch]** Constrained roster optimization via OR-Tools CP-SAT
+      (`jaaffl.engine.optimize::optimize_roster`) — the season-simulator end-state ILP *(needs
+      `engine-stretch`)*
 - [ ] **[stretch]** Only then: XGBoost residual models, injury-risk calibration, 2027 aging curves
 - [x] Treat 2027 outputs as **ESTIMATED** unless a forward-year vendor feed is licensed *(policy
       enforced)*
@@ -104,8 +106,9 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 
 ## Cross-cutting
 
-- [~] **Calibration (Track J)** — `jaaffl.calibrate` + `scripts/`: **E1** flex-split (`calibrate_flex_split.py`,
-      dry-run) and **E3** projection-validation (`validate_projections.py`) tooling done + run live;
-      **E2** param tuning (`optuna`) and the **E6** efficacy tournament still pending
+- [~] **Calibration (Track J)** — `jaaffl.calibrate` + `scripts/`: **E1** flex-split
+      (`calibrate_flex_split.py`), **E3** projection-validation (`validate_projections.py`), and
+      **E2** param tuning (`tune_engine_params.py` — Optuna study + no-regression promotion gate)
+      all done + run live; the **E6** efficacy tournament (full agent-vs-baseline league) still pending
 - [ ] Playwright kept for testing / emergency draft-room recovery (not the production path)
 - [~] Compliance guardrails enforced in code & docs (see `docs/legal-and-compliance.md`)
