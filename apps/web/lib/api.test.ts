@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Recommendation } from "@jaaffl/shared";
 
 import {
+  fetchAnalytics,
   fetchLeague,
   fetchState,
   getRecommendation,
@@ -268,5 +269,54 @@ describe("fetchState", () => {
       }),
     );
     await expect(fetchState("cbs-local")).resolves.toEqual({ status: 0, state: null });
+  });
+});
+
+describe("fetchAnalytics", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("returns the parsed payload on 200", async () => {
+    const body = {
+      league_id: "L1",
+      current_overall_pick: 5,
+      my_next_picks: [7],
+      value_curves: [],
+      survival_curves: [],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body }),
+    );
+    const result = await fetchAnalytics("L1");
+    expect(result.status).toBe(200);
+    expect(result.analytics?.league_id).toBe("L1");
+  });
+
+  it("surfaces a 503 as a status with no analytics rather than throwing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    const result = await fetchAnalytics("L1");
+    expect(result).toEqual({ status: 503, analytics: null });
+  });
+
+  it("maps an unreachable backend to status 0", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    expect(await fetchAnalytics("L1")).toEqual({ status: 0, analytics: null });
+  });
+
+  it("treats an unparseable 200 body as empty, not an exception", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ nope: true }) }),
+    );
+    expect(await fetchAnalytics("L1")).toEqual({ status: 200, analytics: null });
+  });
+
+  it("forwards candidate ids so the curves match the ranked picks on screen", async () => {
+    const spy = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ nope: true }) });
+    vi.stubGlobal("fetch", spy);
+    await fetchAnalytics("L1", ["a", "b"]);
+    expect(spy.mock.calls[0]![0]).toContain("candidates=a%2Cb");
   });
 });
