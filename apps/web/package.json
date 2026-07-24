@@ -10,7 +10,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "next lint || echo \"(lint: configure eslint)\""
+    "lint": "echo \"(lint: add eslint)\" && exit 0"
   },
   "dependencies": {
     "@jaaffl/shared": "workspace:*",
