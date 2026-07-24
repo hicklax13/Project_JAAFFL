@@ -21,6 +21,7 @@ from jaaffl.config import Settings, get_settings
 from jaaffl.data import Crosswalk
 from jaaffl.data.warehouse import Warehouse, open_app_db
 from jaaffl.domain import DraftEvent, DraftEventType, DraftState, LeagueSettings, Recommendation
+from jaaffl.engine.analytics import DraftAnalytics, build_analytics
 from jaaffl.engine.service import RecommendationEngine
 from jaaffl.ingest import DraftLog, IngestResult, handle_event, resolve_pick_ids
 from jaaffl.ingest.board import DraftBoardState, build_board_state
@@ -356,6 +357,41 @@ def create_app(
             )
         state = _resolve_state(fold_state(events), league_id)
         return build_board_state(state, events)
+
+    @app.get("/analytics", response_model=DraftAnalytics)
+    def draft_analytics(
+        request: Request, league_id: str, candidates: str | None = None
+    ) -> DraftAnalytics:
+        """Value + survival series for the dashboard analytics panels (§6).
+
+        Same event gate and Origin allowlist as /state, PLUS a 503 when the engine context is still
+        warming: the board needs only the pick events, while these series need the precomputed
+        DraftContext. Keeping them on separate endpoints means a warming engine degrades the charts
+        without blanking the board.
+
+        ``candidates`` is an optional comma-separated id list — the dashboard passes the ids it
+        already holds from the WS push so the survival lines match the ranked picks on screen.
+        """
+        require_allowed_origin(request)
+        events = app.state.draft_log.events(league_id)
+        if not events:
+            known = app.state.warehouse.latest_cbs_snapshot(league_id) is not None
+            raise HTTPException(
+                status_code=409 if known else 404,
+                detail=(
+                    f"draft not started for league '{league_id}'"
+                    if known
+                    else f"unknown league '{league_id}'"
+                ),
+            )
+        context = app.state.rec_engine.context_for(league_id)
+        if context is None:
+            raise HTTPException(
+                status_code=503, detail=f"engine warming up for league '{league_id}'"
+            )
+        state = _resolve_state(fold_state(events), league_id)
+        ids = [pid for pid in (candidates or "").split(",") if pid] or None
+        return build_analytics(context, state, candidates=ids)
 
     return app
 
