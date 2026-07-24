@@ -66,3 +66,6 @@ Thumbs.db
 
 # ---- Claude Code tooling (ephemeral worktree checkouts; settings/skills stay tracked) ----
 .claude/worktrees/
+
+# ---- Superpowers brainstorm visual-companion scratch (mockups; never committed) ----
+.superpowers/
