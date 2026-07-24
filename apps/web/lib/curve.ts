@@ -4,6 +4,12 @@
  * Both panels draw with `<polyline points="x,y x,y ...">` in a fixed viewBox, so all either needs
  * is a domain→viewBox mapping. Keeping it here makes the maths directly unit-testable and keeps the
  * panel components small enough to read at a glance.
+ *
+ * CALLER INVARIANT: derive the domain (`maxRank`/`minVor`/`maxVor`, `minPick`/`maxPick`) from the
+ * SAME points you are plotting. The polylines deliberately do NOT clamp — a point outside the
+ * stated domain maps outside the viewBox, which surfaces the mistake instead of silently distorting
+ * real data. `pickOffset` DOES clamp, because it positions a single marker annotation where pinning
+ * to the edge beats vanishing off-canvas.
  */
 
 export interface Box {
