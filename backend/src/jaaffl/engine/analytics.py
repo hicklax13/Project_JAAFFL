@@ -14,12 +14,18 @@ Backend-internal view models: no place in the E5 Pydantic⇄Zod parity surface, 
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 from pydantic import BaseModel, Field
 
 from jaaffl.domain import DraftState, Position
 from jaaffl.engine.context import DraftContext
+from jaaffl.engine.opponents import (
+    board_adp_shift,
+    next_overall_pick,
+    pick_probabilities,
+    run_pressure_by_position,
+)
 
 # Positions worth charting. K and DST are drafted in the final rounds and their curves are flat,
 # so plotting them adds noise without informing a decision (config/league.json strategic_notes).
@@ -27,6 +33,17 @@ CURVE_POSITIONS: tuple[Position, ...] = (Position.QB, Position.RB, Position.WR, 
 
 # Bound the payload: 36 players per position is ~three rounds deep at 12 teams.
 CURVE_DEPTH = 36
+
+# One survival line per candidate — matches the scalar SurvivalPanel's slice(0, 6) so the two
+# survival surfaces always show the same players.
+SURVIVAL_CANDIDATES = 6
+
+# Picks charted beyond your second upcoming pick, so the curve continues past the marker.
+SURVIVAL_TAIL = 6
+
+# Hard bound on the charted span. next_overall_pick returns a far-future sentinel once you have no
+# picks left; without this the domain could balloon to thousands of samples.
+SURVIVAL_MAX_SPAN = 60
 
 
 class CurvePoint(BaseModel):
@@ -98,3 +115,114 @@ def value_curves(context: DraftContext, state: DraftState) -> list[PositionCurve
             )
         )
     return curves
+
+
+class SurvivalPoint(BaseModel):
+    """P(player still on the board) at one overall pick number."""
+
+    pick: int = Field(ge=1)
+    survival: float = Field(ge=0.0, le=1.0)
+
+
+class SurvivalCurve(BaseModel):
+    """One candidate's availability decay across the charted pick span."""
+
+    player_id: str
+    name: str | None = None
+    position: str | None = None
+    points: list[SurvivalPoint] = Field(default_factory=list)
+
+
+def _marker_picks(context: DraftContext, state: DraftState) -> list[int]:
+    """Your next two upcoming picks, read from the REAL entered draft order.
+
+    ``config/league.json`` sets ``infer_from_team_count: false`` — the order is decided in person
+    and entered into CBS — so these MUST come from ``next_overall_pick``. Degrades to ``[]`` when
+    the order or our team slot is not known yet (pre-draft), rather than raising.
+    """
+    markers: list[int] = []
+    for horizon in (1, 2):
+        try:
+            pick = next_overall_pick(context.settings, state, horizon=horizon)
+        except ValueError:
+            return []
+        if (
+            pick <= state.current_overall_pick
+            or pick > state.current_overall_pick + SURVIVAL_MAX_SPAN
+        ):
+            break
+        markers.append(pick)
+    return markers
+
+
+def survival_curves(
+    context: DraftContext,
+    state: DraftState,
+    *,
+    candidates: Sequence[str] | None = None,
+) -> tuple[list[SurvivalCurve], list[int]]:
+    """``(curves, marker_picks)`` — availability decay for the candidate set.
+
+    ``candidates`` are the ids the dashboard already holds from the WS push, so the lines match the
+    ranked picks rendered above them; unknown or already-drafted ids are skipped rather than
+    raising. Omitted, it falls back to the best available by projected points so the endpoint is
+    useful (and testable) on its own.
+    """
+    drafted = _drafted_ids(state)
+    available = [pid for pid in context.mu if pid not in drafted]
+    if candidates is None:
+        chosen = sorted(available, key=lambda pid: context.mu[pid], reverse=True)
+    else:
+        available_set = set(available)
+        chosen = [pid for pid in candidates if pid in available_set]
+    chosen = [pid for pid in chosen[:SURVIVAL_CANDIDATES] if pid in context.adp_mean]
+
+    markers = _marker_picks(context, state)
+    start = state.current_overall_pick
+    end = min((markers[-1] if markers else start) + SURVIVAL_TAIL, start + SURVIVAL_MAX_SPAN)
+    picks = list(range(start, end + 1))
+
+    if not chosen:
+        return [], markers
+
+    # Board-conditioned effective ADP (R3), mirroring recommend(): a position going faster than ADP
+    # pulls its survival down, so the chart agrees with the advice the engine is giving.
+    available_adp = {pid: context.adp_mean[pid] for pid in available if pid in context.adp_mean}
+    try:
+        pressure = run_pressure_by_position(
+            state, context.settings, available_adp, context.position
+        )
+    except ValueError:
+        pressure = {}
+    shift = board_adp_shift(pressure, context.position, beta=context.params.board_survival_weight)
+
+    subset_adp = {pid: context.adp_mean[pid] for pid in chosen}
+    subset_sd = {pid: context.adp_sd[pid] for pid in chosen if pid in context.adp_sd}
+
+    # One vectorized call per charted pick, then fan out — not one call per (player, pick).
+    series: dict[str, list[SurvivalPoint]] = {pid: [] for pid in chosen}
+    for pick in picks:
+        taken = pick_probabilities(
+            state,
+            context.settings,
+            subset_adp,
+            subset_sd,
+            my_next_overall=pick,
+            adp_shift=shift,
+        )
+        for pid in chosen:
+            survival = 1.0 - float(taken.get(pid, 0.0))
+            series[pid].append(
+                SurvivalPoint(pick=pick, survival=round(min(1.0, max(0.0, survival)), 4))
+            )
+
+    curves = [
+        SurvivalCurve(
+            player_id=pid,
+            name=context.players[pid].name if pid in context.players else None,
+            position=context.position[pid].value if pid in context.position else None,
+            points=series[pid],
+        )
+        for pid in chosen
+    ]
+    return curves, markers

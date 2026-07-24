@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from jaaffl.domain import DraftPick, Position
-from jaaffl.engine.analytics import CURVE_DEPTH, value_curves
+from jaaffl.engine.analytics import CURVE_DEPTH, SURVIVAL_CANDIDATES, survival_curves, value_curves
 from tests.engine_fixtures import draft_state, jaaffl_settings, make_context
 
 
@@ -110,3 +110,71 @@ def test_value_curves_do_not_require_a_draft_order() -> None:
     """Unlike survival/VONA, value curves are pure VOR math — no snake order needed at all."""
     context = make_context(_specs(), settings=jaaffl_settings(draft_order=None))
     assert value_curves(context, draft_state(1))
+
+
+def test_survival_is_monotonically_decreasing_and_bounded() -> None:
+    """A player can only get less available as picks pass; probabilities stay in [0, 1]."""
+    context = make_context(_specs())
+    curves, _ = survival_curves(context, draft_state(10))
+
+    assert curves, "expected survival curves for the default candidate set"
+    for curve in curves:
+        values = [p.survival for p in curve.points]
+        assert all(0.0 <= v <= 1.0 for v in values)
+        assert values == sorted(values, reverse=True)
+
+
+def test_survival_caps_candidate_count() -> None:
+    """One line per candidate, capped so the chart stays readable."""
+    context = make_context(_specs())
+    curves, _ = survival_curves(context, draft_state(10))
+    assert len(curves) <= SURVIVAL_CANDIDATES
+
+
+def test_explicit_candidates_are_honoured_in_order() -> None:
+    """The dashboard passes the ids it already has, so the lines match the ranked picks shown."""
+    context = make_context(_specs())
+    curves, _ = survival_curves(context, draft_state(10), candidates=["wr3", "rb7"])
+    assert [c.player_id for c in curves] == ["wr3", "rb7"]
+
+
+def test_unknown_and_drafted_candidate_ids_are_ignored_not_fatal() -> None:
+    """A stale id from the client must degrade a line, never 500 the endpoint."""
+    context = make_context(_specs())
+    state = draft_state(
+        3, picks=[DraftPick(overall=1, round=1, pick_in_round=1, team_id="t0", player_id="rb0")]
+    )
+    curves, _ = survival_curves(context, state, candidates=["rb0", "no-such-player", "wr1"])
+    assert [c.player_id for c in curves] == ["wr1"]
+
+
+def test_markers_come_from_the_real_entered_draft_order() -> None:
+    """config/league.json forbids inferring snake order; markers must read settings.draft_order."""
+    context = make_context(_specs())
+    state = draft_state(5, my_team_id="t0")
+    _, markers = survival_curves(context, state)
+
+    assert len(markers) == 2
+    assert all(m > state.current_overall_pick for m in markers)
+    assert markers == sorted(markers)
+
+
+def test_survival_domain_spans_current_pick_through_second_marker_plus_tail() -> None:
+    """The curve must visibly continue past your second turn, not stop on the marker."""
+    context = make_context(_specs())
+    state = draft_state(5, my_team_id="t0")
+    curves, markers = survival_curves(context, state)
+
+    picks = [p.pick for p in curves[0].points]
+    assert picks[0] == state.current_overall_pick
+    assert picks == list(range(picks[0], picks[-1] + 1))  # every integer pick, no gaps
+    assert picks[-1] > markers[-1]
+
+
+def test_survival_degrades_when_draft_order_is_unknown() -> None:
+    """Pre-draft (no order / no team) must return empty markers rather than raising."""
+    context = make_context(_specs(), settings=jaaffl_settings(draft_order=None))
+    state = draft_state(1, my_team_id="t0")
+    curves, markers = survival_curves(context, state)
+    assert markers == []
+    assert curves  # curves still render over the fallback span
