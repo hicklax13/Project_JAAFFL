@@ -280,6 +280,24 @@ class Recommendation(BaseModel):
     as_of_overall_pick: int
     ranked: list[RecommendedPick] = Field(default_factory=list)
     reasoning: str | None = None
+    # Overlay foot (plan §6.3 anatomy #6 / §6.7 auditability). The overlay receives ONLY a
+    # Recommendation — never a DraftState — so the engine publishes the roster summary rather
+    # than letting the client infer one from pick numbers (config/league.json forbids inferring
+    # draft structure). All optional/additive: pre-Tier-2 payloads still validate.
+    recompute_ms: float | None = Field(
+        default=None,
+        ge=0.0,
+        description="Server-side engine recompute cost in ms — the <200ms budget, made visible.",
+    )
+    roster_filled: int | None = Field(
+        default=None, ge=0, description="Roster spots MY team has filled so far."
+    )
+    roster_size: int | None = Field(
+        default=None, ge=0, description="Total roster spots (starters + bench) per the settings."
+    )
+    roster_by_position: dict[str, int] = Field(
+        default_factory=dict, description="My filled spots per position, e.g. {'RB': 1, 'WR': 2}."
+    )
 
     @property
     def best(self) -> RecommendedPick | None:

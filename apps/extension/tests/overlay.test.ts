@@ -179,3 +179,75 @@ describe("overlay panel controls", () => {
     expect(panel.style.left).toBe(""); // never moved
   });
 });
+
+describe("overlay foot — roster + freshness (§6.3 anatomy #6, §6.7 auditability)", () => {
+  // These two fields are the whole difference between trusting a pick and not: they let the
+  // owner tell a 200ms-old recommendation from a 90-second-old one. Both elements existed and
+  // were appended to the DOM, but neither was ever assigned — permanently blank on draft night.
+
+  const FRESH: Recommendation = {
+    ...REC,
+    recompute_ms: 12.4,
+    roster_filled: 2,
+    roster_size: 17,
+    roster_by_position: { RB: 1, WR: 1 },
+  };
+
+  function foot(): HTMLElement {
+    return shadow().querySelector<HTMLElement>(".ov-foot")!;
+  }
+
+  it("renders the roster summary the engine published", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(FRESH);
+    expect(foot().textContent).toContain("Roster 2/17");
+    expect(foot().textContent).toContain("RB 1");
+    expect(foot().textContent).toContain("WR 1");
+    handle.destroy();
+  });
+
+  it("renders the backend recompute cost, making the <200ms budget auditable", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(FRESH);
+    expect(foot().textContent).toContain("recompute 12ms");
+    handle.destroy();
+  });
+
+  it("ages the sync clock so a stale recommendation cannot look fresh", () => {
+    vi.useFakeTimers();
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(FRESH);
+    const first = foot().textContent ?? "";
+    expect(first).toContain("synced 0.0s ago");
+
+    vi.advanceTimersByTime(45_000);
+    const later = foot().textContent ?? "";
+    expect(later).toContain("synced 45.0s ago");
+    expect(later).not.toBe(first); // the whole point: the number MOVED without a new push
+
+    handle.destroy();
+    vi.useRealTimers();
+  });
+
+  it("flags the sync line stale once the push is overdue", () => {
+    vi.useFakeTimers();
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(FRESH);
+    const sync = shadow().querySelector<HTMLElement>(".ov-sync")!;
+    expect(sync.classList.contains("is-stale")).toBe(false);
+
+    vi.advanceTimersByTime(10_000);
+    expect(sync.classList.contains("is-stale")).toBe(true);
+
+    handle.destroy();
+    vi.useRealTimers();
+  });
+
+  it("degrades honestly when the engine published no roster summary", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(REC); // pre-Tier-2 payload: no roster/recompute fields at all
+    expect(foot().textContent).toContain("Roster —");
+    expect(foot().textContent).not.toContain("recompute");
+    handle.destroy();
+  });
+});
