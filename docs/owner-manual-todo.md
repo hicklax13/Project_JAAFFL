@@ -4,15 +4,38 @@ Tasks only the owner can do (record-mode capture, keys, auth, decisions). Deferr
 of each build phase on purpose — nothing here blocks the automated build unless flagged. Do the
 `[BLOCKER]` items when you want the feature they gate; the `[WHEN YOU WANT IT]` items are opt-in.
 
-## 1. CBS record-mode capture session  `[PARTIAL BLOCKER — CBS field mapping only]`
+## 1. CBS record-mode capture session  `[✅ DONE — 2026-07-24]`
+
+> **The owner ran this.** One 12-team snake mock (14 rounds, bots) produced **8.4 MB** of real
+> frames. The decoded result is [`docs/research/cbs-draft-protocol.md`](research/cbs-draft-protocol.md)
+> — ground truth that replaced every `TODO(capture)` guess in the **network-frame** vocabulary of
+> `apps/extension/src/lib/parse.ts`.
+>
+> Headline findings: CBS socket frames are **NUL-terminated** (this alone took parsed frames from
+> 8/98 to 128); `picks/completed` is the pick event and picks are **ID-only**; `newstate.opick` is
+> **forward-looking** (the pick on the clock, not the one just made); the real draft order lives in
+> `fullstatedelta.order`, **not** the rolling `upcomingorder` window.
+>
+> Three live bugs were found and fixed in the process (PRs #24, #25): CWD-relative paths writing
+> captures to a NON-git-ignored directory, CORS globs never matching (which recorded zero frames
+> while looking healthy), and `env_file` being CWD-relative.
+>
+> ⚠️ **The raw captures under `apps/extension/fixtures/cbs/` contain the owner's email and other
+> real drafters' ids/team names.** Git-ignored; keep them local. Committed fixtures are redacted via
+> `scripts/redact_cbs_fixtures.py`.
+>
+> **Still open from this session:** live end-to-end resolution has not been exercised against a real
+> draft — the pieces are individually tested but have never run together on live frames. Also still
+> `TODO(capture)`: the **settings-page** parse and `CbsPageSnapshot` projections/injuries/rankings
+> (§4 below), which need a *settings/board* page capture rather than draft-room frames.
 
 > 📋 **Full step-by-step walkthrough:** [`docs/live-draft-recording-guide.md`](live-draft-recording-guide.md)
 > — exact install commands, Chrome load-unpacked steps, and the record-mode buttons.
 
-The one real-frame session. It unblocks the **real** CBS field shapes that the code currently
-mocks behind `TODO(capture)`: the settings-page parse (Stage 2), `CbsOnPageProvider`'s real
-projections/injuries/rankings mapping and the `CbsPageSnapshot` schema
-(`backend/src/jaaffl/domain/models.py`, `backend/src/jaaffl/providers/cbs_onpage.py`), and — new
+The one real-frame session. It unblocked the **real** CBS field shapes that the code previously
+mocked behind `TODO(capture)`: `CbsOnPageProvider`'s real projections/injuries/rankings mapping and
+the `CbsPageSnapshot` schema (`backend/src/jaaffl/domain/models.py`,
+`backend/src/jaaffl/providers/cbs_onpage.py`) remain outstanding, and — new
 in **Phase 4 (Stage 5 engine)** — two more things:
 
 - **The real CBS scoring VALUES — RESOLVED (owner-confirmed 2026-07-17).** The owner provided the
@@ -27,17 +50,23 @@ in **Phase 4 (Stage 5 engine)** — two more things:
   priors. E1 measures the flex split from live FFC ADP (top-60); E2/E3 tune the weight vector and
   validate μ/σ against real boards. All optional — the engine ships and runs on the priors.
 
-Steps:
+Steps (kept for the next capture — e.g. a settings-page capture, or re-verifying on draft night):
 1. Open a CBS mock draft with the extension loaded.
 2. Click the extension action button to toggle **record mode**.
 3. Run the mock draft to completion (frames land git-ignored under
    `apps/extension/fixtures/cbs/` via `POST /dev/recordings`).
-4. Tell Claude "capture done" — Claude finalizes `parse.ts` field mappings, fills the real
-   `CbsPageSnapshot` fields, reconciles the scoring map, and promotes redacted golden fixtures.
+4. Tell Claude "capture done."
+
+Two things learned the hard way, worth knowing before the next one:
+
+- **`make` is not installed** on the owner's Windows setup, so the guide's `make backend-dev` fails.
+  Use `cd backend && ../.venv/Scripts/python.exe -m jaaffl.api` (now documented in the guide).
+- **Chrome will prompt for "access other apps and services on this device."** That is Chrome's Local
+  Network Access gate on the CBS page reaching `127.0.0.1:8788` — i.e. our own backend. It must be
+  allowed or recording silently stalls. Revoke it afterwards via the icon left of the URL if desired.
 
 Not a build blocker: the engine, nflverse + FFC providers, and the `/recommendation` + `/recs/ws`
-surfaces are fully built and tested against CBS-Standard defaults + synthetic fixtures. Manual-paste
-stays the guaranteed draft-day fallback regardless.
+surfaces are fully built and tested. Manual-paste stays the guaranteed draft-day fallback regardless.
 
 ## 2. Paid data providers  `[WHEN YOU WANT IT — off by default]`
 

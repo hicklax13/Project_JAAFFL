@@ -34,15 +34,17 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 > analytics panel** (value-curve + survival-curve panels are done; manager tendencies await ≥1
 > recorded draft to accrue `manager_tendencies` rows), and the deeper **stretch** items (XGBoost
 > residual projections, per-manager tendency modeling, a large offline real-data E2 study). The
-> only hard gate on *real CBS data* is the owner's one record-mode capture session. Owner-only
+> record-mode capture session is **DONE** (2026-07-24) and its protocol is decoded. Owner-only
 > tasks: [`docs/owner-manual-todo.md`](docs/owner-manual-todo.md).
 
 ## Stage 1 — CBS sync layer
 
 - [x] MV3 extension that runs only on CBS fantasy league/draft pages (`apps/extension`)
 - [x] Content scripts extract league metadata + live pick events; normalize to shared schema
-      *(code + de-dup complete; real CBS field/selector vocabulary is synthetic until the owner
-      capture session — tracked in owner-manual-todo)*
+      *(**capture DONE 2026-07-24** — the network-frame vocabulary is now the REAL decoded CBS
+      protocol, see [`docs/research/cbs-draft-protocol.md`](docs/research/cbs-draft-protocol.md):
+      NUL-terminated frames, `picks/completed`, `fullstatedelta.order`. DOM-selector and
+      settings-page vocabularies remain synthetic — they need a settings/board capture)*
 - [x] Stream normalized events to the localhost backend (`jaaffl.api`, `jaaffl.ingest`)
 - [x] **Decided against `webRequest`/`declarativeNetRequest`** — replaced by the 3-probe MAIN-world
       capture (WebSocket + `fetch`/XHR monkeypatch, React-fiber framework read, `MutationObserver`
@@ -52,7 +54,9 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 
 - [~] Parse CBS roster slots, flex eligibility, scoring rules, team count, keeper/dynasty
       flags, and draft order from the live room / settings pages (`jaaffl.league`)
-      *(scoring model + JAAFFL2025 values complete; live CBS settings-page parse is capture-blocked)*
+      *(scoring model + JAAFFL2025 values complete; the live draft-room **order** now reads from
+      the real `fullstatedelta.order` — never inferred. The settings-PAGE parse is still
+      capture-blocked: the 2026-07-24 session captured draft-room frames, not a settings page)*
 - [x] Never assume snake order from league size — read the actual draft board *(enforced in
       `parse.ts` + engine horizon; order comes from the board / manual-paste, never inferred)*
 - [x] Persist every league snapshot for self-owned historical analysis *(snapshot-every-settings
