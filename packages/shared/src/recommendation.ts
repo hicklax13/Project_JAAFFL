@@ -44,6 +44,9 @@ export const RecommendedPickSchema = z.object({
   next_turn_availability: z.number().min(0).max(1).nullable().optional(),
   tier: z.number().int().nullable().optional(),
   rationale: z.string().nullable().optional(),
+  // Which $0 sources backed this player's μ, sorted (e.g. ["ecr","xep"] vs a bare ["ecr"]).
+  // Live-data honesty: ECR-only means NO modeled projection. See `projectionProvenance`.
+  projection_sources: z.array(z.string()).nullable().optional(),
   // Populated by engine.recommend for every v1 rec (Stage 5); optional so that
   // pre-engine (Stage 1-4) payloads still validate.
   components: ScoreComponentsSchema.nullable().optional(),

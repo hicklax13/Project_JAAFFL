@@ -14,6 +14,7 @@ import {
   type DraftEvent,
   formatPct,
   type Position,
+  projectionProvenance,
   type Recommendation,
   type RecommendedPick,
   survivalOutlook,
@@ -106,6 +107,10 @@ const OVERLAY_CSS = `
    and from the sync line. Never colour-alone — the age in seconds carries the same fact. */
 .ov-sync.is-stale { color: var(--warning); }
 /* §6.6 — sits directly under the brass score it qualifies, so the caveat travels with the number. */
+/* Degraded-projection marker: word + border, never colour alone (§6.7 CVD). */
+.prov-chip { display: inline-block; font-size: var(--fs-xxs); font-weight: 700; letter-spacing: .04em;
+  color: var(--warning); border: 1px solid var(--warning); border-radius: var(--r-xs);
+  padding: 0 4px; }
 /* §6.5 Why? drawer — a dense audit table, rendered locally from ScoreComponents (no fetch). */
 .why-detail { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--hairline-2); }
 .why-detail .eyebrow { display: block; margin: 8px 0 5px; }
@@ -471,6 +476,11 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
     );
 
     box.appendChild(el("div", "eyebrow", "Projection & horizon"));
+    const prov = projectionProvenance(currentBest.projection_sources);
+    if (prov) {
+      box.appendChild(whyLine("Sources", prov.label));
+      box.appendChild(el("p", "mini-note", prov.detail));
+    }
     box.appendChild(whyLine("Floor (p10)", c.floor.toFixed(1)));
     box.appendChild(whyLine("Ceiling (p90)", c.ceiling.toFixed(1)));
     box.appendChild(whyLine("σ", c.sigma.toFixed(1)));
@@ -503,6 +513,17 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
     if (best.bye_week != null) subParts.push(`bye ${best.bye_week}`);
     if (best.components) subParts.push(`replacement ${best.components.replacement_baseline.toFixed(0)}`);
     subEl.textContent = subParts.join(" · ");
+
+    // Projection provenance (§5). Marked ONLY when degraded, so the chip's presence carries the
+    // information — an ECR-only player has no modeled projection at all, just a rank mapped onto
+    // the fallback curve. Unknown provenance renders nothing: "we don't know" and "we checked and
+    // it's degraded" are different claims.
+    const prov = projectionProvenance(best.projection_sources);
+    if (prov && !prov.modeled) {
+      const chip = el("span", "prov-chip", prov.label);
+      chip.title = prov.detail;
+      subEl.append(" ", chip);
+    }
     scoreEl.textContent = best.score.toFixed(1);
 
     // 3 — why bars from the shared decomposition

@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import {
   formatPct,
   type Position,
+  projectionProvenance,
   type RecommendedPick,
   survivalOutlook,
 } from "@jaaffl/shared";
@@ -45,6 +46,22 @@ function subline(pick: RecommendedPick): string {
   return parts.join(" · ");
 }
 
+/**
+ * Degraded-projection marker (§5), sharing the overlay's rule so the two surfaces cannot disagree.
+ * Rendered ONLY when degraded, so its presence carries the information: an ECR-only player has no
+ * modeled projection, just an expert rank on the fallback curve. Unknown provenance renders
+ * nothing — "we don't know" is a different claim from "we checked and it's degraded".
+ */
+function ProvenanceChip({ pick }: { pick: RecommendedPick }): ReactElement | null {
+  const provenance = projectionProvenance(pick.projection_sources);
+  if (!provenance || provenance.modeled) return null;
+  return (
+    <span className="stat-pill is-warning" title={provenance.detail}>
+      ⚠ {provenance.label}
+    </span>
+  );
+}
+
 export interface RecommendationBannerProps {
   best: RecommendedPick;
   reasoning?: string | null;
@@ -59,6 +76,7 @@ export function RecommendationBanner({ best, reasoning }: RecommendationBannerPr
     <section className="reco card" aria-labelledby="reco-name">
       <div className="reco-head">
         <span className="eyebrow">Recommended · on the clock</span>
+        <ProvenanceChip pick={best} />
         <SurvivalBadge probability={best.next_turn_availability} />
       </div>
       <div className="reco-who">

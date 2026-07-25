@@ -223,6 +223,21 @@
       "default": null,
       "title": "Projected Points"
     },
+    "projection_sources": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Projection Sources"
+    },
     "rationale": {
       "anyOf": [
         {

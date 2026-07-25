@@ -268,6 +268,11 @@ class RecommendedPick(BaseModel):
     )
     tier: int | None = None
     rationale: str | None = None
+    # Which $0 sources actually backed this player's mu, sorted (e.g. ["ecr", "xep"] vs a bare
+    # ["ecr"]). Live-data honesty: an ECR-only player has NO modeled projection — mu is still the
+    # rank-derived fallback curve — and the surface must be able to say so. None (not []) when the
+    # context recorded no provenance, since [] would assert "we checked and there are none".
+    projection_sources: list[str] | None = None
     # Populated by engine.recommend for every v1 rec (Stage 5); optional so that
     # pre-engine (Stage 1-4) payloads still validate.
     components: ScoreComponents | None = None
