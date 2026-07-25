@@ -136,3 +136,28 @@ def test_ranked_picks_are_enriched_with_player_identity() -> None:
     assert best.nfl_team == ctx.players[best.player_id].nfl_team
     for pick in rec.ranked:
         assert pick.position is not None  # needed for the pos chip + MLV colouring
+
+
+def test_recommendation_carries_the_roster_and_recompute_footer_fields() -> None:
+    """§6.3 anatomy #6 — the overlay foot renders `Roster n/17 · RB … · WR …` + `recompute Nms`.
+
+    The overlay is a pure consumer that receives ONLY a Recommendation (never a DraftState), so
+    the engine has to supply both. Deriving a roster from pick numbers client-side would infer
+    draft structure, which config/league.json (`infer_from_team_count: false`) forbids.
+    """
+    ctx = make_context(_board())
+    state = draft_state(
+        27,
+        picks=[
+            DraftPick(overall=3, round=1, pick_in_round=3, team_id="t0", player_id="rb0"),
+            DraftPick(overall=22, round=2, pick_in_round=10, team_id="t0", player_id="wr1"),
+            DraftPick(overall=5, round=1, pick_in_round=5, team_id="t1", player_id="rb1"),
+        ],
+    )
+    rec = recommend(state, ctx, ctx.params, limit=5)
+
+    assert rec.roster_filled == 2  # only MY picks — t1's rb1 is somebody else's
+    assert rec.roster_size == 17  # 9 starters + 8 bench, the league constitution
+    assert rec.roster_by_position == {"RB": 1, "WR": 1}
+    assert rec.recompute_ms is not None
+    assert rec.recompute_ms > 0.0

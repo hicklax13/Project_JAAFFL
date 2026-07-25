@@ -302,6 +302,56 @@
       ],
       "default": null,
       "title": "Reasoning"
+    },
+    "recompute_ms": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Server-side engine recompute cost in ms \u2014 the <200ms budget, made visible.",
+      "title": "Recompute Ms"
+    },
+    "roster_by_position": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "description": "My filled spots per position, e.g. {'RB': 1, 'WR': 2}.",
+      "title": "Roster By Position",
+      "type": "object"
+    },
+    "roster_filled": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Roster spots MY team has filled so far.",
+      "title": "Roster Filled"
+    },
+    "roster_size": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Total roster spots (starters + bench) per the settings.",
+      "title": "Roster Size"
     }
   },
   "required": [

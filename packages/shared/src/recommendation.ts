@@ -55,5 +55,13 @@ export const RecommendationSchema = z.object({
   as_of_overall_pick: z.number().int(),
   ranked: z.array(RecommendedPickSchema).default([]),
   reasoning: z.string().nullable().optional(),
+  // Overlay foot (plan §6.3 anatomy #6 / §6.7 auditability). The overlay receives ONLY a
+  // Recommendation — never a DraftState — so the engine publishes the roster summary rather
+  // than letting the client infer one from pick numbers (config/league.json forbids inferring
+  // draft structure). All optional/additive: pre-Tier-2 payloads still validate.
+  recompute_ms: z.number().nonnegative().nullable().optional(),
+  roster_filled: z.number().int().nonnegative().nullable().optional(),
+  roster_size: z.number().int().nonnegative().nullable().optional(),
+  roster_by_position: z.record(z.number().int()).optional(),
 });
 export type Recommendation = z.infer<typeof RecommendationSchema>;

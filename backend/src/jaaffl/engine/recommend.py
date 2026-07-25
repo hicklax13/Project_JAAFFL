@@ -15,6 +15,7 @@ where ``vona`` is stored RAW (pre-κ, may be < 0), and ``risk_penalty`` (λ·σ�
 
 from __future__ import annotations
 
+import time
 from collections import Counter
 from enum import StrEnum
 
@@ -151,6 +152,7 @@ def recommend(
     limit: int | None = None,
 ) -> Recommendation:
     """Score every candidate into a decomposed, ranked Recommendation (stateless hot path)."""
+    started = time.perf_counter()
     settings = context.settings
     picked = {pick.player_id for pick in state.picks if pick.player_id}
     available = [pid for pid in context.mu if pid not in picked]
@@ -316,9 +318,23 @@ def recommend(
         f"α={params.alpha} · flex_split={context.flex_split[0]}RB/{context.flex_split[1]}WR "
         f"(EngineParams v{params.version}; analytic VONA, horizon {horizon})"
     )
+    # Overlay foot (§6.3 anatomy #6): the roster the owner has actually filled. Published here
+    # because the overlay only ever receives a Recommendation — inferring it client-side from
+    # pick numbers would synthesize draft structure, which the league constitution forbids.
+    roster_by_position: Counter[Position] = Counter(
+        context.position[pid] for pid in my_roster if pid in context.position
+    )
+    roster_size = sum(slot.count for slot in settings.roster_slots)
+
     return Recommendation(
         league_id=state.league_id,
         as_of_overall_pick=state.current_overall_pick,
         ranked=ranked,
         reasoning=reasoning,
+        roster_filled=len(my_roster),
+        roster_size=roster_size or None,
+        roster_by_position={pos.value: n for pos, n in roster_by_position.items()},
+        # Measured LAST so it covers the whole recompute — this is the <200ms budget (§6.7)
+        # made auditable on the surface rather than asserted only in a test.
+        recompute_ms=(time.perf_counter() - started) * 1000.0,
     )

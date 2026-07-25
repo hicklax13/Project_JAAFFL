@@ -28,6 +28,13 @@ import { mountManualPaste } from "./manual-paste";
 
 const RECS_WS_URL = "ws://127.0.0.1:8788/recs/ws";
 
+/** Foot repaint cadence — the sync age has to advance on its own, not only on a push. */
+const SYNC_TICK_MS = 500;
+/** Matches the recs socket's own stale window, so the badge and the foot never disagree. */
+const STALE_AFTER_MS = 3000;
+/** Roster-rail order from the league constitution (QB 1 · RB 1 · WR 3 · TE 1 · K 1 · DST 1). */
+const ROSTER_POS_ORDER: Position[] = ["QB", "RB", "WR", "TE", "K", "DST"];
+
 // Overlay layout on top of the shared component kit (which already defines .pos/.sc-*/.btn/etc.).
 const OVERLAY_CSS = `
 :host { all: initial; }
@@ -82,6 +89,9 @@ const OVERLAY_CSS = `
   border-top: 1px solid var(--hairline); background: var(--wash); font-size: var(--fs-xxs); color: var(--ink-3); }
 .sc-label { font-size: var(--fs-xxs); color: var(--ink-3); }
 .sc-val { font-family: var(--font-mono); font-size: var(--fs-xs); }
+/* An overdue push is amber in the foot too, so freshness reads the same from the status pill
+   and from the sync line. Never colour-alone — the age in seconds carries the same fact. */
+.ov-sync.is-stale { color: var(--warning); }
 `;
 
 export type OverlaySyncState = RecsSyncState | "waiting" | "manual";
@@ -303,10 +313,12 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
   const altList = el("div", "alts");
   altSection.append(altHd, altList);
 
-  // 6 — foot
+  // 6 — foot: roster state + freshness. Both were created and appended but never assigned, so
+  // sync age and recompute ms never rendered — the two numbers that let the owner tell a 200ms-old
+  // recommendation from a 90-second-old one (§6.7 auditability).
   const foot = el("div", "ov-foot");
   const footRoster = el("span", undefined, "Roster —");
-  const footSync = el("span", "mono", "");
+  const footSync = el("span", "mono ov-sync", "");
   foot.append(footRoster, footSync);
 
   panel.append(head, reco, whySection, survSection, altSection, foot);
@@ -316,11 +328,60 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
   mountManualPaste(shadow, opts.onPaste ?? (() => {}));
 
   let currentBest: RecommendedPick | null = null;
+  let receivedAt: number | null = null; // CLIENT-side receipt clock — see renderSync()
+  let recomputeMs: number | null = null;
+
+  /**
+   * Foot, right half: `synced 0.4s ago · recompute 380ms` (§6.3 anatomy #6).
+   *
+   * The two numbers come from deliberately different places. `recompute` is server-side truth —
+   * only the backend can time its own engine, so it rides the Recommendation contract. Sync age
+   * is measured CLIENT-side from receipt, because that is the question the owner is actually
+   * asking ("how long since my overlay heard from the engine?"). A server-stamped age would
+   * freeze at its last value the moment the socket died, reading "fresh" forever over rotting
+   * data; a receipt clock keeps ticking, so a dead feed visibly ages.
+   */
+  function renderSync(): void {
+    if (receivedAt === null) {
+      footSync.textContent = "";
+      return;
+    }
+    const ageMs = Date.now() - receivedAt;
+    const parts = [`synced ${(ageMs / 1000).toFixed(1)}s ago`];
+    if (recomputeMs !== null) parts.push(`recompute ${Math.round(recomputeMs)}ms`);
+    footSync.textContent = parts.join(" · ");
+    footSync.classList.toggle("is-stale", ageMs >= STALE_AFTER_MS);
+  }
+
+  // Repaint on a timer, not only on push: without this the age would freeze at "0.0s ago" the
+  // instant the feed stopped — precisely the silent lie the footer exists to prevent.
+  const syncTimer = setInterval(renderSync, SYNC_TICK_MS);
+
+  /** Foot, left half: `Roster 2/17 · RB 1 · WR 3` — published by the engine, never inferred. */
+  function renderRoster(rec: Recommendation): void {
+    if (rec.roster_filled == null || !rec.roster_size) {
+      footRoster.textContent = "Roster —";
+      return;
+    }
+    const byPos = rec.roster_by_position ?? {};
+    const known = ROSTER_POS_ORDER.filter((p) => byPos[p]);
+    const extra = Object.keys(byPos)
+      .filter((p) => byPos[p] && !ROSTER_POS_ORDER.includes(p as Position))
+      .sort();
+    const counts = [...known, ...extra].map((p) => `${p} ${byPos[p]}`);
+    footRoster.textContent = [`Roster ${rec.roster_filled}/${rec.roster_size}`, ...counts].join(
+      " · ",
+    );
+  }
 
   function update(rec: Recommendation): void {
     const best = rec.ranked[0];
     if (!best) return;
     currentBest = best;
+    receivedAt = Date.now();
+    recomputeMs = rec.recompute_ms ?? null;
+    renderRoster(rec);
+    renderSync();
     const name = best.name ?? best.player_id;
     const pos = best.position ?? null;
 
@@ -419,6 +480,7 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
     setStatus,
     setClock,
     destroy: () => {
+      clearInterval(syncTimer);
       unsubscribe();
       host.remove();
     },
