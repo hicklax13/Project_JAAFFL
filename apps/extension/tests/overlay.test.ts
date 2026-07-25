@@ -499,3 +499,62 @@ describe("overlay Why? and Pin (§6.5 anti-black-box, §6.3 advisory actions)", 
     handle.destroy();
   });
 });
+
+describe("overlay projection provenance (§5 live-data honesty)", () => {
+  // After Tier 1 the live board has 314 players backed by {ecr,xep}, 63 by {xep} — and 70 by
+  // {ecr} ONLY, i.e. no modeled projection at all. `sources` never left the backend, so all three
+  // groups rendered identically and the owner could not tell a projection from a rank guess.
+
+  function withSources(name: string, sources: string[] | null): Recommendation {
+    return {
+      ...REC,
+      ranked: [{ ...REC.ranked[0]!, name, projection_sources: sources }, ...REC.ranked.slice(1)],
+    };
+  }
+
+  it("marks an ECR-only pick as having no modeled projection", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(withSources("Fallback Guy", ["ecr"]));
+    const chip = shadow().querySelector(".prov-chip");
+    expect(chip).not.toBeNull();
+    expect(chip!.textContent).toMatch(/ECR only/i);
+    handle.destroy();
+  });
+
+  it("leaves an xEP-backed pick unmarked, so the flag means something", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(withSources("Real Projection Guy", ["ecr", "xep"]));
+    expect(shadow().querySelector(".prov-chip")).toBeNull();
+    handle.destroy();
+  });
+
+  it("clears the mark when the next pick IS backed", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(withSources("Fallback Guy", ["ecr"]));
+    expect(shadow().querySelector(".prov-chip")).not.toBeNull();
+
+    handle.update(withSources("Real Projection Guy", ["ecr", "xep"]));
+    expect(shadow().querySelector(".prov-chip")).toBeNull();
+    handle.destroy();
+  });
+
+  it("shows nothing at all when provenance is unknown, rather than guessing", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(withSources("Unknown Guy", null));
+    expect(shadow().querySelector(".prov-chip")).toBeNull();
+    handle.destroy();
+  });
+
+  it("names the actual sources in the Why? panel either way", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(withSources("Real Projection Guy", ["ecr", "xep"]));
+    shadow().querySelector<HTMLButtonElement>('[aria-label*="Explain" i]')!.click();
+    expect(shadow().querySelector(".why-detail")!.textContent).toContain("ECR + xEP");
+
+    handle.update(withSources("Fallback Guy", ["ecr"]));
+    const text = shadow().querySelector(".why-detail")!.textContent ?? "";
+    expect(text).toContain("ECR only");
+    expect(text).toMatch(/rank/i); // the reason it matters, not just the label
+    handle.destroy();
+  });
+});

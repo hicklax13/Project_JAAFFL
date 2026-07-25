@@ -1,6 +1,7 @@
 export * from "./analytics";
 export * from "./events";
 export * from "./league";
+export * from "./provenance";
 export * from "./recommendation";
 export * from "./socket";
 export * from "./state";

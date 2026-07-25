@@ -102,8 +102,8 @@ def make_context(
     params: EngineParams | None = None,
     settings: LeagueSettings | None = None,
 ) -> DraftContext:
-    """Build a DraftContext directly from ``{pid, pos, mu, sigma?, adp?, sd?, ecr?}`` specs — no
-    providers/network — so the orchestrator can be exercised in isolation (uses the real
+    """Build a DraftContext directly from ``{pid, pos, mu, sigma?, adp?, sd?, ecr?, sources?}``
+    specs — no providers/network — so the orchestrator can be exercised in isolation (uses the real
     baseline/tier/cliff/MLV code paths)."""
     params = params or engine_params()
     settings = settings or jaaffl_settings(draft_order=teams(12))
@@ -128,6 +128,8 @@ def make_context(
             floor=m - Z_SCORE * sigma,
             ceiling=m + Z_SCORE * sigma,
             reliability=1.0,
+            # Which $0 sources actually backed this mu ({"xep","ecr"} vs a bare {"ecr"} fallback).
+            sources=dict(spec.get("sources", {})),
         )
         if spec.get("adp") is not None:
             adp_mean[pid] = spec["adp"]

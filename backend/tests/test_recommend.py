@@ -253,3 +253,44 @@ def test_the_analytic_hot_path_never_imports_the_simulator() -> None:
     ctx = make_context(_board())
     recommend(draft_state(3), ctx, ctx.params, limit=5)  # default analytic path
     assert "jaaffl.engine.simulate" not in sys.modules
+
+
+def test_ranked_picks_carry_their_projection_provenance() -> None:
+    """`PlayerProjection.sources` records exactly which $0 sources backed each player's mu, and
+    after Tier 1 the live board still has ~70 players with ECR ONLY — no real projection, mu still
+    on the `300 − rank` fallback curve. That never left the backend, so the owner could not tell a
+    modeled projection from a rank-derived guess. It has to ride the pick."""
+    specs = [
+        {
+            "pid": "backed",
+            "pos": Position.WR,
+            "mu": 260.0,
+            "sigma": 30.0,
+            "adp": 1.0,
+            "ecr": 1.0,
+            "sources": {"xep": 265.0, "ecr": 255.0},
+        },
+        {
+            "pid": "fallback",
+            "pos": Position.WR,
+            "mu": 240.0,
+            "sigma": 30.0,
+            "adp": 2.0,
+            "ecr": 2.0,
+            "sources": {"ecr": 240.0},
+        },
+    ]
+    rec = recommend(draft_state(1), make_context(specs), engine_params(), limit=5)
+    by_id = {p.player_id: p for p in rec.ranked}
+
+    # Sorted, so the rendered chip is stable between recomputes rather than dict-order dependent.
+    assert by_id["backed"].projection_sources == ["ecr", "xep"]
+    assert by_id["fallback"].projection_sources == ["ecr"]
+
+
+def test_projection_provenance_is_absent_rather_than_faked_when_unknown() -> None:
+    """A context with no recorded sources must yield None — an empty list would read as "we
+    checked and there are none", which is a different and false claim."""
+    specs = [{"pid": "p", "pos": Position.WR, "mu": 200.0, "sigma": 20.0, "adp": 1.0}]
+    rec = recommend(draft_state(1), make_context(specs), engine_params(), limit=1)
+    assert rec.ranked[0].projection_sources is None

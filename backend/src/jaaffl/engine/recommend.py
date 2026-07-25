@@ -370,6 +370,9 @@ def recommend(
                     next_turn_availability=survival_display.get(pid),
                     tier=context.tiers.get(pid),
                     rationale=_dominant_rationale(pos, components, params, proj.situation_flag),
+                    # Provenance of mu (§5 live-data honesty). Sorted so the rendered chip is
+                    # stable between recomputes rather than dict-insertion dependent.
+                    projection_sources=sorted(proj.sources) if proj.sources else None,
                     components=components,
                 ),
             )
