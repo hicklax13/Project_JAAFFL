@@ -352,6 +352,19 @@
       "default": null,
       "description": "Total roster spots (starters + bench) per the settings.",
       "title": "Roster Size"
+    },
+    "vona_method": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Which VONA estimator produced these numbers: 'analytic' | 'monte_carlo'. Stated explicitly so an opt-in ?mc=true can never be a silent no-op again.",
+      "title": "Vona Method"
     }
   },
   "required": [

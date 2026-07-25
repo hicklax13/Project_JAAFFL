@@ -869,3 +869,23 @@ def test_precompute_can_still_be_switched_off(tmp_path: Path) -> None:
         )
     )
     assert app.state.rec_engine._context_source is None
+
+
+def test_recommendation_mc_query_param_reaches_the_engine(tmp_path: Path) -> None:
+    """End-to-end for the flag that was a silent no-op: `?mc=true` threaded `use_mc` all the way
+    into `recommend()` where the parameter was never referenced. The response must now SAY which
+    estimator ran, so the difference is visible from outside the process."""
+    app = create_app(
+        Settings(jaaffl_data_dir=tmp_path / "data", jaaffl_recordings_dir=tmp_path / "rec"),
+        rec_engine=_primed_engine(),
+    )
+    client = TestClient(app)
+    client.post("/draft/events", json=pick_payload(1))
+    params = {"league_id": "L1", "team_id": "t0", "limit": 3}
+
+    default = client.get("/recommendation", params=params).json()
+    mc = client.get("/recommendation", params={**params, "mc": "true"}).json()
+
+    assert default["vona_method"] == "analytic"
+    assert mc["vona_method"] == "monte_carlo"
+    assert "MC VONA" in mc["reasoning"]

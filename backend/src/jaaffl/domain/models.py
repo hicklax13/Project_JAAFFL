@@ -298,6 +298,11 @@ class Recommendation(BaseModel):
     roster_by_position: dict[str, int] = Field(
         default_factory=dict, description="My filled spots per position, e.g. {'RB': 1, 'WR': 2}."
     )
+    vona_method: str | None = Field(
+        default=None,
+        description="Which VONA estimator produced these numbers: 'analytic' | 'monte_carlo'. "
+        "Stated explicitly so an opt-in ?mc=true can never be a silent no-op again.",
+    )
 
     @property
     def best(self) -> RecommendedPick | None:

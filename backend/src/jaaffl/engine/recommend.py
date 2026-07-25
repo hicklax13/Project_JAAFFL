@@ -22,6 +22,7 @@ from enum import StrEnum
 from jaaffl.config import EngineParams
 from jaaffl.domain import (
     DraftState,
+    LeagueSettings,
     Position,
     Recommendation,
     RecommendedPick,
@@ -143,6 +144,64 @@ def _dominant_rationale(
     return f"{pick_pos.value}: {lead} (MLV {components.mlv:.1f}, VONA {components.vona:.1f}){flag}"
 
 
+def _mc_expected_best(
+    state: DraftState,
+    settings: LeagueSettings,
+    context: DraftContext,
+    params: EngineParams,
+    available: list[str],
+    by_position: dict[Position, list[str]],
+    mlv: dict[str, float],
+    baselines: dict[Position, float],
+) -> dict[Position, float]:
+    """Monte-Carlo ``E_π`` per position for the opt-in ``?mc=true`` path (§3.9), or ``{}`` to
+    signal "fall back to analytic".
+
+    Everything here is deliberately lazy and off the default path: ``simulate`` (and therefore
+    numpy) is imported only when MC is actually requested, so the analytic hot path — the one
+    ``test_engine_latency`` holds to p95 < 200 ms — pays nothing for this existing.
+
+    Returns ``{}`` when the real draft order is unreadable. Without it there is no honest count of
+    picks between now and my next turn, and fabricating a snake from team count is exactly what
+    ``config/league.json`` (``infer_from_team_count: false``) forbids. Reporting a Monte-Carlo
+    number computed against an invented board would be worse than the silent no-op this replaces.
+    """
+    from jaaffl.engine.opponents import next_overall_pick
+    from jaaffl.engine.simulate import SimContext, mc_expected_best_available
+
+    try:
+        my_next = next_overall_pick(settings, state, horizon=max(1, params.vona_horizon_picks))
+    except ValueError:
+        return {}
+
+    # Picks landing strictly between my current pick and my next turn — the same window the
+    # analytic survival integrates over.
+    picks_between = max(0, my_next - state.current_overall_pick - 1)
+    if picks_between == 0:
+        return {}
+
+    sim_ctx = SimContext(
+        value=context.mu,
+        position=context.position,
+        baselines=baselines,
+        slots=context.starting_slots,
+        roster_size=sum(slot.count for slot in settings.roster_slots),
+        adp=context.adp_mean,
+        adp_stdev=context.adp_sd,
+    )
+    return mc_expected_best_available(
+        sim_ctx,
+        available=available,
+        candidates_by_position=by_position,
+        mlv=mlv,
+        picks_between=picks_between,
+        n_sims=max(1, params.mc_rollouts),
+        # Seeded off the pick so the same board always yields the same answer (no flicker between
+        # refreshes) while different picks get independent rollouts.
+        seed=state.current_overall_pick,
+    )
+
+
 def recommend(
     state: DraftState,
     context: DraftContext,
@@ -222,12 +281,21 @@ def recommend(
     by_position: dict[Position, list[str]] = {}
     for pid in available:
         by_position.setdefault(context.position[pid], []).append(pid)
+
     expected_best: dict[Position, float] = {}
-    for pos, pids in by_position.items():
-        ranked = sorted(pids, key=lambda p: mlv[p], reverse=True)
-        expected_best[pos] = expected_best_available(
-            ranked, mlv, survival_vona, replacement=baselines.get(pos, 0.0)
+    vona_method = "analytic"
+    if use_mc_vona:
+        expected_best = _mc_expected_best(
+            state, settings, context, params, available, by_position, mlv, baselines
         )
+        if expected_best:
+            vona_method = "monte_carlo"
+    if vona_method == "analytic":
+        for pos, pids in by_position.items():
+            ranked_pos = sorted(pids, key=lambda p: mlv[p], reverse=True)
+            expected_best[pos] = expected_best_available(
+                ranked_pos, mlv, survival_vona, replacement=baselines.get(pos, 0.0)
+            )
 
     # 5) Candidate pool: top-K available by MLV (bounded hot path).
     candidates = sorted(available, key=lambda p: mlv[p], reverse=True)[: params.candidate_cap]
@@ -313,10 +381,15 @@ def recommend(
         ranked = ranked[:limit]
 
     normal_lambda = lambda_weight(round_no, SlotState.NORMAL, params)
+    vona_note = (
+        f"MC VONA, {params.mc_rollouts} rollouts"
+        if vona_method == "monte_carlo"
+        else "analytic VONA"
+    )
     reasoning = (
         f"R{round_no}P{pick_in_round} · λ={normal_lambda:+.2f} · κ={params.kappa} · "
         f"α={params.alpha} · flex_split={context.flex_split[0]}RB/{context.flex_split[1]}WR "
-        f"(EngineParams v{params.version}; analytic VONA, horizon {horizon})"
+        f"(EngineParams v{params.version}; {vona_note}, horizon {horizon})"
     )
     # Overlay foot (§6.3 anatomy #6): the roster the owner has actually filled. Published here
     # because the overlay only ever receives a Recommendation — inferring it client-side from
@@ -334,6 +407,7 @@ def recommend(
         roster_filled=len(my_roster),
         roster_size=roster_size or None,
         roster_by_position={pos.value: n for pos, n in roster_by_position.items()},
+        vona_method=vona_method,
         # Measured LAST so it covers the whole recompute — this is the <200ms budget (§6.7)
         # made auditable on the surface rather than asserted only in a test.
         recompute_ms=(time.perf_counter() - started) * 1000.0,
