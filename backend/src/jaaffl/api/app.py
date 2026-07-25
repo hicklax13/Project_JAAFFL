@@ -108,10 +108,15 @@ def create_app(
         return is_origin_allowed(ws.headers.get("origin"), allowed_origins)
 
     def _resolve_state(state: DraftState, league_id: str) -> DraftState:
-        """Fill canonical player_ids for name-only (manual-paste) picks — resolving the raw event
-        names via the crosswalk — so the engine masks drafted players from the candidate pool."""
+        """Fill canonical player_ids for name-only (manual-paste) picks AND cbs:-id-only (real
+        CBS capture) picks — resolving the raw event names / cbs ids via the crosswalk — so the
+        engine masks drafted players from the candidate pool. The cbs: link table is seeded ahead
+        of time by scripts/seed_cbs_crosswalk.py; a live pick never guesses one."""
         return resolve_pick_ids(
-            state, app.state.draft_log.events(league_id), app.state.crosswalk.resolve_name
+            state,
+            app.state.draft_log.events(league_id),
+            app.state.crosswalk.resolve_name,
+            lambda cbs_id: app.state.crosswalk.resolve("cbs", cbs_id),
         )
 
     def _require_events(league_id: str) -> list[LoggedEvent]:

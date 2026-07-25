@@ -305,6 +305,103 @@ def test_recommendation_survives_unresolvable_paste_pick(tmp_path: Path) -> None
     assert res.json()["ranked"]
 
 
+def test_recommendation_masks_real_cbs_pick(tmp_path: Path) -> None:
+    """A real CBS pick (protocol §3: ID-only, player_id='cbs:<id>') resolves via the crosswalk's
+    cbs source-id link (scripts/seed_cbs_crosswalk.py's seeding target), then masks from the
+    candidate pool -- the live-recs correctness guarantee for the real (non-paste) capture path."""
+    specs = [
+        {"pid": "gsis:cmc", "pos": Position.RB, "mu": 330.0, "adp": 1.0, "sd": 6.0, "ecr": 1.0}
+    ]
+    specs += [
+        {
+            "pid": f"wr{i}",
+            "pos": Position.WR,
+            "mu": 300.0 - 4 * i,
+            "adp": float(i + 2),
+            "sd": 6.0,
+            "ecr": float(i + 2),
+        }
+        for i in range(12)
+    ]
+    engine = RecommendationEngine()
+    engine.prime("L1", make_context(specs))
+    app = create_app(
+        Settings(jaaffl_data_dir=tmp_path / "data", jaaffl_recordings_dir=tmp_path / "rec"),
+        rec_engine=engine,
+    )
+    # Seed the crosswalk's cbs source-id link directly (what scripts/seed_cbs_crosswalk.py does).
+    app.state.crosswalk.upsert(
+        Player(
+            player_id="gsis:cmc", name="Christian McCaffrey", position=Position.RB, nfl_team="SF"
+        )
+    )
+    app.state.crosswalk.link("cbs", "3117251", "gsis:cmc", method="deterministic")
+    client = TestClient(app)
+    cbs_pick = {
+        "event_type": "pick_made",
+        "league_id": "L1",
+        "pick_number": 1,
+        "source": "ws",
+        "data": {
+            "overall": 1,
+            "round": 1,
+            "pick_in_round": 1,
+            "team_id": "1",
+            "player_id": "cbs:3117251",
+            "cbs_player_id": "3117251",
+        },
+    }
+    client.post("/draft/events", json=cbs_pick)
+    res = client.get("/recommendation", params={"league_id": "L1", "team_id": "t0", "limit": 50})
+    assert res.status_code == 200
+    ranked_ids = [p["player_id"] for p in res.json()["ranked"]]
+    assert ranked_ids  # board still non-empty
+    assert "gsis:cmc" not in ranked_ids  # elite RB resolved from the cbs: id, then masked
+
+
+def test_recommendation_survives_unresolved_cbs_pick(tmp_path: Path) -> None:
+    """A CBS pick whose id has no crosswalk link yet degrades gracefully: 200 with a non-empty
+    board (the player is simply left unmasked, and the raw cbs: id is preserved so a later
+    scripts/seed_cbs_crosswalk.py run can still resolve it), never a 500."""
+    specs = [
+        {
+            "pid": f"wr{i}",
+            "pos": Position.WR,
+            "mu": 300.0 - 4 * i,
+            "adp": float(i + 1),
+            "sd": 6.0,
+            "ecr": float(i + 1),
+        }
+        for i in range(12)
+    ]
+    engine = RecommendationEngine()
+    engine.prime("L1", make_context(specs))
+    app = create_app(
+        Settings(jaaffl_data_dir=tmp_path / "data", jaaffl_recordings_dir=tmp_path / "rec"),
+        rec_engine=engine,
+    )
+    # Crosswalk deliberately NOT seeded for this cbs id -> it cannot resolve.
+    client = TestClient(app)
+    cbs_pick = {
+        "event_type": "pick_made",
+        "league_id": "L1",
+        "pick_number": 1,
+        "source": "ws",
+        "data": {
+            "overall": 1,
+            "round": 1,
+            "pick_in_round": 1,
+            "team_id": "1",
+            "player_id": "cbs:999999",
+            "cbs_player_id": "999999",
+        },
+    }
+    client.post("/draft/events", json=cbs_pick)
+    res = client.get("/recommendation", params={"league_id": "L1", "team_id": "t0", "limit": 5})
+    assert res.status_code == 200  # graceful: served the board, did not 500
+    assert res.json()["ranked"]
+
+
 def test_pick_ingest_publishes_a_fresh_recommendation_to_recs_ws(tmp_path: Path) -> None:
     """§8.4 step 5: a state-advancing pick recomputes and pushes a rec to /recs/ws subscribers."""
     app = create_app(

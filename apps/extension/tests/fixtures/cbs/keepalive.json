@@ -1,0 +1,10 @@
+{
+  "kind": "ws-send",
+  "payload": {
+    "body": "{\"type\":\"keepalive\"}",
+    "seq": 75,
+    "ts": "2026-07-25T01:23:57.857Z",
+    "url": "wss://chat.prod.fantasy.cbssports.cloud:443"
+  },
+  "ts": 1784942637857
+}

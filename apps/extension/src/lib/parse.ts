@@ -3,10 +3,10 @@
  * normalizer via the discriminated RawSource union; the isolated content script is the
  * sole caller (trust boundary).
  *
- * TODO(capture): every CBS-specific message shape and DOM selector below is a SYNTHETIC
- * placeholder pinned by tests/fixtures. After the record-mode mock-draft session, swap
- * the field mappings/selectors for the real captured shapes — the capture mechanism
- * (probes/relay/de-dup/transport) must not change.
+ * The network-frame vocabulary below is the REAL decoded CBS draft-socket protocol
+ * (docs/research/cbs-draft-protocol.md, verified against a live capture) — no longer
+ * synthetic. The DOM-selector vocabulary and the settings-page mapping remain SYNTHETIC
+ * placeholders pinned by tests/fixtures (TODO(capture): still pending a real capture).
  */
 
 import type { DraftEvent, LeagueSettings } from "@jaaffl/shared";
@@ -41,7 +41,10 @@ function isValidOverall(value: unknown): boolean {
 }
 
 /* ------------------------------------------------------------------------------------ *
- * Synthetic network-frame vocabulary — TODO(capture): map real CBS frames here.
+ * Real CBS network-frame vocabulary (docs/research/cbs-draft-protocol.md, decoded from a
+ * live capture). Frames are NUL-terminated JSON, or a bare numeral heartbeat. Envelope is
+ * {type, subtype|event, payload}. The DOM-selector vocabulary below this section is
+ * unrelated and stays synthetic (TODO(capture) — still pending a real capture).
  * ------------------------------------------------------------------------------------ */
 
 interface SyntheticPlayer {
@@ -81,26 +84,6 @@ function pickEnvelope(
   };
 }
 
-function pickEvent(
-  leagueId: string,
-  source: DraftEvent["source"],
-  pick: {
-    overall: number;
-    round?: number;
-    pickInRound?: number;
-    teamId: string;
-    player?: SyntheticPlayer;
-  },
-): DraftEvent {
-  const arithmetic = roundFromOverall(pick.overall);
-  return pickEnvelope(leagueId, source, pick.overall, {
-    round: pick.round ?? arithmetic.round,
-    pick_in_round: pick.pickInRound ?? arithmetic.pick_in_round,
-    team_id: pick.teamId,
-    ...playerData(pick.player),
-  });
-}
-
 function orderEvent(
   leagueId: string,
   source: DraftEvent["source"],
@@ -116,10 +99,144 @@ function orderEvent(
   };
 }
 
+/** Strip the trailing NUL(s) every CBS draft-socket frame carries. `JSON.parse` throws
+ * "Extra data" on the raw frame — this is the single most load-bearing line in this file. */
+function stripCbsFrame(raw: string): string {
+  return raw.replace(/\0+$/, "").trim();
+}
+
+/** payload.picks[] entry (picks/completed) — ID-ONLY, no name/position/team. */
+interface CbsPickEntry {
+  playerid?: string | number;
+  teamid?: string | number;
+  source?: string; // "autopick" | "userpick" | ... — preserved for manager-tendency work
+  skipped?: number;
+}
+
+/** payload.newstate — attached to most frames; describes the CURRENT/next (forward-
+ * looking) pick, not whatever pick(s) this same frame's payload.picks[] just reported. */
+interface CbsNewState {
+  opick?: string | number;
+  round?: string | number;
+  rounds?: string | number;
+  onclockteamid?: string | number;
+  ondeckteamid?: string | number;
+  state?: string;
+}
+
+/** payload.fullstatedelta — the delta CBS attaches to picks/completed frames. `order` is
+ * the STABLE, real entered round-1 order (see parseDraftOrder). */
+interface CbsFullStateDelta {
+  order?: string;
+}
+
+function cbsPlayerData(playerid: string | number | undefined): Record<string, unknown> {
+  if (playerid == null) return {};
+  return { player_id: `cbs:${playerid}`, cbs_player_id: String(playerid) };
+}
+
+/** CBS represents "nobody" as the NUMBER 0 (not the string "0") on onclockteamid /
+ * ondeckteamid once the draft is over; a real team id rides as a numeric string. */
+function cbsTeamId(value: string | number | undefined): string | null {
+  if (value == null || value === 0 || value === "0") return null;
+  return String(value);
+}
+
+/**
+ * payload.fullstatedelta.order → the REAL entered round-1 order, verbatim.
+ *
+ * NOT payload.newstate.upcomingorder: that field is a ROLLING multi-round lookahead
+ * window (observed entry counts across one full draft: 22, 17, 8, 1, 0 — never a stable
+ * one-per-team order) and must never feed draft_order — opponents.py's snake math
+ * (_my_overall_picks) uses len(draft_order) AS the team count, so a wrong-length order
+ * silently corrupts every "my next pick" calculation. fullstatedelta.order, by contrast,
+ * is confirmed STABLE: exactly one distinct value ("1,2,...,12") across all
+ * fullstatedelta-bearing frames of a full draft.
+ *
+ * Length guard: only accept a parsed order of EXACTLY IMMUTABLE_TEAM_COUNT entries — that
+ * is the whole point (any other length, empty or otherwise, risks the same corruption the
+ * rolling window would have caused) — never synthesize a snake from team count either (A5).
+ */
+function parseDraftOrder(order: string | undefined): string[] | null {
+  if (!order) return null;
+  const teams = order
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return teams.length === IMMUTABLE_TEAM_COUNT ? teams : null;
+}
+
+/**
+ * payload.picks[] → one pick_made per entry. GROUND-TRUTH CORRECTION vs. the doc's
+ * original prose ("take the overall from newstate.opick", corrected in commit 43b386b):
+ * newstate.opick is the pick now on the clock (paired with onclockteamid), i.e. ONE AHEAD
+ * of the pick(s) this same frame just reported. overall = newstate.opick - picks.length +
+ * index is CONFIRMED against every pick of a full draft (168/168 matches, batch sizes
+ * 1/2/5/7/9 all included) via fullstatedelta.opickindex and fullstatedelta.results/teams.
+ * Walking backward from opick by the batch size also naturally avoids ever minting a
+ * phantom pick at the completion sentinel.
+ */
+function cbsPickEvents(
+  leagueId: string,
+  source: DraftEvent["source"],
+  payload: Record<string, unknown>,
+): DraftEvent[] {
+  const picks = payload["picks"];
+  const newstate = payload["newstate"] as CbsNewState | undefined;
+  const hasAnchor = !!newstate && isValidOverall(newstate.opick);
+  if (!Array.isArray(picks) || picks.length === 0 || !hasAnchor) return [];
+
+  const nextOverall = Number(newstate!.opick);
+  const rounds = Number(newstate!.rounds);
+  const maxOverall =
+    Number.isInteger(rounds) && rounds > 0 ? rounds * IMMUTABLE_TEAM_COUNT : Infinity;
+
+  const events: DraftEvent[] = [];
+  picks.forEach((raw: unknown, i: number) => {
+    const p = raw as CbsPickEntry;
+    const overall = nextOverall - picks.length + i;
+    if (!isValidOverall(overall) || overall > maxOverall) return; // completion-sentinel guard
+    const arithmetic = roundFromOverall(overall);
+    events.push(
+      pickEnvelope(leagueId, source, overall, {
+        round: arithmetic.round,
+        pick_in_round: arithmetic.pick_in_round,
+        team_id: String(p.teamid ?? ""),
+        pick_source: p.source ?? null,
+        ...cbsPlayerData(p.playerid),
+      }),
+    );
+  });
+  return events;
+}
+
+/** payload.newstate → draft_state (current pick / round / on-the-clock / on-deck). Unlike
+ * pick_made, NO adjustment is needed here — newstate IS "the current state," by design. */
+function cbsDraftStateEvent(
+  leagueId: string,
+  source: DraftEvent["source"],
+  newstate: CbsNewState,
+): DraftEvent | null {
+  if (!isValidOverall(newstate.opick)) return null;
+  return {
+    event_type: "draft_state",
+    league_id: leagueId,
+    source,
+    data: {
+      current_overall_pick: Number(newstate.opick),
+      round: newstate.round != null ? Number(newstate.round) : null,
+      on_the_clock_team_id: cbsTeamId(newstate.onclockteamid),
+      on_deck_team_id: cbsTeamId(newstate.ondeckteamid),
+    },
+  };
+}
+
 function parseNetworkFrame(via: NetworkVia, body: string): DraftEvent[] {
+  const stripped = stripCbsFrame(body);
+  if (!stripped.startsWith("{")) return []; // bare-numeral heartbeat / non-JSON — silent skip
   let frame: Record<string, unknown>;
   try {
-    frame = JSON.parse(body) as Record<string, unknown>;
+    frame = JSON.parse(stripped) as Record<string, unknown>;
   } catch {
     return []; // noisy relay, silent parser — not a draft frame
   }
@@ -127,60 +244,8 @@ function parseNetworkFrame(via: NetworkVia, body: string): DraftEvent[] {
   const source = probeSource(via);
   const leagueId = String(frame["leagueId"] ?? frame["league_id"] ?? "cbs-live");
 
-  if (frame["type"] === "pick" && typeof frame["pick"] === "object" && frame["pick"]) {
-    return [pickEvent(leagueId, source, frame["pick"] as Parameters<typeof pickEvent>[2])];
-  }
-  if (frame["type"] === "on_the_clock") {
-    const overall = Number(frame["overall"]);
-    if (!isValidOverall(overall)) return [];
-    return [
-      {
-        event_type: "on_the_clock",
-        league_id: leagueId,
-        pick_number: overall,
-        source,
-        data: { current_overall_pick: overall, team_id: String(frame["teamId"] ?? "") },
-      },
-    ];
-  }
-  if (frame["type"] === "draft_state" || Array.isArray(frame["picks"])) {
-    const rawPicks = (frame["picks"] ?? []) as Array<Record<string, unknown>>;
-    const picks = rawPicks
-      .filter((p) => isValidOverall(p["overall"]))
-      .map((p) => {
-        const overall = Number(p["overall"]);
-        const arithmetic = roundFromOverall(overall);
-        const player = p["player"] as SyntheticPlayer | undefined;
-        return {
-          overall,
-          round: Number(p["round"] ?? arithmetic.round),
-          pick_in_round: Number(
-            p["pickInRound"] ?? p["pick_in_round"] ?? arithmetic.pick_in_round,
-          ),
-          team_id: String(p["teamId"] ?? p["team_id"] ?? ""),
-          ...(player?.id != null ? { player_id: `cbs:${player.id}` } : {}),
-        };
-      });
-    const events: DraftEvent[] = [
-      {
-        event_type: "draft_state",
-        league_id: leagueId,
-        source,
-        data: {
-          current_overall_pick: Number(
-            frame["currentPick"] ?? frame["current_overall_pick"] ?? 1,
-          ),
-          on_the_clock_team_id: (frame["onTheClock"] ?? null) as string | null,
-          picks,
-        },
-      },
-    ];
-    const order = frame["order"] ?? frame["draftOrder"];
-    if (Array.isArray(order) && order.length > 0) {
-      events.push(orderEvent(leagueId, source, order.map(String)));
-    }
-    return events;
-  }
+  // Settings-page mapping — a DIFFERENT (still-synthetic) source than the draft socket;
+  // real CBS draft frames never carry type "league_settings" (see doc's observed table).
   if (frame["type"] === "league_settings") {
     const settings = mapSyntheticSettings(frame);
     if (!settings) return [];
@@ -193,10 +258,33 @@ function parseNetworkFrame(via: NetworkVia, body: string): DraftEvent[] {
       },
     ];
   }
-  if (frame["type"] === "draft_complete") {
-    return [{ event_type: "draft_complete", league_id: leagueId, source, data: {} }];
+
+  const payload = (frame["payload"] ?? {}) as Record<string, unknown>;
+  const verb = (frame["subtype"] ?? frame["event"]) as string | undefined; // doc §2: read either
+  const events: DraftEvent[] = [];
+
+  if (frame["type"] === "picks" && verb === "completed") {
+    events.push(...cbsPickEvents(leagueId, source, payload));
   }
-  return [];
+
+  const newstate = payload["newstate"];
+  const ns = newstate && typeof newstate === "object" ? (newstate as CbsNewState) : null;
+  if (ns) {
+    const stateEvent = cbsDraftStateEvent(leagueId, source, ns);
+    if (stateEvent) events.push(stateEvent);
+  }
+
+  const fullstatedelta = payload["fullstatedelta"];
+  if (fullstatedelta && typeof fullstatedelta === "object") {
+    const order = parseDraftOrder((fullstatedelta as CbsFullStateDelta).order);
+    if (order) events.push(orderEvent(leagueId, source, order));
+  }
+
+  if (ns?.state === "completed") {
+    events.push({ event_type: "draft_complete", league_id: leagueId, source, data: {} });
+  }
+
+  return events;
 }
 
 /* ------------------------------------------------------------------------------------ *
