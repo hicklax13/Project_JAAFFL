@@ -106,6 +106,13 @@ const OVERLAY_CSS = `
    and from the sync line. Never colour-alone — the age in seconds carries the same fact. */
 .ov-sync.is-stale { color: var(--warning); }
 /* §6.6 — sits directly under the brass score it qualifies, so the caveat travels with the number. */
+/* §6.5 Why? drawer — a dense audit table, rendered locally from ScoreComponents (no fetch). */
+.why-detail { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--hairline-2); }
+.why-detail .eyebrow { display: block; margin: 8px 0 5px; }
+.why-detail .eyebrow:first-child { margin-top: 0; }
+.why-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 2px 0; }
+.why-row .sc-val { font-variant-numeric: tabular-nums; }
 .badge-estimated { display: block; margin-top: 4px; font-size: var(--fs-xxs); font-weight: 700;
   letter-spacing: .07em; color: var(--warning); border: 1px solid var(--warning);
   border-radius: var(--r-xs); padding: 1px 5px; }
@@ -306,10 +313,16 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
   const copyBtn = el("button", "btn btn-primary", "Copy name");
   copyBtn.type = "button";
   copyBtn.title = "Advisory only — copies the name; the overlay never submits a pick to CBS";
+  // Pin gets its OWN control. It used to ride the copyBtn handler, which meant the owner could
+  // not copy a name without also writing a pick to the advisory log — two intents, one button.
+  const pinBtn = el("button", "btn ov-pin", "Pin my pick");
+  pinBtn.type = "button";
+  pinBtn.title = "Advisory only — logs your intent locally; the overlay never submits to CBS";
   const whyBtn = el("button", "btn", "Why?");
   whyBtn.type = "button";
   whyBtn.setAttribute("aria-label", "Explain this recommendation");
-  actions.append(copyBtn, whyBtn);
+  whyBtn.setAttribute("aria-expanded", "false");
+  actions.append(copyBtn, pinBtn, whyBtn);
   reco.append(who, actions);
 
   // 3 — the why (score components)
@@ -318,7 +331,8 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
   whyHd.appendChild(el("span", "eyebrow", "The why · score components"));
   const whyStack = el("div", "stack");
   const whyNote = el("p", "mini-note");
-  whySection.append(whyHd, whyStack, whyNote);
+  const whyDetailHost = el("div"); // holds the Why? panel; empty while collapsed
+  whySection.append(whyHd, whyStack, whyNote, whyDetailHost);
 
   // 4 — next-turn survival
   const survSection = el("div", "section");
@@ -361,6 +375,8 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
   let receivedAt: number | null = null; // CLIENT-side receipt clock — see renderSync()
   let recomputeMs: number | null = null;
   let socketState: OverlaySyncState = "waiting";
+  let whyOpen = false;
+  let lastReasoning: string | null = null;
   /** Latched once the owner falls back to manual paste — the board's provenance, not the socket's. */
   let manualBoard = false;
 
@@ -407,10 +423,71 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
     );
   }
 
+  /** One `label · value` line inside the Why? panel. */
+  function whyLine(label: string, value: string): HTMLElement {
+    const row = el("div", "why-row");
+    row.append(el("span", "sc-label", label), el("span", "sc-val", value));
+    return row;
+  }
+
+  /**
+   * The `Why?` panel (§6.5, the anti-black-box guarantee). Rendered LOCALLY from the
+   * `ScoreComponents` the overlay already holds — no fetch. That keeps the click within the
+   * one-frame repaint budget (§6.7) and, more importantly, keeps the explanation available
+   * exactly when the backend is not: a dropped socket is when you most want to interrogate the
+   * last pick you were given.
+   *
+   * It shows what the four bars CANNOT: the score reconciling to the sum of its terms (proof that
+   * no term is hidden, rather than a promise), the capped modifiers the bars deliberately filter
+   * out, and the descriptive fields — σ band, reliability shrinkage, VONA horizon, and E[best
+   * available next] — that ride the contract and were never rendered anywhere.
+   */
+  function renderWhyDetail(): void {
+    whyDetailHost.replaceChildren();
+    if (!whyOpen || !currentBest) return;
+
+    const box = el("div", "why-detail");
+    const why = decomposeWhy(currentBest, lastReasoning, {
+      position: currentBest.position ?? undefined,
+    });
+    const c = currentBest.components;
+    if (!why || !c) {
+      box.appendChild(el("p", "mini-note", "No decomposition rode along with this pick."));
+      whyDetailHost.appendChild(box);
+      return;
+    }
+
+    box.appendChild(el("div", "eyebrow", "Score reconciliation"));
+    for (const term of why.terms) {
+      box.appendChild(whyLine(term.label, whyTermBar(term).displayValue));
+    }
+    box.appendChild(whyLine("Sum of terms", why.reconstructed.toFixed(1)));
+    box.appendChild(whyLine("Reported score", why.score.toFixed(1)));
+    box.appendChild(
+      whyLine(
+        why.reconciles ? "Reconciles ✓" : "Reconciles ✗",
+        `residual ${why.residual.toFixed(2)}`,
+      ),
+    );
+
+    box.appendChild(el("div", "eyebrow", "Projection & horizon"));
+    box.appendChild(whyLine("Floor (p10)", c.floor.toFixed(1)));
+    box.appendChild(whyLine("Ceiling (p90)", c.ceiling.toFixed(1)));
+    box.appendChild(whyLine("σ", c.sigma.toFixed(1)));
+    box.appendChild(whyLine("Replacement baseline", c.replacement_baseline.toFixed(1)));
+    if (c.reliability != null) box.appendChild(whyLine("Reliability r_pos", c.reliability.toFixed(2)));
+    if (c.vona_horizon != null) box.appendChild(whyLine("VONA horizon", `${c.vona_horizon} turns`));
+    if (c.best_available_next != null) {
+      box.appendChild(whyLine("E[best available next]", c.best_available_next.toFixed(1)));
+    }
+    whyDetailHost.appendChild(box);
+  }
+
   function update(rec: Recommendation): void {
     const best = rec.ranked[0];
     if (!best) return;
     currentBest = best;
+    lastReasoning = rec.reasoning ?? null;
     receivedAt = Date.now();
     recomputeMs = rec.recompute_ms ?? null;
     renderRoster(rec);
@@ -471,6 +548,7 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
       altList.appendChild(row);
     });
 
+    renderWhyDetail(); // keep an OPEN explanation in step with the pick it explains
     setStatus("live");
   }
 
@@ -519,7 +597,17 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
     if (!currentBest) return;
     const name = currentBest.name ?? currentBest.player_id;
     void navigator.clipboard?.writeText(name); // advisory — copies the name, never submits to CBS
-    opts.onPin?.(currentBest);
+  });
+
+  pinBtn.addEventListener("click", () => {
+    if (!currentBest) return;
+    opts.onPin?.(currentBest); // advisory local-log write — never a CBS submit (§6.3)
+  });
+
+  whyBtn.addEventListener("click", () => {
+    whyOpen = !whyOpen;
+    whyBtn.setAttribute("aria-expanded", String(whyOpen));
+    renderWhyDetail();
   });
 
   const unsubscribe = subscribeRecs(

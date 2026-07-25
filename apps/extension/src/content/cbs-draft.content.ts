@@ -10,6 +10,7 @@
 
 import { createForwarder } from "../lib/dedup";
 import { parseDraftEvents, type RawSource } from "../lib/parse";
+import { recordPinnedPick } from "../lib/pin-log";
 import { Recorder } from "../lib/record";
 import { DraftSocket, type MainRelay } from "../lib/transport";
 import { mountOverlay } from "../overlay/overlay";
@@ -48,7 +49,12 @@ const ackTimer = setInterval(() => {
 // document_start). Watches the board AND the always-updating ticker/chat, because CBS
 // results panes are known to render only on tab click (§5.4.3).
 function onReady(): void {
-  mountOverlay({ onPaste: (events) => events.forEach(forward) });
+  mountOverlay({
+    onPaste: (events) => events.forEach(forward),
+    // Advisory local-log write, NEVER a CBS submit (§6.3). Without this the overlay's pin control
+    // called `opts.onPin?.()` on an undefined sink, so pinning did nothing at all.
+    onPin: (pick) => void recordPinnedPick(pick, Date.now()),
+  });
   const target =
     document.querySelector('[class*="draft-board" i],[data-testid*="draft" i]') ??
     document.querySelector('[class*="ticker" i],[class*="chat" i],[class*="pick-log" i]') ??
