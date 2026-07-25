@@ -1,0 +1,10 @@
+{
+  "kind": "ws-message",
+  "payload": {
+    "body": "{\"type\":\"auth\",\"event\":\"reply\",\"payload\":{\"status\":100,\"message\":\"Authentication Success\",\"roster\":[{\"auth\":{\"id\":\"owner-1\"},\"last_connection_time\":0,\"attrib\":{\"status\":\"active\",\"name\":\"Team 1\"},\"id\":\"owner-1\",\"node\":\"#cn-fantasy-chat-prod-74d554c455-877d6\",\"created\":1784941662,\"websocketId\":5256760}],\"user\":{\"auth\":{\"id\":\"owner-1\"},\"last_connection_time\":0,\"attrib\":{\"status\":\"active\",\"name\":\"Team 1\"},\"id\":\"owner-1\",\"node\":\"#cn-fantasy-chat-prod-74d554c455-877d6\",\"created\":1784941662,\"websocketId\":5256760},\"node\":{\"id\":\"#cn-fantasy-chat-prod-74d554c455-877d6\",\"currentTime\":1784941663},\"logs\":{\"public\":[],\"private\":[]}}}",
+    "seq": 3,
+    "ts": "2026-07-25T01:07:38.454Z",
+    "url": "wss://chat.prod.fantasy.cbssports.cloud:443"
+  },
+  "ts": 1784941658455
+}

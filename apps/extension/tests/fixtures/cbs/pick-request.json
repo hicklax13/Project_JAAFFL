@@ -1,0 +1,10 @@
+{
+  "kind": "ws-send",
+  "payload": {
+    "body": "{\"payload\":{\"playerid\":2181054,\"psource\":\"web\",\"teamid\":\"1\"},\"subtype\":\"request\",\"type\":\"pick\"}",
+    "seq": 46,
+    "ts": "2026-07-25T01:18:45.787Z",
+    "url": "wss://k8s-draft.prod.fantasy.cbssports.cloud:443/?host=fantasy-draft-server-prod-1.fantasy-draft-server-prod.fantasy-services.svc.cluster.local:8445"
+  },
+  "ts": 1784942325788
+}
