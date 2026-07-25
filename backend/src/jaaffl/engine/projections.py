@@ -13,7 +13,8 @@ blend is a simple average of the $0 sources (empirically ≥ any hand-weighting 
 
 ``assemble_projections`` is the pure core (canonical-keyed points → PlayerProjection);
 ``build_projections`` gathers those points from providers (PROJECTIONS via the exact scoring map,
-RANKINGS via an ECR→points curve). All provider I/O is precompute — never the hot path.
+EXPECTED_POINTS via ``league.xep``, RANKINGS via an ECR→points curve). All provider I/O is
+precompute — never the hot path.
 """
 
 from __future__ import annotations
@@ -22,11 +23,16 @@ import statistics
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
+import structlog
+
 from jaaffl.config import EngineParams
 from jaaffl.domain import LeagueSettings, Player, Position
 from jaaffl.league.replacement import replacement_values
 from jaaffl.league.scoring import league_points
-from jaaffl.providers.base import Capability, FantasyDataProvider
+from jaaffl.league.xep import XepSource, expected_points_source
+from jaaffl.providers.base import Capability, FantasyDataProvider, ProviderError
+
+log = structlog.get_logger(__name__)
 
 Z_SCORE = 1.2816  # 10th/90th-pct band multiplier (design §3.1; z for an 80% central interval)
 
@@ -68,10 +74,17 @@ def assemble_projections(
     situation: Mapping[str, SituationSignal] | None = None,
     games_missed: Mapping[Position, float] | None = None,
     stat_lines: Mapping[str, Mapping[str, float]] | None = None,
+    sigma_prior: Mapping[str, float] | None = None,
 ) -> dict[str, PlayerProjection]:
-    """Blend canonical-keyed source points into PlayerProjections (pure; no provider/network)."""
+    """Blend canonical-keyed source points into PlayerProjections (pure; no provider/network).
+
+    ``sigma_prior`` is the per-player σ measured from history (``league.xep``); ``sigma_floor`` is
+    the per-position fallback for everyone it could not measure (rookies, K/DST, anyone under the
+    games floor). σ is a floor stack — cross-source disagreement still wins when it is wider.
+    """
     situation = situation or {}
     stat_lines = stat_lines or {}
+    sigma_prior = sigma_prior or {}
 
     # 1) Gather each player's per-source points (drop rows with no resolved position).
     per_player: dict[str, dict[str, float]] = {}
@@ -109,7 +122,8 @@ def assemble_projections(
         baseline = baselines.get(pos, adj)
         mu = baseline + reliability * (adj - baseline)
         signal = situation.get(pid)
-        sigma = max(cross_sd[pid], float(sigma_floor.get(pos, 0.0)))
+        floor = float(sigma_prior.get(pid, sigma_floor.get(pos, 0.0)))
+        sigma = max(cross_sd[pid], floor)
         if signal is not None:
             sigma *= signal.sigma_multiplier
         out[pid] = PlayerProjection(
@@ -139,13 +153,39 @@ def build_projections(
     situation: Mapping[str, SituationSignal] | None = None,
     ecr_to_points: Callable[[Position, float], float] | None = None,
     games_missed: Mapping[Position, float] | None = None,
+    xep_season: int | None = None,
 ) -> dict[str, PlayerProjection]:
     """Gather canonical-keyed source points from the first provider supporting each capability, then
-    blend (§3.1). PROJECTIONS stat lines → points via the exact CBS map; RANKINGS ECR → points via
-    ``ecr_to_points`` (skipped if not supplied). Provider I/O only — this runs in precompute."""
+    blend (§3.1). PROJECTIONS stat lines → points via the exact CBS map; EXPECTED_POINTS (nflverse
+    xEP) → points via the same map through ``league.xep``; RANKINGS ECR → points via
+    ``ecr_to_points`` (skipped if not supplied). Provider I/O only — this runs in precompute.
+
+    ``xep_season`` defaults to ``season - 1``: xEP measures REALIZED opportunity, so the draft
+    season has no rows at all (verified — nflreadpy raises ``ValueError`` for 2026). A pull that
+    fails or covers nobody is logged and dropped, leaving those players honestly marked as
+    ECR-only in ``PlayerProjection.sources`` rather than carrying a fabricated projection.
+    """
     position = {pid: player.position for pid, player in players.items()}
     source_points: dict[str, dict[str, float]] = {}
     stat_lines: dict[str, dict[str, float]] = {}
+    sigma_prior: dict[str, float] = {}
+
+    xep_provider = next((p for p in providers if p.supports(Capability.EXPECTED_POINTS)), None)
+    if xep_provider is not None:
+        resolved_xep_season = season - 1 if xep_season is None else xep_season
+        xep = _expected_points(
+            xep_provider, resolved_xep_season, settings, position, sigma_floor, week
+        )
+        if xep is not None and xep.points:
+            source_points["xep"] = dict(xep.points)
+            stat_lines.update({pid: dict(line) for pid, line in xep.stat_lines.items()})
+            sigma_prior.update(xep.sigma)
+            log.info(
+                "projections_xep_source",
+                season=resolved_xep_season,
+                players=len(xep.points),
+                measured_sigma=len(xep.sigma),
+            )
 
     projections_provider = next((p for p in providers if p.supports(Capability.PROJECTIONS)), None)
     if projections_provider is not None:
@@ -183,4 +223,35 @@ def build_projections(
         situation=situation,
         games_missed=games_missed,
         stat_lines=stat_lines,
+        sigma_prior=sigma_prior,
+    )
+
+
+def _expected_points(
+    provider: FantasyDataProvider,
+    season: int,
+    settings: LeagueSettings,
+    position: Mapping[str, Position],
+    sigma_floor: Mapping[Position, float],
+    week: int | None,
+) -> XepSource | None:
+    """Pull + translate the xEP frame, or ``None`` when the source cannot be had.
+
+    Failures are LOUD in the log and invisible in the output: the affected players simply have no
+    ``xep`` entry in ``sources``, which is the project's live-data-honesty posture (never a
+    silently substituted stand-in). ``ValueError`` is the real, observed failure — nflreadpy
+    raises it for a season outside 2006–2025.
+    """
+    try:
+        frame = provider.expected_points(season, week)
+    except (ProviderError, NotImplementedError, ValueError) as exc:
+        log.warning(
+            "projections_xep_unavailable",
+            provider=provider.name,
+            season=season,
+            error=str(exc),
+        )
+        return None
+    return expected_points_source(
+        frame, settings=settings, position=position, drift_sigma=sigma_floor
     )

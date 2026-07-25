@@ -185,3 +185,48 @@ def test_registry_player_loader_uses_real_players_method(monkeypatch, tmp_path) 
     universe = _registry_player_loader([provider])(2026)
     assert set(universe) == {"gsis:00-0034796"}
     assert universe["gsis:00-0034796"].name == "CeeDee Lamb"
+
+
+# --- measured σ (replacing the v1 flat placeholder) ---------------------------------------
+
+
+def test_sigma_floors_are_the_measured_positional_drift_not_one_flat_constant() -> None:
+    """`_DEFAULT_SIGMA_FLOOR` used to be a hand-picked ~50-for-everyone placeholder. It is now
+    the year-over-year projection error measured from nflverse xEP under the JAAFFL map, whose
+    substantive finding is the ORDERING: a QB season is far less predictable in raw points than
+    a TE season, and WR is tighter than RB — none of which a flat constant can express."""
+    from jaaffl.engine.precompute import _DEFAULT_SIGMA_FLOOR
+
+    qb = _DEFAULT_SIGMA_FLOOR[Position.QB]
+    rb = _DEFAULT_SIGMA_FLOOR[Position.RB]
+    wr = _DEFAULT_SIGMA_FLOOR[Position.WR]
+    te = _DEFAULT_SIGMA_FLOOR[Position.TE]
+    assert qb > rb > wr > te
+    assert set(_DEFAULT_SIGMA_FLOOR) == set(Position)  # a stray IDP row can never KeyError
+
+
+def test_precompute_asks_for_xep_from_the_last_completed_season(tmp_path) -> None:
+    """The draft season has no xEP rows at all (nflreadpy raises for 2026) — precompute must
+    request season − 1 or the whole source silently evaporates."""
+    seen: list[int] = []
+
+    class _XepFake(_CountingFake):
+        def expected_points(self, season, week=None):
+            seen.append(season)
+            return []
+
+    providers = [
+        _XepFake(
+            "nflverse",
+            {Capability.HISTORICAL_STATS, Capability.RANKINGS, Capability.EXPECTED_POINTS},
+            rankings={"rb0": 1.0, "rb1": 5.0, "wr0": 2.0, "wr1": 6.0, "te0": 20.0},
+            players=_universe(),
+        )
+    ]
+    source = build_registry_context_source(
+        Settings(jaaffl_data_dir=tmp_path / "data", jaaffl_season=2026),
+        warehouse=Warehouse(tmp_path / "data"),
+        providers=providers,
+    )
+    assert source("cbs-local") is not None
+    assert seen == [2025]
