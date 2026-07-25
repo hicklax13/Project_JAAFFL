@@ -179,6 +179,51 @@ def test_fold_pick_made_removes_player_from_available() -> None:
     assert state.available_player_ids == ["cbs:2"]
 
 
+def test_fold_draft_state_ticker_does_not_wipe_previously_folded_picks() -> None:
+    """REGRESSION, real-capture verified (docs/research/cbs-draft-protocol.md): the REAL CBS
+    protocol's ``draft_state`` event (``parse.ts::cbsDraftStateEvent``) fires on almost every
+    frame and carries ONLY current_overall_pick/round/on_the_clock_team_id/on_deck_team_id --
+    never ``picks``. These two events are the exact shape of the committed golden fixture
+    ``apps/extension/tests/fixtures/cbs/picks-completed.autopick.json``, whose parsed values are
+    pinned by apps/extension/tests/parse.test.ts ("numbers an autopick 1" / "carries current
+    pick / round / on-the-clock ... from an in-progress frame": pick_made overall=1 team_id="1"
+    cbs_player_id="3162723", followed by draft_state current_overall_pick=2 on_the_clock="2"
+    on_deck="3"). A ticker-only draft_state folded after a pick_made must NOT be treated as a
+    resync-to-empty: replaying a full real draft (165 real picks, 75 real draft_state ticks)
+    through the pre-fix reducer folded ``state.picks`` to ZERO -- the engine's drafted-player
+    mask (jaaffl.engine.recommend) depends entirely on ``state.picks`` surviving this."""
+    events = [
+        logged(
+            "pick_made",
+            {
+                "overall": 1,
+                "round": 1,
+                "pick_in_round": 1,
+                "team_id": "1",
+                "player_id": "cbs:3162723",
+            },
+            seq=1,
+            pick=1,
+        ),
+        logged(
+            "draft_state",
+            {
+                "league_id": "L1",
+                "current_overall_pick": 2,
+                "round": 1,
+                "on_the_clock_team_id": "2",
+                "on_deck_team_id": "3",
+            },
+            seq=2,
+        ),
+    ]
+    state = fold_state(events)
+    assert [p.overall for p in state.picks] == [1]
+    assert state.picks[0].player_id == "cbs:3162723"
+    assert state.current_overall_pick == 2
+    assert state.on_the_clock_team_id == "2"
+
+
 def test_fold_draft_state_is_authoritative_resync() -> None:
     events = [
         logged("league_settings", {"my_team_id": "T7"}, seq=1),

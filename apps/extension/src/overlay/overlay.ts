@@ -38,7 +38,17 @@ const OVERLAY_CSS = `
 .panel::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
   background: linear-gradient(90deg, transparent, var(--brass-solid), transparent); }
 .ov-head { display: flex; align-items: center; justify-content: space-between;
-  padding: 11px 14px 9px; border-bottom: 1px solid var(--hairline); }
+  padding: 11px 14px 9px; border-bottom: 1px solid var(--hairline);
+  cursor: grab; touch-action: none; user-select: none; }
+.ov-head:active { cursor: grabbing; }
+/* Collapse to just the header. The panel is fixed at the maximum z-index, so without this it
+   sits permanently over the CBS draft board — worst exactly when the board matters most. */
+.panel.is-collapsed > *:not(.ov-head) { display: none; }
+.panel.is-collapsed { width: 224px; }
+.ov-collapse { cursor: pointer; background: transparent; border: 1px solid var(--hairline);
+  color: var(--ink-3); border-radius: var(--r-xs); font: inherit; font-size: var(--fs-xxs);
+  line-height: 1; padding: 3px 7px; margin-left: 8px; }
+.ov-collapse:hover { color: var(--ink); }
 .live { display: inline-flex; align-items: center; gap: .45em; font-size: var(--fs-xxs);
   font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
 .beat { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
@@ -124,6 +134,85 @@ function whyRow(term: WhyTerm, position: Position | null): HTMLElement {
   return row;
 }
 
+const PANEL_STATE_KEY = "jaaffl_overlay_panel";
+
+interface PanelState {
+  collapsed?: boolean;
+  left?: number;
+  top?: number;
+}
+
+/** Persist panel placement so it survives the draft-room popup reloading mid-draft. Best-effort:
+ * outside an extension context (tests, plain pages) there is no chrome.storage and we no-op. */
+function savePanelState(patch: PanelState): void {
+  if (typeof chrome === "undefined" || !chrome.storage?.local) return;
+  void chrome.storage.local.get(PANEL_STATE_KEY).then((v) => {
+    const prev = (v[PANEL_STATE_KEY] ?? {}) as PanelState;
+    void chrome.storage.local.set({ [PANEL_STATE_KEY]: { ...prev, ...patch } });
+  });
+}
+
+async function restorePanelState(
+  applyCollapsed: (on: boolean) => void,
+  panel: HTMLElement,
+): Promise<void> {
+  if (typeof chrome === "undefined" || !chrome.storage?.local) return;
+  const v = await chrome.storage.local.get(PANEL_STATE_KEY);
+  const state = (v[PANEL_STATE_KEY] ?? {}) as PanelState;
+  if (state.collapsed) applyCollapsed(true);
+  if (typeof state.left === "number" && typeof state.top === "number") {
+    placePanel(panel, state.left, state.top);
+  }
+}
+
+/** Move the panel onto explicit coordinates, releasing its default top/right anchor. */
+function placePanel(panel: HTMLElement, left: number, top: number): void {
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+  panel.style.right = "auto";
+}
+
+/**
+ * Drag the panel by its header. `ignore` (the collapse button) must not start a drag, or the
+ * button becomes unclickable. Listeners live on `window` so a fast drag that outruns the cursor
+ * doesn't strand the panel mid-move.
+ */
+function makeDraggable(panel: HTMLElement, handle: HTMLElement, ignore: HTMLElement): void {
+  let startX = 0;
+  let startY = 0;
+  let originLeft = 0;
+  let originTop = 0;
+  let dragging = false;
+
+  const onMove = (e: MouseEvent): void => {
+    if (!dragging) return;
+    placePanel(panel, originLeft + (e.clientX - startX), originTop + (e.clientY - startY));
+  };
+  const onUp = (): void => {
+    if (!dragging) return;
+    dragging = false;
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    savePanelState({
+      left: Number.parseFloat(panel.style.left) || 0,
+      top: Number.parseFloat(panel.style.top) || 0,
+    });
+  };
+
+  handle.addEventListener("pointerdown", (e) => {
+    const target = e.target as Node | null;
+    if (target && (target === ignore || ignore.contains(target))) return;
+    const rect = panel.getBoundingClientRect();
+    startX = (e as MouseEvent).clientX;
+    startY = (e as MouseEvent).clientY;
+    originLeft = rect.left;
+    originTop = rect.top;
+    dragging = true;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+}
+
 export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
   document.getElementById("jaaffl-overlay")?.remove();
 
@@ -145,7 +234,29 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
   const clock = el("div", "clock");
   const clockPk = el("span", "pk", "— · —");
   clock.appendChild(clockPk);
-  head.append(live, clock);
+
+  // Collapse toggle. The panel is fixed at the maximum z-index, so on a live draft it otherwise
+  // covers the CBS board with no way out short of disabling the extension (which stops recording).
+  const collapseBtn = el("button", "ov-collapse", "▾") as HTMLButtonElement;
+  collapseBtn.type = "button";
+  const applyCollapsed = (on: boolean): void => {
+    panel.classList.toggle("is-collapsed", on);
+    collapseBtn.textContent = on ? "▸" : "▾";
+    collapseBtn.setAttribute("aria-expanded", String(!on));
+    collapseBtn.setAttribute("aria-label", on ? "Expand JAAFFL panel" : "Collapse JAAFFL panel");
+  };
+  applyCollapsed(false);
+  collapseBtn.addEventListener("click", () => {
+    const next = !panel.classList.contains("is-collapsed");
+    applyCollapsed(next);
+    savePanelState({ collapsed: next });
+  });
+
+  const headRight = el("div", "ov-head-right");
+  headRight.append(clock, collapseBtn);
+  head.append(live, headRight);
+  makeDraggable(panel, head, collapseBtn);
+  void restorePanelState(applyCollapsed, panel);
 
   // 2 — recommended block
   const reco = el("div", "reco");

@@ -216,6 +216,23 @@ With the **CBS draft tab focused**:
 That's the whole toggle — one click. Behind the scenes the extension now streams every observed
 draft frame (and periodic board snapshots) to the backend, which writes them to disk.
 
+### ⚠️ Chrome will ask to "access other apps and services on this device" — click **Allow**
+
+This is Chrome's **Local Network Access** gate on a public page (CBS) reaching `127.0.0.1:8788` —
+i.e. our own backend. **If you don't allow it, recording silently stalls**: the extension keeps
+retrying, the WebSockets stay connected, the REC badge looks fine, and nothing lands on disk.
+
+Two things that make this bite repeatedly:
+
+- **It is per-ORIGIN.** The lobby (`mockdraft-1.football.cbssports.com`) and the draft-room popup
+  (`mockdraft56-<draftid>.football.cbssports.com`) are different origins, so you get asked **again**
+  when the popup opens. Allow it there too.
+- **Every mock spawns a new subdomain**, so it re-prompts on each new draft — and it will prompt
+  once more on your real league's subdomain on **draft night**. Expect it; don't be surprised by it.
+
+Revoke it afterwards if you like, via the icon to the left of the URL. Nothing in JAAFFL needs it
+outside a recording session.
+
 **Confirm it's actually capturing** (either check works):
 
 - Watch the backend terminal from Step 6 — you'll see `recording_stored` log lines appear (frames
@@ -291,6 +308,8 @@ backstop no matter what.
 | Overlay panel never appears on the CBS page         | Confirm the URL matches the patterns in Step 7. Reload the page. Check the extension card is enabled.                            |
 | `curl http://127.0.0.1:8788/health` fails           | The backend isn't running — start it with `make backend-dev` (Step 6) and leave that terminal open.                              |
 | No `rec-*.jsonl` file appears while recording       | Backend must be running **before** you toggle REC. Check the backend terminal for errors; re-toggle REC off/on.                  |
+| REC badge is on, sockets connect, but **zero frames land** | You almost certainly dismissed Chrome's **Local Network Access** prompt (Step 8). Click the icon left of the URL and allow it. Confirm by watching for `OPTIONS /dev/recordings ... 400` in the backend log — that is the preflight being blocked. |
+| Overlay panel covers the draft board                | Click **▾** in the panel header to collapse it, or drag the panel by its header. Both persist across reloads. Do NOT disable the extension — that stops recording. |
 | Extension card shows fewer than 3 content scripts   | Known `@crxjs` build risk with the MAIN-world entry. Re-run `pnpm --filter @jaaffl/extension build`, remove + re-load unpacked.  |
 | CBS settings don't match Step 1's table             | **Don't** edit `config/league.json`. Tell Claude what differs so the conflict is handled correctly.                             |
 

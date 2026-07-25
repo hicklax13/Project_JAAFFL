@@ -172,9 +172,22 @@ def fold_state(events: Iterable[LoggedEvent]) -> DraftState:
     """Pure, deterministic left-fold of the log into a DraftState. No I/O, no clock.
 
     Reducer semantics (§2.6): league_settings binds identity; draft_state is an
-    authoritative full re-sync; on_the_clock advances the clock; pick_made appends
-    idempotently per ``overall``; draft_complete marks terminal. Draft order is only ever
-    what the room reported — never synthesized from team count.
+    authoritative full re-sync FOR WHATEVER FIELDS IT ACTUALLY CARRIES; on_the_clock advances
+    the clock; pick_made appends idempotently per ``overall``; draft_complete marks terminal.
+    Draft order is only ever what the room reported — never synthesized from team count.
+
+    ``draft_state`` is overloaded by design: the real CBS protocol emits it on nearly every
+    frame as a lightweight clock/on-the-clock ticker (``current_overall_pick`` / ``round`` /
+    ``on_the_clock_team_id`` / ``on_deck_team_id`` only — see
+    ``apps/extension/src/lib/parse.ts::cbsDraftStateEvent``), but a genuine full-roster resync
+    (e.g. a late-join/reconnect rebuilt from ``subscribe``'s per-team snapshot) is ALSO modeled
+    as a ``draft_state`` event, this time carrying an explicit ``picks`` (and, in principle,
+    ``available_player_ids``) list — see ``test_fold_draft_state_is_authoritative_resync``.
+    Replacing ``picks``/``available_player_ids`` unconditionally on EVERY ``draft_state`` event
+    would treat every ticker tick as a resync-to-nothing, silently discarding every previously
+    folded pick the instant the next ticker frame arrived — verified against a full real capture
+    (165 real picks folded to 0). So each of those two fields is only replaced when the event's
+    OWN raw data actually carries that key; a ticker-only snapshot leaves prior picks untouched.
     """
     state: DraftState | None = None
     for ev in events:
@@ -187,11 +200,13 @@ def fold_state(events: Iterable[LoggedEvent]) -> DraftState:
         elif ev.event_type == DraftEventType.DRAFT_STATE:
             snap = DraftState.model_validate({"league_id": ev.league_id, **ev.data})
             update: dict = {
-                "picks": snap.picks,
                 "current_overall_pick": snap.current_overall_pick,
                 "on_the_clock_team_id": snap.on_the_clock_team_id,
-                "available_player_ids": snap.available_player_ids,
             }
+            if "picks" in ev.data:  # a genuine full resync, not a plain ticker tick
+                update["picks"] = snap.picks
+            if "available_player_ids" in ev.data:
+                update["available_player_ids"] = snap.available_player_ids
             if snap.my_team_id:
                 update["my_team_id"] = snap.my_team_id
             state = state.model_copy(update=update)
