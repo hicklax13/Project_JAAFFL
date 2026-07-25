@@ -230,3 +230,128 @@ def test_precompute_asks_for_xep_from_the_last_completed_season(tmp_path) -> Non
     )
     assert source("cbs-local") is not None
     assert seen == [2025]
+
+
+# --- automatic id-crosswalk seeding --------------------------------------------------------
+
+
+class _SeedingFake(_CountingFake):
+    """A provider that also exposes ``seed_crosswalk`` (as NflreadpyProvider does), recording
+    the order of operations so a test can prove the seed lands BEFORE the provider reads."""
+
+    def __init__(self, *args, seed_error=None, log=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._seed_error = seed_error
+        self.log = log if log is not None else []
+        self.seed_calls = 0
+
+    def seed_crosswalk(self):
+        self.seed_calls += 1
+        self.log.append("seed")
+        if self._seed_error is not None:
+            raise self._seed_error
+        return 4428
+
+    def rankings(self, season, week=None):
+        self.log.append("rankings")
+        return super().rankings(season, week)
+
+    def players(self, season):
+        self.log.append("players")
+        return super().players(season)
+
+
+def _seeding_providers(**kwargs):
+    log: list[str] = []
+    return log, [
+        _SeedingFake(
+            "nflverse",
+            {Capability.HISTORICAL_STATS, Capability.RANKINGS},
+            rankings={"rb0": 1.0, "rb1": 5.0, "wr0": 2.0, "wr1": 6.0, "te0": 20.0},
+            players=_universe(),
+            log=log,
+            **kwargs,
+        )
+    ]
+
+
+def test_crosswalk_is_seeded_before_any_provider_is_read(tmp_path) -> None:
+    """ADP resolves by name and ECR by FantasyPros id — both need a populated crosswalk. On a
+    fresh clone it is EMPTY, so an unseeded precompute resolves 0 ADP and 0 ECR rows and every
+    recommendation comes back with vona = 0. The seed must therefore precede the reads."""
+    log, providers = _seeding_providers()
+    assert _source(providers, tmp_path)("cbs-local") is not None
+    assert log[0] == "seed"
+    assert providers[0].seed_calls == 1
+
+
+def test_the_crosswalk_is_seeded_once_per_process_not_once_per_league(tmp_path) -> None:
+    """Seeding pulls ~4.5k rows and rewrites them; doing it per league (or per cache miss) would
+    pay that cost repeatedly for no benefit."""
+    _, providers = _seeding_providers()
+    source = _source(providers, tmp_path)
+    source("cbs-local")
+    source("another-league")
+    source("cbs-local")
+    assert providers[0].seed_calls == 1
+
+
+def test_a_failed_seed_is_non_fatal_so_an_offline_draft_still_gets_a_board(tmp_path) -> None:
+    """Draft night with no internet must still serve the cached/degraded board rather than
+    losing the engine entirely to a seeding error."""
+    from jaaffl.providers.base import ProviderError
+
+    _, providers = _seeding_providers(seed_error=ProviderError("nflverse unreachable"))
+    ctx = _source(providers, tmp_path)("cbs-local")
+    assert ctx is not None
+    assert ctx.mu  # the board still assembled
+
+
+def test_precompute_seeds_real_cbs_links_into_the_warehouse_sqlite(monkeypatch, tmp_path) -> None:
+    """The cross-module link that makes drafted-player masking work without manual setup: the
+    REAL NflreadpyProvider seeds cbs→canonical rows into the SAME app.sqlite that the API's
+    ``cbs_resolver`` (``crosswalk.resolve("cbs", id)``) reads. Fully offline — nflreadpy is faked,
+    but the crosswalk, the provider and the seeding path are all real."""
+    import polars as pl
+
+    from jaaffl.data import Crosswalk
+    from jaaffl.providers.nflverse import NflreadpyProvider
+    from tests.test_providers import fake_nflreadpy
+
+    warehouse = Warehouse(tmp_path / "data")
+    warehouse.init()
+    row = {
+        "gsis_id": "00-0034796",
+        "cbs_id": "2181292",
+        "pfr_id": "LambCe00",
+        "sleeper_id": "6786",
+        "espn_id": "4241389",
+        "yahoo_id": "32692",
+        "fantasypros_id": "17246",
+        "name": "CeeDee Lamb",
+        "position": "WR",
+        "team": "DAL",
+    }
+    fake_nflreadpy(
+        monkeypatch,
+        load_ff_playerids=lambda: pl.DataFrame([row]),
+        # The real provider also declares RANKINGS + EXPECTED_POINTS, so both loaders must exist;
+        # empty is fine — this test is about the seed, not the board.
+        load_ff_rankings=lambda: pl.DataFrame(schema={"page_type": pl.Utf8}),
+        load_ff_opportunity=lambda seasons: pl.DataFrame(
+            schema={"player_id": pl.Utf8, "week": pl.Float64}
+        ),
+    )
+    crosswalk = Crosswalk(warehouse.app_sqlite)
+    assert crosswalk.resolve("cbs", "2181292") is None  # fresh clone: nothing to resolve with
+
+    build_registry_context_source(
+        Settings(jaaffl_data_dir=tmp_path / "data"),
+        warehouse=warehouse,
+        # The real provider goes LAST so the fakes still serve every capability read; it is
+        # reached only for ``seed_crosswalk``, which is the behaviour under test.
+        providers=[*_providers(), NflreadpyProvider(crosswalk=crosswalk)],
+    )("cbs-local")
+
+    # The exact lookup api/app.py performs for an ID-only CBS pick — now satisfied automatically.
+    assert crosswalk.resolve("cbs", "2181292") == "gsis:00-0034796"

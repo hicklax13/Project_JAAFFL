@@ -92,6 +92,51 @@ def _load_engine_params(settings: Settings) -> EngineParams:
     return EngineParams()
 
 
+def _seed_crosswalk_once(providers: Sequence[FantasyDataProvider]) -> Callable[[], None]:
+    """Return a call-once closure that seeds the id crosswalk from the provider registry.
+
+    **Why this has to be automatic.** CBS picks are ID-only (protocol doc §3), and FFC ADP is
+    name-keyed, and nflverse ECR joins on the FantasyPros id — all three resolve through
+    ``data/crosswalk.py``. On a fresh clone that table is EMPTY, and the failure is silent: a real
+    server against a pristine data dir logged ``ffc_adp kept=0 skipped=179`` and
+    ``rankings kept=0 skipped=508`` while still answering ``/recommendation`` with HTTP 200 and
+    plausible-looking scores — every one of them carrying ``vona = 0.0``, because the entire
+    opponent/survival model had no ADP. Tiers and cliff bonuses were empty for the same reason,
+    and drafted CBS picks could never be masked. Leaving that to a manual, dry-run-by-default
+    script (``scripts/seed_cbs_crosswalk.py``) means one forgotten step silently guts the engine
+    on draft night.
+
+    **Why here.** ``precompute`` is the one module allowed provider I/O (§4.7), and this must run
+    BEFORE the providers are read, so the seam is the context closure — not app startup (which
+    would pay a multi-second network pull on every boot, including offline ones) and not the hot
+    path. It is lazy, so the cost lands on the first ``/recommendation``, which already does the
+    provider pulls.
+
+    Seeded once per process: the links persist in SQLite, and re-seeding per league would rewrite
+    ~4.5k rows for nothing. Idempotent and precedence-safe either way — ``Crosswalk.link`` upserts
+    and never downgrades a manual mapping. A failure is logged and swallowed so an offline draft
+    still gets a board rather than losing the engine to a seeding error.
+    """
+    done = False
+
+    def _seed() -> None:
+        nonlocal done
+        if done:
+            return
+        done = True  # set first: one failed attempt must not retry on every league
+        provider = next((p for p in providers if hasattr(p, "seed_crosswalk")), None)
+        if provider is None:
+            return
+        try:
+            seeded = provider.seed_crosswalk()
+        except (ProviderError, NotImplementedError, OSError) as exc:
+            log.warning("precompute_crosswalk_seed_failed", provider=provider.name, error=str(exc))
+            return
+        log.info("precompute_crosswalk_seeded", provider=provider.name, players=seeded)
+
+    return _seed
+
+
 def _registry_player_loader(
     providers: Sequence[FantasyDataProvider],
 ) -> Callable[[int], dict[str, Player]]:
@@ -156,8 +201,12 @@ def build_registry_context_source(
         resolved_providers = list(providers)
 
     load_players = player_loader or _registry_player_loader(resolved_providers)
+    seed_crosswalk = _seed_crosswalk_once(resolved_providers)
 
     def _context_for(league_id: str) -> DraftContext | None:
+        # BEFORE any provider read: FFC ADP resolves by name and nflverse ECR by FantasyPros id,
+        # so an unseeded crosswalk silently yields a board with no ADP, no ECR and vona = 0.
+        seed_crosswalk()
         players = dict(load_players(resolved_season))
         if not players:
             log.info("precompute_no_player_universe", league_id=league_id)
