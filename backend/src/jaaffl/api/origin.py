@@ -25,3 +25,21 @@ def is_origin_allowed(origin: str | None, allowed: list[str]) -> bool:
     if "*" in allowed:
         return True
     return any(fnmatch.fnmatch(origin, pattern) for pattern in allowed)
+
+
+def allowed_origin_regex(allowed: list[str]) -> str | None:
+    """The glob allowlist as ONE regex, for Starlette's ``CORSMiddleware``.
+
+    ``CORSMiddleware(allow_origins=[...])`` compares origins by EXACT string equality — it never
+    matches a glob such as ``https://*.cbssports.com``. Left unhandled, that desynchronizes the two
+    gates: :func:`is_origin_allowed` (fnmatch) accepts the origin, so the WebSocket handshake
+    succeeds, while the CORS preflight for a JSON POST fails (``OPTIONS`` → 400) and the request
+    never happens. That is not hypothetical — it silently dropped every record-mode frame during a
+    live capture session while the sockets looked healthy.
+
+    Translating the same globs keeps both gates in lockstep. ``None`` when ``*`` is present, since
+    the caller then opens CORS wholesale.
+    """
+    if "*" in allowed:
+        return None
+    return "|".join(fnmatch.translate(pattern) for pattern in allowed)

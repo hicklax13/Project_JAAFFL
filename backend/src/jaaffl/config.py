@@ -74,7 +74,10 @@ class EngineParams(BaseModel):
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Absolute: the service launches from backend/ (pytest, backend-dev) AND the repo root
+        # (scripts). A CWD-relative ".env" made the repo-root file silently invisible from
+        # backend/, so edits to it appeared to do nothing at all.
+        env_file=_REPO_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -89,7 +92,13 @@ class Settings(BaseSettings):
     # by CORS, so the app checks Origin itself: only the user's own extension
     # (chrome-extension://) and the local dashboard may write. "*" opens it to any web page
     # in another tab — set only for debugging.
-    jaaffl_allowed_origins: str = "chrome-extension://*,http://localhost:3000,http://127.0.0.1:3000"
+    jaaffl_allowed_origins: str = (
+        "chrome-extension://*,http://localhost:3000,http://127.0.0.1:3000,"
+        # Record mode: the extension's content script runs INSIDE the CBS page, so its
+        # requests carry the CBS page origin -- not chrome-extension://. Without CBS here a
+        # capture session silently records zero frames.
+        "https://*.cbssports.com"
+    )
     jaaffl_season: int = 2026
     jaaffl_engine_params_path: Path = Path("./config/engine.json")
     # Pre-draft precompute bridge (§4.7). OFF by default so the base install boots to a 503

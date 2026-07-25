@@ -1,6 +1,7 @@
 """The companion-service wire path: health, ingest (REST + WS /draft/ws with the §8.4
 frame contract), the /recommendation engine endpoint, and the /recs/ws push channel."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -633,3 +634,110 @@ def test_analytics_honours_origin_allowlist(client: TestClient) -> None:
         "/analytics", params={"league_id": "cbs-local"}, headers={"origin": "https://evil.example"}
     )
     assert res.status_code == 403
+
+
+def _origin_app(tmp_path: Path, allowed: str):
+    """An app whose Origin allowlist is exactly ``allowed`` (comma-separated globs)."""
+    return create_app(
+        Settings(
+            jaaffl_data_dir=tmp_path / "data",
+            jaaffl_recordings_dir=tmp_path / "rec",
+            jaaffl_allowed_origins=allowed,
+        )
+    )
+
+
+def test_glob_allowlist_entry_passes_the_origin_check_AND_the_cors_preflight(
+    tmp_path: Path,
+) -> None:
+    """The two Origin gates must never disagree.
+
+    ``CORSMiddleware`` compares ``allow_origins`` by EXACT string equality, so a glob such as
+    ``https://*.cbssports.com`` silently never matched there — while ``is_origin_allowed``
+    (fnmatch) DID match it. That desynchronization is not theoretical: during a live record-mode
+    capture the WebSocket handshakes succeeded and the service looked healthy, while every JSON
+    POST died at its preflight (``OPTIONS`` -> 400) and the whole session recorded zero frames.
+    """
+    client = TestClient(_origin_app(tmp_path, "chrome-extension://*,https://*.cbssports.com"))
+    origin = "https://mockdraft-1.football.cbssports.com"
+
+    # Gate 1 — the app's own Origin check (this half always worked).
+    res = client.post(
+        "/dev/recordings", json={"session": "rec-x", "frames": []}, headers={"origin": origin}
+    )
+    assert res.status_code == 200
+
+    # Gate 2 — the browser's CORS preflight. THIS is what silently blocked the capture.
+    pre = client.options(
+        "/dev/recordings",
+        headers={
+            "origin": origin,
+            "access-control-request-method": "POST",
+            "access-control-request-headers": "content-type",
+        },
+    )
+    assert pre.status_code == 200
+    assert pre.headers.get("access-control-allow-origin") == origin
+
+
+def test_cors_preflight_still_refuses_an_origin_outside_the_allowlist(tmp_path: Path) -> None:
+    """Translating globs must not widen CORS into allow-anything."""
+    client = TestClient(_origin_app(tmp_path, "chrome-extension://*,https://*.cbssports.com"))
+
+    pre = client.options(
+        "/dev/recordings",
+        headers={
+            "origin": "https://evil.example",
+            "access-control-request-method": "POST",
+            "access-control-request-headers": "content-type",
+        },
+    )
+    assert pre.headers.get("access-control-allow-origin") is None
+
+
+def test_cbs_is_allowed_by_the_shipped_default_allowlist(tmp_path: Path) -> None:
+    """Record mode must work out of the box: the extension's content script runs in the CBS page,
+    so its requests carry the CBS page origin, NOT chrome-extension://."""
+    client = TestClient(
+        create_app(
+            Settings(jaaffl_data_dir=tmp_path / "data", jaaffl_recordings_dir=tmp_path / "rec")
+        )
+    )
+
+    res = client.post(
+        "/dev/recordings",
+        json={"session": "rec-x", "frames": []},
+        headers={"origin": "https://mockdraft-1.football.cbssports.com"},
+    )
+    assert res.status_code == 200
+
+
+def test_concurrent_recording_posts_never_corrupt_the_jsonl(tmp_path: Path) -> None:
+    """Every appended line must be valid JSON, even under concurrent same-session flushes.
+
+    A real capture came back with 2 of 223 lines unparseable (one logical line split in two) after
+    four same-session flushes landed in the same second. NOTE: this test does NOT reproduce that
+    corruption against the pre-fix code — TestClient appears to serialize requests — so it is a
+    regression guard on the write contract, not a proof of the original defect.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    app = create_app(
+        Settings(jaaffl_data_dir=tmp_path / "data", jaaffl_recordings_dir=tmp_path / "rec")
+    )
+    client = TestClient(app)
+    big = {"kind": "ws-message", "payload": {"body": "x" * 500_000}}  # real captures hit 509 KB
+
+    def flush(i: int):
+        return client.post(
+            "/dev/recordings", json={"session": "rec-concurrent", "frames": [big, big]}
+        ).status_code
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        assert all(code == 200 for code in pool.map(flush, range(16)))
+
+    out = (tmp_path / "rec" / "rec-concurrent.jsonl").read_text(encoding="utf-8")
+    lines = [ln for ln in out.splitlines() if ln.strip()]
+    assert len(lines) == 32
+    for ln in lines:
+        json.loads(ln)  # must not raise — a split line would
