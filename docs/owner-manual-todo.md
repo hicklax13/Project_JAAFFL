@@ -28,6 +28,12 @@ of each build phase on purpose — nothing here blocks the automated build unles
 > draft — the pieces are individually tested but have never run together on live frames. Also still
 > `TODO(capture)`: the **settings-page** parse and `CbsPageSnapshot` projections/injuries/rankings
 > (§4 below), which need a *settings/board* page capture rather than draft-room frames.
+>
+> ✅ **`scripts/seed_cbs_crosswalk.py` is no longer a prerequisite (PR #31).** The crosswalk now
+> seeds itself on the first `/recommendation` (~4,400 players / ~4,360 CBS links from the free
+> DynastyProcess table). Running the script after a capture is still worthwhile — it mines CBS ids
+> that table lacks — but forgetting it no longer breaks draft night. Verified on a pristine data
+> dir: an ID-only CBS pick now masks its player from the board with zero manual setup.
 
 > 📋 **Full step-by-step walkthrough:** [`docs/live-draft-recording-guide.md`](live-draft-recording-guide.md)
 > — exact install commands, Chrome load-unpacked steps, and the record-mode buttons.
@@ -49,6 +55,12 @@ in **Phase 4 (Stage 5 engine)** — two more things:
   8RB/4WR, κ, λ-table, α, reliability shrinkage, situation caps) are literature/first-principles
   priors. E1 measures the flex split from live FFC ADP (top-60); E2/E3 tune the weight vector and
   validate μ/σ against real boards. All optional — the engine ships and runs on the priors.
+  **E2 was re-run on 2026-07-25** against the new *real* xEP-backed μ/σ (the earlier run had tuned
+  against the `300 − ecr` placeholder, so its "optimum" was fitted to synthetic value). It again
+  **kept the baseline**: the tuned vector was directionally better but not significantly so
+  (`mean_diff +3.18 pts/slot`, `min_slot_diff −0.41`, `p = 0.41`), failing the no-regression gate.
+  So κ = 0.65 / α = 0.40 stand on their own merits now, not by default. Nothing was written —
+  the CLI is dry-run unless you pass `--write`, and `config/engine.json` stays owner-adopted.
 
 Steps (kept for the next capture — e.g. a settings-page capture, or re-verifying on draft night):
 1. Open a CBS mock draft with the extension loaded.
