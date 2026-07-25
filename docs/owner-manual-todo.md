@@ -24,8 +24,10 @@ of each build phase on purpose — nothing here blocks the automated build unles
 > real drafters' ids/team names.** Git-ignored; keep them local. Committed fixtures are redacted via
 > `scripts/redact_cbs_fixtures.py`.
 >
-> **Still open from this session:** live end-to-end resolution has not been exercised against a real
-> draft — the pieces are individually tested but have never run together on live frames. Also still
+> **Still open from this session:** live end-to-end resolution has **not** been exercised against a
+> real draft — the pieces are individually tested but have never run together on live frames. Tier 2
+> did not change this: it made the overlay tell the truth about the data it is given, which is a
+> different thing from proving the pipeline works on real CBS frames. That is **Tier 3**. Also still
 > `TODO(capture)`: the **settings-page** parse and `CbsPageSnapshot` projections/injuries/rankings
 > (§4 below), which need a *settings/board* page capture rather than draft-room frames.
 >
@@ -115,6 +117,22 @@ Preseason real-flow check (2026): FFC ADP resolved **144 / 166** players to cano
 free DynastyProcess crosswalk. Unresolved rows are logged and skipped (the engine tolerates gaps),
 and all skill-position starters resolve. If you later want K/DST ADP fully covered, ask Claude to
 add a DST city→team alias map; otherwise it's a safe, low-impact gap (K/DST go in the last rounds).
+
+## 3b. Two Tier-2 decisions left for you  `[WHEN YOU WANT IT]`
+
+Neither blocks anything; both are judgement calls rather than bugs.
+
+- **Monte-Carlo VONA is opt-in and slow on purpose.** `?mc=true` now genuinely runs (it used to be
+  a silent no-op). Measured on the pick-1 worst case: **analytic p95 9 ms · MC p95 1.14 s** at the
+  shipped `mc_rollouts = 2000`, against the plan's `<2 s` MC budget. It is NOT on the `/recs/ws`
+  push path — the overlay always gets the analytic number — so you only pay this when you ask for
+  it by hand. If you ever want MC on the live path, drop `mc_rollouts` (it is a real, tested
+  budget knob) rather than raising the budget. MC and analytic **disagree on the #1 pick** on the
+  synthetic board, so this is a genuine second opinion, not a rounding difference.
+- **`ESTIMATED` currently means "degraded board", not "forward-year".** §6.6 names forward-year
+  (2027) figures as the trigger. Nothing on the contract flags a forward-year projection today, so
+  the badge is driven by the trigger we can actually detect: a manually-pasted or non-live board.
+  Same badge, same treatment — say the word if you want a forward-year flag plumbed through too.
 
 ## 4. Stage 6 (UI) — live data + deferred panels
 

@@ -32,17 +32,49 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 >   returned 200 with **`vona = 0.00` on every pick** — a dead opponent model behind a healthy
 >   status code. Now 147 ADP / 387 ECR / 4,358 CBS links, seeded automatically.
 >
-> **Stages 0–6 core are built and green** (backend 459 + shared 80 + extension 62 + web 58; the
-> backend suite also passes with all non-loopback network hard-blocked). The live **$0
-> recommendation path works end-to-end**: real nflverse player universe → transparent engine →
-> decomposed pick pushed to the overlay over `WS /recs/ws`.
+> **Stages 0–6 core are built and green** (backend 474 + shared 86 + extension 93 + web 61; the
+> backend suite also passes with all non-loopback network hard-blocked — and the blocker itself is
+> verified to fire, so that is not a green light over a no-op). The live **$0 recommendation path
+> works end-to-end**: real nflverse player universe → transparent engine → decomposed pick pushed
+> to the overlay over `WS /recs/ws`.
 >
-> **Known gaps (Tier 2, verified, NOT fixed):** the overlay creates `footRoster`/`footSync` but
-> never assigns them, so sync age and recompute ms never render; its `"manual"` / `ESTIMATED`
-> states are dead code, so a capture failure still looks fully live; `?mc=true` threads `use_mc`
-> into `recommend()` where it is never referenced (Monte-Carlo VONA is built but unreachable); and
-> the overlay's `Why?` button has no click handler. Also: `PlayerProjection.sources` records which
-> players are ECR-only, but never leaves the backend — the owner cannot see a degraded projection.
+> **Tier 2 of the audit is merged** (PRs #33–#37) — *trust & honesty on the primary surface*. Five
+> places where the overlay looked like it was working:
+>
+> - **The foot renders.** `footRoster`/`footSync` were created, appended, and never assigned, so
+>   sync age and recompute ms had never rendered. `recompute_ms` + a roster summary now ride the
+>   `Recommendation` contract (the overlay never receives a `DraftState`, and inferring a roster
+>   from pick numbers would synthesize draft structure). Sync age is measured **client-side from
+>   receipt** and ticks on a timer — a server-stamped age would freeze when the socket died,
+>   reading "fresh" forever over rotting data.
+> - **Degraded modes are visible.** Nothing ever called `setStatus("manual")`, so a capture failure
+>   still looked fully live. Manual provenance is now latched from the real paste path and outranks
+>   a *healthy* socket (never a degraded one). The `ESTIMATED` badge is keyed off **trust**
+>   (`!manualBoard && socketState === "live"`), not the displayed status word — keying it off the
+>   word made the caveat vanish on "Reconnecting…", i.e. exactly as things got worse.
+> - **`?mc=true` is real.** `use_mc_vona` appeared only on `recommend()`'s signature. Wired to a new
+>   `simulate.mc_expected_best_available`, which estimates the same quantity as the analytic form
+>   but with a *coupled* opponent model. Measured (239 players, horizon 2, 2000 rollouts): analytic
+>   **p95 9 ms** vs MC **p95 1.14 s** (plan budget <2 s), RB VONA 59.51 → 65.96, and **the two
+>   disagree on the #1 pick**. The response now states `vona_method`.
+> - **`Why?` works, and pin is its own control.** `whyBtn` had no listener at all; `onPin` rode the
+>   Copy handler and the content script never passed it. The panel renders locally from
+>   `ScoreComponents` (available even when the backend is not) and shows the score **reconciling to
+>   the sum of its terms** — §6.5 made checkable rather than promised — plus σ band, reliability,
+>   VONA horizon, `E[best available next]`, and the capped modifiers the bars filter out.
+> - **Projection provenance is visible.** `PlayerProjection.sources` never left the backend; ~70
+>   ECR-only players (no modeled μ, still the `300 − rank` curve) were indistinguishable from
+>   xEP-backed ones. Now on `RecommendedPick.projection_sources`, with one shared rule
+>   (`packages/shared/src/provenance.ts`) so overlay and dashboard cannot drift.
+>
+> **What Tier 2 did NOT do** (scoped honestly): the end-to-end path has **still never run against
+> live CBS frames** — every piece is individually tested and they have never run together on real
+> frames (Tier 3). `ESTIMATED` is driven by a degraded *board*, not by the forward-year trigger
+> §6.6 names, because no forward-year flag exists on the contract yet. `Why?` is local prose-free
+> decomposition, **not** wired to the Responses API (§6.8) — that stays key-gated. Provenance
+> renders on the best pick and the dashboard banner, **not** on the top-5 rows. And MC-VONA has no
+> CI latency gate at 2000 rollouts: local margin to the 2 s budget is ~43%, which a slower runner
+> would eat, so `mc_rollouts` is pinned as a working budget knob instead.
 >
 > The `feat/post-v1-unblocked` branch adds, all TDD'd + verified: the **`GET /state` board +
 > pick-log** endpoint and its **dashboard panels**; the **Stage 7 assistant key-free core**
@@ -117,7 +149,11 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
       optimizer the engine actually uses
 - [x] **[stretch]** Draft simulator + agents + MC-VONA (`jaaffl.engine.simulate`) — `simulate_draft`
       (full snake to completion), the behavioral/Score agents, and `simulate_drafts` (E[best
-      available]); analytic VONA remains the shipped v1 hot-path default *(needs `engine-stretch`)*
+      available]); analytic VONA remains the shipped v1 hot-path default. **`?mc=true` is now
+      actually wired** (PR #35): `mc_expected_best_available` replaces the analytic per-position
+      `E_π` with a coupled rollout, the response states `vona_method`, no readable draft order
+      degrades to analytic *and says so*, and `simulate` imports lazily so the analytic path pays
+      nothing. Measured: analytic p95 9 ms · MC p95 1.14 s at 2000 rollouts (budget <2 s)
 - [x] **[stretch]** Constrained roster optimization via OR-Tools CP-SAT
       (`jaaffl.engine.optimize::optimize_roster`) — the season-simulator end-state ILP *(needs
       `engine-stretch`)*
@@ -127,7 +163,12 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 
 ## Stage 6 — Two-surface UI
 
-- [x] Thin in-page overlay: best pick / next-turn risk / why (`apps/extension` overlay)
+- [x] Thin in-page overlay: best pick / next-turn risk / why (`apps/extension` overlay) *(Tier 2,
+      PRs #33/#34/#36/#37: the **foot** renders roster + a ticking sync age + recompute ms; the
+      **manual-paste** and **ESTIMATED** degraded states are driven from the real paste path;
+      **`Why?`** opens a local decomposition that shows the score reconciling to its terms; **pin**
+      has its own control writing an advisory `chrome.storage.local` log; ECR-only projections are
+      **marked**. Verified in real Chromium via the E4 Playwright spec, not only jsdom)*
 - [x] Next.js dashboard: board analytics, manager tendencies, scenarios (`apps/web`) *(live
       recommendation feed, **draft board & pick-log** via `GET /state`, and the **value-curve +
       survival-curve** analytics panels via `GET /analytics` — all done; manager-tendency panel
