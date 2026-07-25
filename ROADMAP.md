@@ -13,11 +13,36 @@ order — later stages assume the earlier contracts exist.
 
 Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` done
 
-> ## 📍 Status — 2026-07-23 (verified against code; branch `feat/post-v1-unblocked`)
+> ## 📍 Status — 2026-07-25 (verified against code + a live server on a pristine data dir)
 >
-> **Stages 0–6 core are built and green** (backend + JS suites pass). The live **$0 recommendation
-> path works end-to-end**: real nflverse player universe → transparent engine → decomposed pick
-> pushed to the overlay over `WS /recs/ws`.
+> **Tier 1 of the spec-vs-code audit is merged** (PRs #29–#31). Three specified inputs existed but
+> never reached the engine; all three now do:
+>
+> - **Projections are real.** μ was `max(0, 300 − ecr)` — linear in expert rank. `build_projections`
+>   now consumes `Capability.EXPECTED_POINTS` (nflverse xEP) through `league/xep.py`, scored under
+>   the owner-verified `jaaffl_scoring` map, with `xep_season = season − 1` (nflreadpy **raises**
+>   for 2026 — xEP is retrospective). σ is per-player from measured weekly residuals; the flat
+>   ~50-for-everyone σ floor is replaced by year-over-year drift measured over two season-pairs
+>   (`scripts/measure_projection_sigma.py`). Live board: 447 players, 377 with real xEP,
+>   267 distinct σ (was 9), adjacent-μ gaps no longer a constant 1.0.
+> - **The engine is on by default.** `jaaffl_precompute_enabled` defaulted to `False` and was
+>   absent from `.env`, so a fresh clone could never serve a real pick.
+> - **The id crosswalk seeds itself** in precompute. This was worse than "drafted players aren't
+>   masked": on a fresh clone ADP resolved **0/179** and ECR **0/508**, so `/recommendation`
+>   returned 200 with **`vona = 0.00` on every pick** — a dead opponent model behind a healthy
+>   status code. Now 147 ADP / 387 ECR / 4,358 CBS links, seeded automatically.
+>
+> **Stages 0–6 core are built and green** (backend 459 + shared 80 + extension 62 + web 58; the
+> backend suite also passes with all non-loopback network hard-blocked). The live **$0
+> recommendation path works end-to-end**: real nflverse player universe → transparent engine →
+> decomposed pick pushed to the overlay over `WS /recs/ws`.
+>
+> **Known gaps (Tier 2, verified, NOT fixed):** the overlay creates `footRoster`/`footSync` but
+> never assigns them, so sync age and recompute ms never render; its `"manual"` / `ESTIMATED`
+> states are dead code, so a capture failure still looks fully live; `?mc=true` threads `use_mc`
+> into `recommend()` where it is never referenced (Monte-Carlo VONA is built but unreachable); and
+> the overlay's `Why?` button has no click handler. Also: `PlayerProjection.sources` records which
+> players are ECR-only, but never leaves the backend — the owner cannot see a degraded projection.
 >
 > The `feat/post-v1-unblocked` branch adds, all TDD'd + verified: the **`GET /state` board +
 > pick-log** endpoint and its **dashboard panels**; the **Stage 7 assistant key-free core**
@@ -81,7 +106,12 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 ## Stage 5 — Transparent draft engine
 
 - [x] Exact CBS scoring translation + replacement values + tier breaks (`jaaffl.league`)
-- [x] Projection ensemble (`jaaffl.engine.projections`)
+- [x] Projection ensemble (`jaaffl.engine.projections`) *(PR #29: **real** nflverse xEP
+      (`Capability.EXPECTED_POINTS`) + ECR, both scored under the owner-verified `jaaffl_scoring`
+      map. Replaces the `300 − ecr` placeholder. Per-player σ from measured weekly residuals;
+      per-position drift σ measured, not chosen (`scripts/measure_projection_sigma.py`). CBS
+      on-page projections remain a third source once a settings/board capture exists — that path
+      is still unreachable, `cbs_page_snapshots` has 0 rows)*
 - [x] Opponent pick-probability model — analytic survival (`jaaffl.engine.opponents`)
 - [x] Marginal Lineup Value via Hungarian assignment (`jaaffl.engine.optimize`) — the v1 flex-aware
       optimizer the engine actually uses
@@ -121,7 +151,18 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
       (`calibrate_flex_split.py`), **E3** projection-validation (`validate_projections.py`), and
       **E2** param tuning (`tune_engine_params.py` — Optuna study + no-regression gate; `--real`
       builds a precompute-backed pool), and the **E6** efficacy tournament (`run_tournament.py` —
-      our agent vs VBD-only / ADP-only baselines) all done + run live. A large offline real-data E2
-      study (many trials/seeds) is the remaining calibration follow-up
+      our agent vs VBD-only / ADP-only baselines) all done + run live. **E2 re-run 2026-07-25**
+      against the real xEP-backed μ (the prior run had tuned against the `300 − ecr` placeholder,
+      fitting its "optimum" to synthetic value) — gate again says **KEEP baseline**
+      (`+3.18 pts/slot`, `min_slot −0.41`, `p = 0.41`). Nothing written; `config/engine.json`
+      stays owner-adopted. ⚠️ That re-run also exposed **two harness problems** (see
+      `docs/owner-manual-todo.md` §1): the held-out opponent `NeedBasedAgent` never consumes its
+      `rng`, so `--eval-seeds` is **inert** and the gate has zero simulation variance; and
+      **pure-MLV (κ=α=λ=0) PASSES that gate** (`+14.74/slot`, `min_slot +0.00`, `p = 0.0010`)
+      while the tuned vector fails it. E2 as configured therefore cannot validate the strategic
+      terms — a stochastic held-out mix is the remaining calibration follow-up
+- [x] **Projection σ measurement** — `scripts/measure_projection_sigma.py` (read-only) measures the
+      per-position year-over-year projection error that anchors the risk band, replacing the flat
+      v1 σ placeholder. Also settles season-sum vs rate×17 for μ with two-year-pair evidence
 - [ ] Playwright kept for testing / emergency draft-room recovery (not the production path)
 - [~] Compliance guardrails enforced in code & docs (see `docs/legal-and-compliance.md`)
