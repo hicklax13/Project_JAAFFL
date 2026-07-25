@@ -59,8 +59,26 @@ in **Phase 4 (Stage 5 engine)** — two more things:
   against the `300 − ecr` placeholder, so its "optimum" was fitted to synthetic value). It again
   **kept the baseline**: the tuned vector was directionally better but not significantly so
   (`mean_diff +3.18 pts/slot`, `min_slot_diff −0.41`, `p = 0.41`), failing the no-regression gate.
-  So κ = 0.65 / α = 0.40 stand on their own merits now, not by default. Nothing was written —
-  the CLI is dry-run unless you pass `--write`, and `config/engine.json` stays owner-adopted.
+  Nothing was written — the CLI is dry-run unless you pass `--write`, and `config/engine.json`
+  stays owner-adopted.
+
+  ⚠️ **Two things that re-run exposed about the E2 harness itself — READ BEFORE TRUSTING E2.**
+  Neither is fixed; both are decisions for you.
+
+  1. **`--eval-seeds` is inert.** The held-out opponent set is `[NeedBasedAgent()]`, and
+     `NeedBasedAgent.pick` accepts `rng` and never uses it — it is fully deterministic. So the
+     held-out evaluation has **zero simulation variance**: 1 eval seed and 6 eval seeds produce
+     bit-identical numbers (measured twice; two studies with different trial counts and different
+     tuned vectors reported the same `+3.18 / −0.41 / p=0.4062`). The gate's Wilcoxon is therefore
+     a 12-slot paired test on ONE deterministic scenario, not a seed-varied estimate. Fix would be
+     a stochastic held-out mix (e.g. include `AdpNoiseAgent`, which does consume `rng`).
+  2. **Pure-MLV passes the gate that the tuned vector fails.** Turning every strategic term OFF
+     (κ=0, α=0, λ≡0, no K/DST shrinkage — i.e. rank purely on Marginal Lineup Value) scores
+     `+14.74 pts/slot` over the baseline with `min_slot_diff +0.00` and `p = 0.0010` —
+     `would_promote = True`. Read it narrowly: that is against ONE deterministic, exploitable
+     opponent archetype, and E6 separately shows the agent beating VBD-only/ADP-only baselines. It
+     does **not** mean VONA/cliff/risk are worthless. It does mean **E2 as currently configured
+     cannot validate them**, so "KEEP baseline" is a weak endorsement rather than a clean one.
 
 Steps (kept for the next capture — e.g. a settings-page capture, or re-verifying on draft night):
 1. Open a CBS mock draft with the extension loaded.

@@ -154,9 +154,13 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
       our agent vs VBD-only / ADP-only baselines) all done + run live. **E2 re-run 2026-07-25**
       against the real xEP-backed μ (the prior run had tuned against the `300 − ecr` placeholder,
       fitting its "optimum" to synthetic value) — gate again says **KEEP baseline**
-      (`+3.18 pts/slot`, `min_slot −0.41`, `p = 0.41`), so κ/α/λ now stand on their merits.
-      Nothing written; `config/engine.json` stays owner-adopted. A larger offline study
-      (many trials/seeds) is the remaining calibration follow-up
+      (`+3.18 pts/slot`, `min_slot −0.41`, `p = 0.41`). Nothing written; `config/engine.json`
+      stays owner-adopted. ⚠️ That re-run also exposed **two harness problems** (see
+      `docs/owner-manual-todo.md` §1): the held-out opponent `NeedBasedAgent` never consumes its
+      `rng`, so `--eval-seeds` is **inert** and the gate has zero simulation variance; and
+      **pure-MLV (κ=α=λ=0) PASSES that gate** (`+14.74/slot`, `min_slot +0.00`, `p = 0.0010`)
+      while the tuned vector fails it. E2 as configured therefore cannot validate the strategic
+      terms — a stochastic held-out mix is the remaining calibration follow-up
 - [x] **Projection σ measurement** — `scripts/measure_projection_sigma.py` (read-only) measures the
       per-position year-over-year projection error that anchors the risk band, replacing the flat
       v1 σ placeholder. Also settles season-sum vs rate×17 for μ with two-year-pair evidence
