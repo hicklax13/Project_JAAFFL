@@ -35,6 +35,19 @@ const STALE_AFTER_MS = 3000;
 /** Roster-rail order from the league constitution (QB 1 · RB 1 · WR 3 · TE 1 · K 1 · DST 1). */
 const ROSTER_POS_ORDER: Position[] = ["QB", "RB", "WR", "TE", "K", "DST"];
 
+/** §6.6 states. Every one carries an icon-free word + colour, never colour alone (§6.7 CVD). */
+const STATUS_MAP: Record<OverlaySyncState, { text: string; color: string }> = {
+  live: { text: "Live · CBS synced", color: "var(--good)" },
+  connecting: { text: "Connecting…", color: "var(--warning)" },
+  stale: { text: "Stale · awaiting pick", color: "var(--warning)" },
+  disconnected: { text: "Reconnecting…", color: "var(--critical)" },
+  waiting: { text: "Watching the board", color: "var(--ink-3)" },
+  manual: { text: "Manual paste · not live", color: "var(--warning)" },
+};
+
+/** States whose numbers came off a board we cannot vouch for → badge them ESTIMATED (§6.6). */
+const ESTIMATED_STATES = new Set<OverlaySyncState>(["manual", "stale"]);
+
 // Overlay layout on top of the shared component kit (which already defines .pos/.sc-*/.btn/etc.).
 const OVERLAY_CSS = `
 :host { all: initial; }
@@ -92,6 +105,10 @@ const OVERLAY_CSS = `
 /* An overdue push is amber in the foot too, so freshness reads the same from the status pill
    and from the sync line. Never colour-alone — the age in seconds carries the same fact. */
 .ov-sync.is-stale { color: var(--warning); }
+/* §6.6 — sits directly under the brass score it qualifies, so the caveat travels with the number. */
+.badge-estimated { display: block; margin-top: 4px; font-size: var(--fs-xxs); font-weight: 700;
+  letter-spacing: .07em; color: var(--warning); border: 1px solid var(--warning);
+  border-radius: var(--r-xs); padding: 1px 5px; }
 `;
 
 export type OverlaySyncState = RecsSyncState | "waiting" | "manual";
@@ -280,6 +297,10 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
   scoreBox.appendChild(el("span", "eyebrow", "Score"));
   const scoreEl = el("b", "mono", "—");
   scoreBox.appendChild(scoreEl);
+  // §6.6 ESTIMATED — a badge ON THE NUMBER, added/removed from the DOM rather than hidden, so
+  // "is this figure trustworthy?" is answerable from the tree and not just from a CSS property.
+  const estimatedBadge = el("span", "badge-estimated", "ESTIMATED");
+  estimatedBadge.title = "Computed from a board that is not live — treat this number as estimated";
   who.append(posChip, idBox, scoreBox);
   const actions = el("div", "reco-actions");
   const copyBtn = el("button", "btn btn-primary", "Copy name");
@@ -325,11 +346,23 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
   shadow.appendChild(panel);
   document.body.appendChild(host);
 
-  mountManualPaste(shadow, opts.onPaste ?? (() => {}));
+  // Manual-paste fallback. parse.ts already tags these events "manual"; that signal used to be
+  // thrown away, so a capture failure left the overlay looking fully live. Latch it instead:
+  // provenance is a property of the BOARD, so it holds until the page reloads.
+  mountManualPaste(shadow, (events) => {
+    if (events.length > 0) {
+      manualBoard = true;
+      renderStatus();
+    }
+    opts.onPaste?.(events);
+  });
 
   let currentBest: RecommendedPick | null = null;
   let receivedAt: number | null = null; // CLIENT-side receipt clock — see renderSync()
   let recomputeMs: number | null = null;
+  let socketState: OverlaySyncState = "waiting";
+  /** Latched once the owner falls back to manual paste — the board's provenance, not the socket's. */
+  let manualBoard = false;
 
   /**
    * Foot, right half: `synced 0.4s ago · recompute 380ms` (§6.3 anatomy #6).
@@ -442,17 +475,37 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
   }
 
   function setStatus(state: OverlaySyncState): void {
-    const map: Record<OverlaySyncState, { text: string; color: string }> = {
-      live: { text: "Live · CBS synced", color: "var(--good)" },
-      connecting: { text: "Connecting…", color: "var(--warning)" },
-      stale: { text: "Stale · awaiting pick", color: "var(--warning)" },
-      disconnected: { text: "Reconnecting…", color: "var(--critical)" },
-      waiting: { text: "Watching the board", color: "var(--ink-3)" },
-      manual: { text: "Manual paste", color: "var(--warning)" },
-    };
-    const s = map[state];
+    socketState = state;
+    renderStatus();
+  }
+
+  /**
+   * Resolve socket health + board provenance into one honest status (§6.6).
+   *
+   * Manual provenance outranks a HEALTHY socket, because the two describe different things: the
+   * recs feed can be perfectly live while the board it computed from came out of a human paste.
+   * It never outranks a DEGRADED socket — "reconnecting" is both more urgent and equally true,
+   * and hiding it behind a provenance badge would trade one silent lie for another.
+   */
+  function renderStatus(): void {
+    const healthy = socketState === "live" || socketState === "waiting";
+    const effective: OverlaySyncState = manualBoard && healthy ? "manual" : socketState;
+    const s = STATUS_MAP[effective];
     liveText.textContent = s.text;
     beat.style.background = s.color;
+
+    // §6.6's ESTIMATED row names forward-year figures as the trigger; the same badge is what a
+    // degraded board warrants, and a degraded board is the trigger we can actually detect today.
+    // A forward-year flag on the contract would light the identical treatment.
+    //
+    // Keyed off TRUST, not off the displayed word. Keying it off `effective` made the badge
+    // vanish on "Reconnecting…" — the caveat disappearing exactly as things got worse, because a
+    // manual board plus a dead socket rendered as merely disconnected. A score is un-caveated
+    // only when a live feed is reporting a live-captured board; anything less is estimated.
+    const trustworthy = !manualBoard && socketState === "live";
+    const estimated = currentBest !== null && !trustworthy;
+    if (estimated && !estimatedBadge.isConnected) scoreBox.appendChild(estimatedBadge);
+    else if (!estimated && estimatedBadge.isConnected) estimatedBadge.remove();
   }
 
   function setClock(secondsLeft: number, pick: string): void {

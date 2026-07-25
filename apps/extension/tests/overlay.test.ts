@@ -251,3 +251,123 @@ describe("overlay foot — roster + freshness (§6.3 anatomy #6, §6.7 auditabil
     handle.destroy();
   });
 });
+
+describe("overlay degraded modes — manual paste + ESTIMATED (§6.6)", () => {
+  // If capture fails and the owner falls back to manual paste, the overlay used to still look
+  // fully live: nothing ever called setStatus("manual") and no ESTIMATED treatment existed.
+  // That is a silent lie at exactly the wrong moment.
+
+  /** Drive the REAL manual-paste control, not setStatus() — the point is that the path is wired. */
+  function pasteRealPicks(): void {
+    const box = shadow().querySelector<HTMLTextAreaElement>(".paste textarea")!;
+    const send = shadow().querySelector<HTMLButtonElement>(".paste button")!;
+    box.value = "12. Team Six - Bijan Robinson, RB, ATL";
+    send.click();
+  }
+
+  function statusText(): string {
+    return shadow().querySelector(".live")?.textContent ?? "";
+  }
+
+  it("routes pasted picks to the onPaste sink AND flags the board manual", () => {
+    const onPaste = vi.fn();
+    const handle = mountOverlay({ wsFactory: noopFactory, onPaste });
+    handle.setStatus("live");
+    expect(statusText()).toMatch(/live/i);
+
+    pasteRealPicks();
+
+    expect(onPaste).toHaveBeenCalledTimes(1);
+    expect(onPaste.mock.calls[0]![0]).toHaveLength(1); // the parsed pick still flows through
+    expect(statusText()).toMatch(/manual/i);
+    handle.destroy();
+  });
+
+  it("keeps the manual flag latched when a live push follows", () => {
+    // The recs socket can be perfectly healthy while the BOARD came from a human paste.
+    // Provenance is a property of the board, so it must not be cleared by a fresh rec.
+    const handle = mountOverlay({ wsFactory: noopFactory, onPaste: () => {} });
+    pasteRealPicks();
+    handle.update(REC); // update() ends by calling setStatus("live")
+
+    expect(statusText()).toMatch(/manual/i);
+    expect(statusText()).not.toMatch(/CBS synced/i);
+    handle.destroy();
+  });
+
+  it("still reports a dropped socket over the manual flag", () => {
+    // A dead socket is both more urgent and equally true — it must not be masked by provenance.
+    const handle = mountOverlay({ wsFactory: noopFactory, onPaste: () => {} });
+    pasteRealPicks();
+    handle.setStatus("disconnected");
+
+    expect(statusText()).toMatch(/reconnect/i);
+    handle.destroy();
+  });
+
+  it("does not flag manual when nothing parsed out of the paste box", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory, onPaste: () => {} });
+    handle.setStatus("live");
+    const box = shadow().querySelector<HTMLTextAreaElement>(".paste textarea")!;
+    box.value = "not a pick line at all";
+    shadow().querySelector<HTMLButtonElement>(".paste button")!.click();
+
+    expect(statusText()).toMatch(/live/i);
+    handle.destroy();
+  });
+
+  it("badges the score ESTIMATED once the board is manually pasted", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory, onPaste: () => {} });
+    handle.update(REC);
+    expect(shadow().querySelector(".badge-estimated")).toBeNull();
+
+    pasteRealPicks();
+    const badge = shadow().querySelector(".badge-estimated");
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toMatch(/estimated/i);
+    handle.destroy();
+  });
+
+  it("badges the score ESTIMATED while the feed is stale", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(REC);
+    expect(shadow().querySelector(".badge-estimated")).toBeNull();
+
+    handle.setStatus("stale");
+    expect(shadow().querySelector(".badge-estimated")).not.toBeNull();
+
+    handle.setStatus("live"); // recovered — the number is trustworthy again
+    expect(shadow().querySelector(".badge-estimated")).toBeNull();
+    handle.destroy();
+  });
+});
+
+describe("overlay ESTIMATED — the badge tracks trust, not just the status word", () => {
+  function pasteRealPicks(): void {
+    const box = shadow().querySelector<HTMLTextAreaElement>(".paste textarea")!;
+    box.value = "12. Team Six - Bijan Robinson, RB, ATL";
+    shadow().querySelector<HTMLButtonElement>(".paste button")!.click();
+  }
+
+  it("keeps the badge when a manual board's socket ALSO drops", () => {
+    // Caught by looking at the rendered output: keying the badge off the displayed status word
+    // made it vanish on "Reconnecting…", i.e. the caveat disappeared exactly as things got worse.
+    const handle = mountOverlay({ wsFactory: noopFactory, onPaste: () => {} });
+    handle.update(REC);
+    pasteRealPicks();
+    expect(shadow().querySelector(".badge-estimated")).not.toBeNull();
+
+    handle.setStatus("disconnected");
+    expect(shadow().querySelector(".live")!.textContent).toMatch(/reconnect/i);
+    expect(shadow().querySelector(".badge-estimated")).not.toBeNull();
+    handle.destroy();
+  });
+
+  it("badges a rec left on screen while the socket is only connecting", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(REC);
+    handle.setStatus("connecting");
+    expect(shadow().querySelector(".badge-estimated")).not.toBeNull();
+    handle.destroy();
+  });
+});
