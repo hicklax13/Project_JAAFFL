@@ -75,10 +75,30 @@ Observed `type/subtype` pairs, with counts from one mock draft:
 CBS-id → canonical crosswalk (§5). This is the single biggest divergence from the synthetic
 `parse.ts`, which assumed name/team/position rode along with the pick.
 
-`source` distinguishes `"autopick"` from a human pick — keep it; it feeds future manager-tendency
-work rather than being discarded.
+`source` distinguishes `"autopick"` from a human (`"userpick"`) pick — keep it; it feeds future
+manager-tendency work rather than being discarded.
 
-The overall pick number is **not** on the pick entry. Take it from `newstate.opick`.
+### ⚠️ The overall pick number: `newstate.opick` is FORWARD-LOOKING
+
+The overall pick is **not** on the pick entry, and `newstate.opick` is **not** the pick that just
+completed — it is the pick now **on the clock** (it pairs with `onclockteamid`). Reading it
+literally mis-numbers every pick by +1 and, at the terminal frame, drops the real final pick.
+
+`payload.picks[]` is also **batched** — observed batch sizes 1, 2, 5, 7 and 9 (one frame can report
+nine completed picks at once, e.g. after a run of autopicks). So walk backward from `opick`:
+
+```ts
+overall = newstate.opick - picks.length + index   // index within payload.picks[]
+```
+
+**Verified exhaustively:** this matches CBS's own record
+(`fullstatedelta.teams[<team>].players[<playerid>].opick`) for **all 168 picks of a complete draft,
+zero mismatches**, across every observed batch size.
+
+`fullstatedelta.opickindex` is consistently `opick - 1` (a 0-based index of the on-the-clock pick).
+
+Note `draft_state.current_overall_pick` should use `opick` **unadjusted** — there, "the pick now on
+the clock" is exactly the right meaning.
 
 ## 4. `newstate` — the draft state, attached to most frames
 
@@ -104,11 +124,33 @@ Observed: `rounds: 14`, 12 teams → 168 real picks, but the terminal frame carr
 `169` is a **draft-over sentinel**, not a 15th-round pick. Treat `opick > rounds × teams` as
 "draft complete", exactly as `opponents.next_overall_pick` does with its own sentinel.
 
-### ⚠️ `upcomingorder` is empty once `state == "completed"`
+### ⚠️ `upcomingorder` is a ROLLING WINDOW — do NOT use it as `draft_order`
 
-It is populated *during* the draft only. `config/league.json` sets `infer_from_team_count: false`,
-so the parser must **read** this field when present and degrade honestly when absent — never
-synthesize a snake from team count. Manual paste (`ORDER:` line) remains the draft-day fallback.
+`upcomingorder` is the upcoming pick sequence from *right now*, spanning a partial round into the
+next — **not** one entry per team. Observed entry counts across one draft:
+
+| Frames | Entries |
+|---:|---:|
+| 55 | 22 |
+| 1 | 17 |
+| 2 | 8 |
+| 2 | 1 |
+| 4 | 0 (once `state == "completed"`) |
+
+This matters because `engine/opponents.py::_my_overall_picks` does `n = len(settings.draft_order)`
+and uses `n` as the **team count** for snake math. Feeding it a 22-entry window would set
+`team_count: 22` and silently corrupt every "my next pick" and survival calculation.
+
+**Use `payload.fullstatedelta.order` instead.** It is exactly one entry per team and stable for the
+whole draft — a single distinct value `"1,2,3,4,5,6,7,8,9,10,11,12"` across all 40 frames that
+carry it, i.e. 12 entries for a 12-team league.
+
+`config/league.json` sets `infer_from_team_count: false`, so the parser must **read** the order and
+degrade honestly when it is absent — never synthesize a snake from team count. Manual paste
+(`ORDER:` line) remains the draft-day fallback.
+
+`upcomingorder_withroundbreaks` (the `-9`-delimited variant) is still useful for *reading* the snake
+shape, but it is the same rolling window and is likewise not a `draft_order`.
 
 ### Full roster state
 
