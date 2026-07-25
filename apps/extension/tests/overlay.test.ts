@@ -108,3 +108,74 @@ describe("mountOverlay", () => {
     expect(document.getElementById("jaaffl-overlay")).toBeNull();
   });
 });
+
+describe("overlay panel controls", () => {
+  // The panel is position:fixed at z-index 2147483647 with hard-coded top/right. During a live
+  // mock draft that meant it sat permanently over the CBS draft board with no way to move or
+  // dismiss it — exactly when the board matters most. These pin the escape hatches.
+
+  function mount() {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    const shadow = document.getElementById("jaaffl-overlay")!.shadowRoot!;
+    return { handle, shadow };
+  }
+
+  it("renders a collapse toggle that is expanded by default", () => {
+    const { shadow } = mount();
+    const btn = shadow.querySelector<HTMLButtonElement>(".ov-collapse")!;
+
+    expect(btn).toBeTruthy();
+    expect(btn.getAttribute("aria-expanded")).toBe("true");
+    expect(shadow.querySelector(".panel")!.classList.contains("is-collapsed")).toBe(false);
+  });
+
+  it("collapses to just the header when toggled, and restores", () => {
+    const { shadow } = mount();
+    const btn = shadow.querySelector<HTMLButtonElement>(".ov-collapse")!;
+    const panel = shadow.querySelector(".panel")!;
+
+    btn.click();
+    expect(panel.classList.contains("is-collapsed")).toBe(true);
+    expect(btn.getAttribute("aria-expanded")).toBe("false");
+
+    btn.click();
+    expect(panel.classList.contains("is-collapsed")).toBe(false);
+    expect(btn.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("gives the collapse button an accessible name in both states", () => {
+    const { shadow } = mount();
+    const btn = shadow.querySelector<HTMLButtonElement>(".ov-collapse")!;
+
+    expect(btn.getAttribute("aria-label")).toMatch(/collapse/i);
+    btn.click();
+    expect(btn.getAttribute("aria-label")).toMatch(/expand/i);
+  });
+
+  it("drags by the header to a new position", () => {
+    const { shadow } = mount();
+    const head = shadow.querySelector<HTMLElement>(".ov-head")!;
+    const panel = shadow.querySelector<HTMLElement>(".panel")!;
+
+    head.dispatchEvent(new MouseEvent("pointerdown", { clientX: 500, clientY: 100, bubbles: true }));
+    window.dispatchEvent(new MouseEvent("pointermove", { clientX: 460, clientY: 160, bubbles: true }));
+    window.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
+
+    // Dragging switches the panel off its hard-coded `right` anchor onto explicit coords.
+    expect(panel.style.left).not.toBe("");
+    expect(panel.style.top).not.toBe("");
+    expect(panel.style.right).toBe("auto");
+  });
+
+  it("does not start a drag from the collapse button", () => {
+    const { shadow } = mount();
+    const btn = shadow.querySelector<HTMLButtonElement>(".ov-collapse")!;
+    const panel = shadow.querySelector<HTMLElement>(".panel")!;
+
+    btn.dispatchEvent(new MouseEvent("pointerdown", { clientX: 500, clientY: 100, bubbles: true }));
+    window.dispatchEvent(new MouseEvent("pointermove", { clientX: 300, clientY: 300, bubbles: true }));
+    window.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
+
+    expect(panel.style.left).toBe(""); // never moved
+  });
+});
