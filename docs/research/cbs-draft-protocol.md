@@ -94,7 +94,8 @@ The overall pick number is **not** on the pick entry. Take it from `newstate.opi
 | `upcomingorder_withroundbreaks` | `"1,…,12,-9,12,…,4"` | same, `-9` marks a round break |
 | `onautopilot` | `"10:moderate,11:moderate,…"` | which teams are bots |
 | `state` | `"completed"` | terminal marker |
-| `teamspresent` / `ownerspresent` | `"1,10,8"` | attendance |
+| `teamspresent` | `"1,10,8"` | attendance — team SLOT numbers |
+| `ownerspresent` | `"d5k…,pwc…"` | attendance — alphanumeric owner-id tokens (**PII**) |
 | `deadline`, `currenttime`, `currenthirestime` | epoch | clock |
 
 ### ⚠️ `opick` overruns the draft by one at completion
@@ -146,5 +147,16 @@ Every `TODO(capture)` marker in `apps/extension/src/lib/parse.ts`, plus the unve
 `CbsPageSnapshot` field shapes in `backend/src/jaaffl/domain/models.py` and
 `backend/src/jaaffl/providers/cbs_onpage.py`.
 
-Raw captures live git-ignored under `apps/extension/fixtures/cbs/` (they carry the owner's
-`ownerid` and team name). Only redacted golden fixtures are committed.
+Raw captures live git-ignored under `apps/extension/fixtures/cbs/`. Only redacted golden fixtures
+are committed, under `apps/extension/tests/fixtures/cbs/`, generated reproducibly by
+`scripts/redact_cbs_fixtures.py`.
+
+### ⚠️ What the RAW captures contain
+
+More personal data than first assumed — verified while building the fixtures:
+
+- the owner's `ownerid`, team display name, **and email address**
+- **other real drafters' `ownerid`s and team names** (a public mock draft has other humans in it)
+
+They are git-ignored and must stay local. Do not paste them into an issue, share them, or upload
+them anywhere. The redaction script exists precisely so that testing never requires the raw files.
