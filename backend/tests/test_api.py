@@ -48,10 +48,14 @@ def _primed_engine() -> RecommendationEngine:
 
 @pytest.fixture
 def app(tmp_path: Path):
+    """The shared app, pinned OFFLINE. ``jaaffl_precompute_enabled`` now defaults to True, so
+    without this the first `/recommendation` in any test would reach out to nflverse/FFC for
+    real. Tests that want the bridge inject fake providers explicitly."""
     return create_app(
         Settings(
             jaaffl_data_dir=tmp_path / "data",
             jaaffl_recordings_dir=tmp_path / "recordings",
+            jaaffl_precompute_enabled=False,
         )
     )
 
@@ -838,3 +842,30 @@ def test_concurrent_recording_posts_never_corrupt_the_jsonl(tmp_path: Path) -> N
     assert len(lines) == 32
     for ln in lines:
         json.loads(ln)  # must not raise — a split line would
+
+
+def test_default_app_wires_a_registry_backed_context_source(tmp_path: Path) -> None:
+    """With precompute on by default, a plain ``create_app`` gives the engine a context source —
+    so `/recommendation` can reach 200. Construction alone must stay network-free (the registry
+    is built eagerly; every provider pull happens lazily inside the closure)."""
+    app = create_app(
+        Settings(
+            _env_file=None,
+            jaaffl_data_dir=tmp_path / "data",
+            jaaffl_recordings_dir=tmp_path / "rec",
+        )
+    )
+    assert app.state.rec_engine._context_source is not None
+
+
+def test_precompute_can_still_be_switched_off(tmp_path: Path) -> None:
+    """The kill-switch still works — an owner (or a test) can pin the old warming-up behaviour."""
+    app = create_app(
+        Settings(
+            _env_file=None,
+            jaaffl_data_dir=tmp_path / "data",
+            jaaffl_recordings_dir=tmp_path / "rec",
+            jaaffl_precompute_enabled=False,
+        )
+    )
+    assert app.state.rec_engine._context_source is None

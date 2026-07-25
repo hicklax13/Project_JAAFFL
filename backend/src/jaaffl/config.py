@@ -101,11 +101,14 @@ class Settings(BaseSettings):
     )
     jaaffl_season: int = 2026
     jaaffl_engine_params_path: Path = Path("./config/engine.json")
-    # Pre-draft precompute bridge (§4.7). OFF by default so the base install boots to a 503
-    # "warming up" /recommendation until a context is primed (existing behavior / tests). Flip on to
-    # have create_app build a registry-backed context_source (the $0 providers) that turns
-    # /recommendation 503 → 200 end-to-end. All provider I/O stays in precompute.
-    jaaffl_precompute_enabled: bool = False
+    # Pre-draft precompute bridge (§4.7). ON by default: create_app builds a registry-backed
+    # context_source (the $0 providers) so a fresh clone reaches a real /recommendation with no
+    # extra configuration. It FAILS SOFT — an empty universe or no projections returns None and
+    # /recommendation 503s exactly as it did when this was off — so ON is the safe default, and
+    # OFF was a documented setup that could never serve a pick. All provider I/O stays inside the
+    # precompute closure (lazy, on first use); the per-pick hot path still touches no provider.
+    # Set false to pin the old "warming up" behaviour (the test suite does, to stay offline).
+    jaaffl_precompute_enabled: bool = True
     # The primary/demo league id the local dashboard + precompute target (single-user, ADR 0002).
     # GET /league/{id} serves the immutable constitution for THIS id (or any id that already has a
     # CBS snapshot or folded draft events); every other id is 404.

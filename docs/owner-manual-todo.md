@@ -93,8 +93,10 @@ live. Three items are opt-in / follow-up, none block the UI:
 
 - **Live $0 recommendations — ✅ RESOLVED (PR #14, merged `fb338d2`; no owner action needed).**
   `NflreadpyProvider.players()` now loads the FREE nflverse universe via `load_ff_playerids()`
-  (real pull verified: **4,571 players**), so with `JAAFFL_PRECOMPUTE_ENABLED=true` a live server
-  serves `GET /recommendation` **503→200** on the $0 tier with **no fixture injection**.
+  (real pull verified: **4,571 players**), so a live server serves `GET /recommendation`
+  **503→200** on the $0 tier with **no fixture injection**. `JAAFFL_PRECOMPUTE_ENABLED` now
+  **defaults to true** (PR #30) — it used to default to false and was absent from `.env`, so a
+  fresh clone followed the documented setup and still got a permanent 503.
   `ingest/resolve.resolve_pick_ids` masks name-only manual-paste picks upstream of the frozen
   `recommend()`; recorded fixtures keep CI offline. *(This was the former `[BLOCKER]`; it is done.)*
 - **Draft board + pick-log panels**  `[DONE — branch feat/post-v1-unblocked]`. Shipped: `GET /state`
