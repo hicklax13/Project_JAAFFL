@@ -371,3 +371,131 @@ describe("overlay ESTIMATED — the badge tracks trust, not just the status word
     handle.destroy();
   });
 });
+
+describe("overlay Why? and Pin (§6.5 anti-black-box, §6.3 advisory actions)", () => {
+  // `Why?` was created, given an aria-label, appended — and never given a click handler. `onPin`
+  // was invoked, but from INSIDE the copyBtn handler, and the content script passed no onPin at
+  // all. Both halves of the primary action were inert.
+
+  const WITH_MODS: Recommendation = {
+    ...REC,
+    ranked: [
+      {
+        ...REC.ranked[0]!,
+        components: {
+          ...REC.ranked[0]!.components!,
+          modifiers: { bye_stack: -1.5, handcuff_synergy: 2 },
+          reliability: 0.82,
+          vona_horizon: 2,
+          best_available_next: 17.4,
+        },
+      },
+      ...REC.ranked.slice(1),
+    ],
+  };
+
+  function whyBtn(): HTMLButtonElement {
+    return shadow().querySelector<HTMLButtonElement>('[aria-label*="Explain" i]')!;
+  }
+
+  it("opens and closes the explanation, tracking aria-expanded", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(REC);
+    expect(shadow().querySelector(".why-detail")).toBeNull();
+    expect(whyBtn().getAttribute("aria-expanded")).toBe("false");
+
+    whyBtn().click();
+    expect(shadow().querySelector(".why-detail")).not.toBeNull();
+    expect(whyBtn().getAttribute("aria-expanded")).toBe("true");
+
+    whyBtn().click();
+    expect(shadow().querySelector(".why-detail")).toBeNull();
+    handle.destroy();
+  });
+
+  it("shows the score reconciling to its terms — the anti-black-box guarantee, checkable", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(REC);
+    whyBtn().click();
+    const text = shadow().querySelector(".why-detail")!.textContent ?? "";
+    expect(text).toMatch(/reconcile/i);
+    expect(text).toContain("41.2"); // the score the terms must add up to
+    handle.destroy();
+  });
+
+  it("surfaces the ScoreComponents fields the bars never render", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(WITH_MODS);
+    whyBtn().click();
+    const text = shadow().querySelector(".why-detail")!.textContent ?? "";
+
+    expect(text).toContain("200.0"); // floor  — risk band, invisible until now
+    expect(text).toContain("300.0"); // ceiling
+    expect(text).toContain("0.82"); // reliability shrinkage r_pos
+    expect(text).toContain("17.4"); // E[best available next] — the VONA baseline
+    expect(text).toMatch(/horizon/i);
+    handle.destroy();
+  });
+
+  it("renders capped modifiers, which the why bars deliberately filter out", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(WITH_MODS);
+    whyBtn().click();
+    const text = shadow().querySelector(".why-detail")!.textContent ?? "";
+    expect(text).toMatch(/bye stack/i);
+    expect(text).toMatch(/handcuff/i);
+    handle.destroy();
+  });
+
+  it("repaints the open explanation when a new recommendation arrives", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(REC);
+    whyBtn().click();
+    expect(shadow().querySelector(".why-detail")!.textContent).not.toContain("0.82");
+
+    handle.update(WITH_MODS);
+    expect(shadow().querySelector(".why-detail")!.textContent).toContain("0.82");
+    handle.destroy();
+  });
+
+  it("pins from its OWN control, not by riding the Copy handler", () => {
+    const writeText = vi.fn();
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    const onPin = vi.fn();
+    const handle = mountOverlay({ wsFactory: noopFactory, onPin });
+    handle.update(REC);
+
+    const pin = shadow().querySelector<HTMLButtonElement>(".ov-pin")!;
+    expect(pin.textContent).toMatch(/pin/i);
+    pin.click();
+    expect(onPin).toHaveBeenCalledTimes(1);
+    expect(onPin.mock.calls[0]![0].player_id).toBe("p1");
+    expect(writeText).not.toHaveBeenCalled(); // pinning is not copying
+
+    handle.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it("copies without pinning, so the two intents stay separable", () => {
+    const writeText = vi.fn();
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    const onPin = vi.fn();
+    const handle = mountOverlay({ wsFactory: noopFactory, onPin });
+    handle.update(REC);
+
+    shadow().querySelector<HTMLButtonElement>(".btn-primary")!.click();
+    expect(writeText).toHaveBeenCalledWith("James Cook");
+    expect(onPin).not.toHaveBeenCalled();
+
+    handle.destroy();
+    vi.unstubAllGlobals();
+  });
+
+  it("does not pin when there is no recommendation yet", () => {
+    const onPin = vi.fn();
+    const handle = mountOverlay({ wsFactory: noopFactory, onPin });
+    shadow().querySelector<HTMLButtonElement>(".ov-pin")!.click();
+    expect(onPin).not.toHaveBeenCalled();
+    handle.destroy();
+  });
+});

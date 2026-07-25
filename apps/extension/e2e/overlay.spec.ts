@@ -104,3 +104,54 @@ test("renders a pushed recommendation with its decomposition into the Shadow DOM
   expect(result.primaryLabel).toMatch(/copy name/i); // advisory, not a CBS submit
   expect(result.hasStyleTokens).toBe(true); // self-contained design tokens inlined
 });
+
+test("Why? opens the decomposition and Pin fires its own advisory handler", async ({ page }) => {
+  // Tier 2: `Why?` was appended with an aria-label and NO click handler, and `onPin` was invoked
+  // from inside the Copy handler while the content script passed no onPin at all. Both halves of
+  // the primary action were inert. Driven here through real Chromium, not jsdom.
+  const result = await page.evaluate((rec) => {
+    class NoopWs {
+      addEventListener() {}
+      send() {}
+      close() {}
+    }
+    (window as unknown as { WebSocket: unknown }).WebSocket = NoopWs;
+
+    const pinned: string[] = [];
+    const copied: string[] = [];
+    // Clipboard is unavailable/denied in the sandbox — stub it so Copy is observable.
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: (t: string) => void copied.push(t) },
+    });
+
+    const handle = window.JaafflOverlay.mountOverlay({
+      onPin: (p: { player_id: string }) => void pinned.push(p.player_id),
+    });
+    handle.update(rec);
+    const shadow = document.getElementById("jaaffl-overlay")!.shadowRoot!;
+    const why = shadow.querySelector<HTMLButtonElement>('[aria-label*="Explain" i]')!;
+
+    const before = shadow.querySelector(".why-detail") !== null;
+    why.click();
+    const opened = shadow.querySelector(".why-detail")?.textContent ?? "";
+    why.click();
+    const afterClose = shadow.querySelector(".why-detail") !== null;
+
+    shadow.querySelector<HTMLButtonElement>(".ov-pin")!.click();
+    shadow.querySelector<HTMLButtonElement>(".btn-primary")!.click();
+
+    return { before, opened, afterClose, pinned, copied, expanded: why.getAttribute("aria-expanded") };
+  }, REC);
+
+  expect(result.before).toBe(false); // collapsed by default
+  expect(result.opened).toMatch(/reconcile/i); // the score reconciles to its terms
+  expect(result.opened).toContain("200.0"); // floor — a field the bars never render
+  expect(result.opened).toContain("300.0"); // ceiling
+  expect(result.afterClose).toBe(false); // toggles shut again
+  expect(result.expanded).toBe("false");
+
+  expect(result.pinned).toEqual(["p1"]); // Pin has its own control and it fires
+  expect(result.copied).toEqual(["James Cook"]); // Copy still copies...
+  expect(result.pinned).toHaveLength(1); // ...and does NOT also pin
+});
