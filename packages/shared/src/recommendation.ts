@@ -63,5 +63,7 @@ export const RecommendationSchema = z.object({
   roster_filled: z.number().int().nonnegative().nullable().optional(),
   roster_size: z.number().int().nonnegative().nullable().optional(),
   roster_by_position: z.record(z.number().int()).optional(),
+  /** Which VONA estimator produced these numbers, so `?mc=true` can never be a silent no-op. */
+  vona_method: z.string().nullable().optional(),
 });
 export type Recommendation = z.infer<typeof RecommendationSchema>;

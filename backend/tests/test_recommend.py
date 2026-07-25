@@ -6,11 +6,18 @@ The load-bearing invariant is that every RecommendedPick's ``score`` reconstruct
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from jaaffl.domain import DraftPick, Position
 from jaaffl.engine.recommend import recommend
-from tests.engine_fixtures import draft_state, engine_params, make_context
+from tests.engine_fixtures import (
+    draft_state,
+    engine_params,
+    jaaffl_settings,
+    make_context,
+)
 
 
 def _board() -> list[dict]:
@@ -161,3 +168,88 @@ def test_recommendation_carries_the_roster_and_recompute_footer_fields() -> None
     assert rec.roster_by_position == {"RB": 1, "WR": 1}
     assert rec.recompute_ms is not None
     assert rec.recompute_ms > 0.0
+
+
+def test_mc_vona_is_the_default_off_and_reports_the_analytic_method() -> None:
+    """Regression guard: `use_mc_vona` used to appear ONLY on the signature line and was never
+    referenced, so `?mc=true` was a silent no-op. The method now has to be stated either way."""
+    ctx = make_context(_board())
+    rec = recommend(draft_state(3), ctx, ctx.params, limit=5)
+    assert rec.vona_method == "analytic"
+    assert "analytic VONA" in (rec.reasoning or "")
+
+
+def test_mc_vona_changes_the_numbers_and_says_which_method_produced_them() -> None:
+    """MC and analytic estimate the SAME quantity by different opponent models — the analytic form
+    multiplies independent survivals, MC couples them. They must therefore disagree, and the
+    response must say which one the owner is looking at."""
+    ctx = make_context(_board())
+    state = draft_state(3)
+    analytic = recommend(state, ctx, ctx.params, limit=25)
+    mc = recommend(state, ctx, ctx.params, limit=25, use_mc_vona=True)
+
+    assert mc.vona_method == "monte_carlo"
+    assert "MC VONA" in (mc.reasoning or "")
+
+    lhs = {p.player_id: p.components.vona for p in analytic.ranked if p.components}
+    rhs = {p.player_id: p.components.vona for p in mc.ranked if p.components}
+    shared = set(lhs) & set(rhs)
+    assert shared, "the two runs must rank overlapping players to be comparable"
+    assert any(abs(lhs[pid] - rhs[pid]) > 1e-6 for pid in shared), (
+        "MC VONA is indistinguishable from analytic — the flag is still a no-op"
+    )
+
+
+def test_mc_vona_is_reproducible_run_to_run() -> None:
+    """Two identical MC requests must agree, or the owner sees the board flicker between
+    refreshes."""
+    ctx = make_context(_board())
+    state = draft_state(3)
+    first = recommend(state, ctx, ctx.params, limit=10, use_mc_vona=True)
+    second = recommend(state, ctx, ctx.params, limit=10, use_mc_vona=True)
+    assert [p.player_id for p in first.ranked] == [p.player_id for p in second.ranked]
+    assert [p.components.vona for p in first.ranked if p.components] == [
+        p.components.vona for p in second.ranked if p.components
+    ]
+
+
+def test_mc_vona_degrades_to_analytic_without_a_readable_draft_order() -> None:
+    """No draft order → no honest picks-between count. Fall back to analytic and SAY analytic
+    rather than reporting a Monte-Carlo number computed against a fabricated snake."""
+    ctx = make_context(_board(), settings=jaaffl_settings(draft_order=None))
+    rec = recommend(draft_state(3), ctx, ctx.params, limit=5, use_mc_vona=True)
+    assert rec.vona_method == "analytic"
+
+
+def test_mc_vona_honours_the_mc_rollouts_budget_knob() -> None:
+    """MC is NOT free: measured p95 ≈ 1.14 s at the shipped mc_rollouts=2000 on the pick-1 worst
+    case, against the plan's <2 s MC budget (analytic stays ≈9 ms). `mc_rollouts` therefore has to
+    be a real lever — it is how the owner trades estimate precision for latency."""
+    ctx = make_context(_board())
+    state = draft_state(3)
+    cheap = engine_params(mc_rollouts=4)
+    dear = engine_params(mc_rollouts=400)
+
+    start = time.perf_counter()
+    lo = recommend(state, ctx, cheap, limit=5, use_mc_vona=True)
+    cheap_ms = (time.perf_counter() - start) * 1000.0
+
+    start = time.perf_counter()
+    hi = recommend(state, ctx, dear, limit=5, use_mc_vona=True)
+    dear_ms = (time.perf_counter() - start) * 1000.0
+
+    assert lo.vona_method == "monte_carlo" and hi.vona_method == "monte_carlo"
+    assert cheap_ms < dear_ms, "mc_rollouts does not drive cost — the budget knob is inert"
+    assert "4 rollouts" in (lo.reasoning or "")
+
+
+def test_the_analytic_hot_path_never_imports_the_simulator() -> None:
+    """The <200ms analytic budget must not pay for MC merely existing: `simulate` is imported
+    lazily, only when ?mc=true actually asks for it. (numpy is NOT part of this claim — tiers.py
+    and opponents.py legitimately vectorize on the hot path.)"""
+    import sys
+
+    sys.modules.pop("jaaffl.engine.simulate", None)
+    ctx = make_context(_board())
+    recommend(draft_state(3), ctx, ctx.params, limit=5)  # default analytic path
+    assert "jaaffl.engine.simulate" not in sys.modules

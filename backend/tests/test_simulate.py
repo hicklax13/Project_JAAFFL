@@ -8,6 +8,7 @@ but it lives in `engine.simulate`; tests importorskip nothing (numpy is in the b
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from jaaffl.config import EngineParams
 from jaaffl.domain import LeagueSettings, Position, RosterSlot
@@ -17,6 +18,7 @@ from jaaffl.engine.simulate import (
     ScoreAgent,
     SimContext,
     VbdOnlyAgent,
+    mc_expected_best_available,
     optimal_lineup_value,
     simulate_draft,
     simulate_drafts,
@@ -210,3 +212,112 @@ def test_simulate_drafts_is_deterministic_for_a_seed() -> None:
     ctx = _big_ctx()
     kw = dict(my_roster=[], candidates=["rb0"], picks_between=11, n_sims=4, seed=3)
     assert simulate_drafts(ctx, **kw) == simulate_drafts(ctx, **kw)
+
+
+def _rb_candidates() -> tuple[list[str], dict[Position, list[str]], dict[str, float]]:
+    """RB0-11 as the position pool, MLV strictly decreasing so depletion is legible."""
+    ctx = _big_ctx()
+    available = list(ctx.value)
+    by_pos = {Position.RB: [f"rb{i}" for i in range(12)]}
+    mlv = {pid: ctx.value[pid] for pid in available}
+    return available, by_pos, mlv
+
+
+def test_mc_expected_best_available_falls_as_opponents_pick_more() -> None:
+    """MC-VONA substrate (§3.9): E[best surviving MLV at a position] must DROP as more opponent
+    picks land between now and my next turn — that decay is the whole scarcity signal."""
+    ctx = _big_ctx()
+    available, by_pos, mlv = _rb_candidates()
+    kwargs = {"available": available, "candidates_by_position": by_pos, "mlv": mlv, "n_sims": 60}
+
+    shallow = mc_expected_best_available(ctx, picks_between=1, seed=7, **kwargs)
+    deep = mc_expected_best_available(ctx, picks_between=14, seed=7, **kwargs)
+    assert deep[Position.RB] < shallow[Position.RB]
+
+
+def test_mc_expected_best_available_is_reproducible_from_its_seed() -> None:
+    """Same seed → same number. An estimator that drifts run-to-run cannot be calibrated."""
+    ctx = _big_ctx()
+    available, by_pos, mlv = _rb_candidates()
+    kwargs = {
+        "available": available,
+        "candidates_by_position": by_pos,
+        "mlv": mlv,
+        "picks_between": 8,
+        "n_sims": 40,
+    }
+    assert mc_expected_best_available(ctx, seed=3, **kwargs) == mc_expected_best_available(
+        ctx, seed=3, **kwargs
+    )
+
+
+def test_mc_expected_best_available_actually_consumes_its_rng() -> None:
+    """Different seeds must give different answers, or the Monte Carlo is decoration — exactly the
+    failure mode the E2 harness has with its deterministic NeedBasedAgent held-out opponent."""
+    ctx = _big_ctx()
+    available, by_pos, mlv = _rb_candidates()
+    kwargs = {
+        "available": available,
+        "candidates_by_position": by_pos,
+        "mlv": mlv,
+        "picks_between": 10,
+        "n_sims": 25,
+    }
+    assert mc_expected_best_available(ctx, seed=1, **kwargs) != mc_expected_best_available(
+        ctx, seed=2, **kwargs
+    )
+
+
+def test_mc_expected_best_available_degrades_to_replacement_when_the_pool_empties() -> None:
+    """No survivor at a position → the positional replacement baseline, matching the analytic
+    estimator's own fallback rather than 0.0 or a crash."""
+    ctx = _big_ctx()
+    available = [f"rb{i}" for i in range(3)]
+    by_pos = {Position.RB: list(available)}
+    mlv = {pid: ctx.value[pid] for pid in available}
+    out = mc_expected_best_available(
+        ctx,
+        available=available,
+        candidates_by_position=by_pos,
+        mlv=mlv,
+        picks_between=3,  # every RB is gone before my turn
+        n_sims=10,
+        seed=0,
+    )
+    assert out[Position.RB] == pytest.approx(ctx.baselines[Position.RB])
+
+
+def test_mc_expected_best_available_matches_the_adp_agent_model_with_no_noise() -> None:
+    """The vectorized sampler IS AdpNoiseAgent's model, not a lookalike. With σ=0 both reduce to
+    argmin(adp), so a no-noise rollout must agree with the agent's own deterministic sequence —
+    pinning the two together so the MC path cannot silently diverge from the opponent model."""
+    base = _big_ctx()
+    ctx = SimContext(
+        value=base.value,
+        position=base.position,
+        baselines=base.baselines,
+        slots=base.slots,
+        roster_size=base.roster_size,
+        adp=base.adp,
+        adp_stdev=dict.fromkeys(base.adp, 0.0),  # no noise → both are pure argmin(adp)
+    )
+    available = list(ctx.value)
+    picks_between = 6
+
+    agent, remaining = AdpNoiseAgent(), set(available)
+    for _ in range(picks_between):
+        remaining.discard(agent.pick(sorted(remaining), (), ctx, None))
+
+    by_pos = {Position.RB: [f"rb{i}" for i in range(12)]}
+    mlv = {pid: ctx.value[pid] for pid in available}
+    out = mc_expected_best_available(
+        ctx,
+        available=available,
+        candidates_by_position=by_pos,
+        mlv=mlv,
+        picks_between=picks_between,
+        n_sims=1,
+        seed=0,
+    )
+    expected = max(mlv[pid] for pid in by_pos[Position.RB] if pid in remaining)
+    assert out[Position.RB] == pytest.approx(expected)

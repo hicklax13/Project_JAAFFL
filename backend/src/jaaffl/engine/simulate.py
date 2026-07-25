@@ -225,6 +225,78 @@ def simulate_draft(
     return rosters
 
 
+def mc_expected_best_available(
+    ctx: SimContext,
+    *,
+    available: Sequence[str],
+    candidates_by_position: Mapping[Position, Sequence[str]],
+    mlv: Mapping[str, float],
+    picks_between: int,
+    n_sims: int = 200,
+    seed: int = 0,
+) -> dict[Position, float]:
+    """MC-VONA (§3.9): ``E[best surviving MLV]`` per position, the ``use_mc_vona`` refinement.
+
+    Estimates exactly the quantity :func:`opponents.expected_best_available` estimates, so the
+    resulting ``VONA = MLV(p) − E_π[pos]`` stays on the same scale and the two are directly
+    comparable. What changes is the *opponent model*: the analytic form multiplies INDEPENDENT
+    per-player survivals (``Σ_k MLV_k·S_k·Π_{i<k}(1−S_i)``), which can price a board on which
+    nobody is taken at all. Rolling the draft forward is coupled by construction — ``picks_between``
+    picks remove exactly ``picks_between`` players, concentrated at the top by ADP.
+
+    Measured on the pick-1 worst case (239 players, horizon 2, 2000 rollouts): MC returns a LOWER
+    ``E_π`` at RB than the analytic form, i.e. a HIGHER VONA (+6.45), and the two disagree on the
+    #1 pick. Direction is a property of the board, not a theorem — do not assume its sign.
+
+    One shared rollout answers EVERY position per sim (not one rollout per candidate), so the
+    positional estimates are mutually consistent and the cost is ``O(n_sims × picks_between)``
+    rather than ``O(n_sims × candidates)``.
+
+    Vectorized restatement of :class:`AdpNoiseAgent`'s model — ``argmin(adp + N(0, adp_stdev))``,
+    redrawn each pick — evaluated for the whole pool at once instead of per candidate. The
+    equivalence is pinned by a test (σ=0 must reproduce the agent's deterministic order).
+    Reproducible from ``seed``.
+    """
+    import numpy as np
+
+    pool = list(available)
+    if not pool or n_sims <= 0:
+        return {pos: float(ctx.baselines.get(pos, 0.0)) for pos in candidates_by_position}
+
+    index = {pid: i for i, pid in enumerate(pool)}
+    adp = np.array([ctx.adp.get(pid, _FAR) for pid in pool], dtype=float)
+    stdev = np.array([ctx.adp_stdev.get(pid, 0.0) for pid in pool], dtype=float)
+
+    # Per position: the candidate row-indices and their MLVs, ordered best-MLV first, so the
+    # survivor scan is a first-hit lookup instead of a max over the whole position.
+    ranked: dict[Position, tuple[np.ndarray, np.ndarray]] = {}
+    for pos, pids in candidates_by_position.items():
+        rows = [(index[pid], mlv[pid]) for pid in pids if pid in index]
+        rows.sort(key=lambda r: r[1], reverse=True)
+        ranked[pos] = (
+            np.array([r[0] for r in rows], dtype=int),
+            np.array([r[1] for r in rows], dtype=float),
+        )
+
+    steps = max(0, min(picks_between, len(pool)))
+    totals = dict.fromkeys(candidates_by_position, 0.0)
+    for sim in range(n_sims):
+        rng = np.random.default_rng((seed, sim))
+        alive = np.ones(len(pool), dtype=bool)
+        for _ in range(steps):
+            keys = np.where(alive, adp + rng.normal(0.0, 1.0, size=len(pool)) * stdev, np.inf)
+            alive[int(np.argmin(keys))] = False
+        for pos, (rows, values) in ranked.items():
+            survivors = alive[rows] if rows.size else np.zeros(0, dtype=bool)
+            # Best surviving MLV, else this position's replacement — the analytic fallback.
+            totals[pos] += (
+                float(values[int(np.argmax(survivors))])
+                if survivors.any()
+                else float(ctx.baselines.get(pos, 0.0))
+            )
+    return {pos: total / n_sims for pos, total in totals.items()}
+
+
 def simulate_drafts(
     ctx: SimContext,
     *,
