@@ -141,3 +141,14 @@ def test_env_file_is_anchored_to_the_repo_root() -> None:
     env_file = Settings.model_config["env_file"]
     assert Path(env_file).is_absolute()
     assert Path(env_file) == REPO_ROOT / ".env"
+
+
+def test_precompute_is_on_by_default_so_a_fresh_clone_serves_real_recommendations() -> None:
+    """The flag gates whether ``create_app`` builds a registry-backed ``context_source`` at all.
+    Defaulting it OFF meant a documented fresh-clone setup ended at a permanent 503 — the engine
+    could never serve a real pick without an undocumented env var. It fails soft (no data →
+    ``None`` → 503, the old behaviour), so ON is the safe default, not the risky one.
+
+    ``_env_file=None`` so the assertion is about the CODE default, not the owner's local .env.
+    """
+    assert Settings(_env_file=None).jaaffl_precompute_enabled is True
