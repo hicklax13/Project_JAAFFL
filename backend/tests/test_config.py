@@ -131,3 +131,13 @@ def test_absolute_path_settings_pass_through_untouched(tmp_path: Path) -> None:
     assert settings.jaaffl_data_dir == tmp_path / "data"
     assert settings.jaaffl_recordings_dir == tmp_path / "rec"
     assert settings.jaaffl_engine_params_path == tmp_path / "engine.json"
+
+
+def test_env_file_is_anchored_to_the_repo_root() -> None:
+    """``SettingsConfigDict(env_file=".env")`` resolves against the process CWD, so launching from
+    ``backend/`` looked for ``backend/.env`` and silently ignored the real repo-root file. That cost
+    a live debugging cycle mid-capture: an edit to .env appeared to have no effect at all.
+    """
+    env_file = Settings.model_config["env_file"]
+    assert Path(env_file).is_absolute()
+    assert Path(env_file) == REPO_ROOT / ".env"

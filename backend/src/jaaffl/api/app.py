@@ -8,6 +8,7 @@ CORS is scoped to the user's own extension + dashboard, and every WS handler re-
 from __future__ import annotations
 
 import json
+import threading
 
 import structlog
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
@@ -15,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError
 
 from jaaffl import __version__
-from jaaffl.api.origin import is_origin_allowed, parse_allowed_origins
+from jaaffl.api.origin import allowed_origin_regex, is_origin_allowed, parse_allowed_origins
 from jaaffl.api.recs import PROTOCOL_VERSION, SCHEMA_VERSION, RecsHub
 from jaaffl.config import Settings, get_settings
 from jaaffl.data import Crosswalk
@@ -29,6 +30,12 @@ from jaaffl.ingest.log import LoggedEvent, fold_state
 from jaaffl.league.constitution import resolve_league_settings
 
 log = structlog.get_logger(__name__)
+
+# Serializes appends to the record-mode capture files. Real CBS frames reach 509 KB, so a write
+# spans several OS writes and two content scripts flushing one session interleaved mid-line,
+# corrupting the JSONL. FastAPI runs sync endpoints in a threadpool, so a threading.Lock is the
+# right primitive here.
+_recordings_write_lock = threading.Lock()
 
 # Events that advance the draft state and therefore warrant a fresh recommendation (§8.4 step 4).
 _STATE_ADVANCING = {
@@ -88,7 +95,7 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
-        allow_origin_regex=None if "*" in allowed_origins else r"chrome-extension://.*",
+        allow_origin_regex=allowed_origin_regex(allowed_origins),
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -310,13 +317,30 @@ def create_app(
     def store_recording(batch: RecordingBatch, request: Request) -> dict:
         """Record-mode capture sink (Phase-1 tooling, localhost-only): appends observed
         frames as JSONL under the recordings dir so ONE real CBS mock draft yields the
-        golden fixtures that finalize parse.ts (TODO(capture))."""
+        golden fixtures that finalize parse.ts (TODO(capture)).
+
+        Serialized behind ``_recordings_write_lock``, with each batch rendered to ONE string and
+        written in a single ``write()``.
+
+        Why: a real capture came back with 2 of 223 lines unparseable — each began mid-way through
+        escaped HTML and ended with a valid JSON tail, i.e. one logical line split in two. Those two
+        frames were buffered by the extension while a browser permission prompt blocked POSTs, then
+        arrived in a burst: the log shows FOUR `recording_stored` events for the same session in the
+        same second, and CBS frames reach 509 KB, so a per-frame write spans several OS writes.
+        Concurrent same-session flushes are therefore real and observed.
+
+        Honesty note: that corruption could NOT be reproduced in a test — neither via TestClient
+        (which appears to serialize requests) nor with raw threads writing the pre-fix way. So treat
+        this as defense-in-depth on a path whose failure mode is unrecoverable capture data, not
+        as a fix with a red/green proof behind it. One locked write is strictly cheaper than N
+        unlocked ones regardless.
+        """
         require_allowed_origin(request)
         settings.jaaffl_recordings_dir.mkdir(parents=True, exist_ok=True)
         out = settings.jaaffl_recordings_dir / f"{batch.session}.jsonl"
-        with out.open("a", encoding="utf-8", newline="\n") as fh:
-            for frame in batch.frames:
-                fh.write(json.dumps(frame, sort_keys=True) + "\n")
+        blob = "".join(json.dumps(frame, sort_keys=True) + "\n" for frame in batch.frames)
+        with _recordings_write_lock, out.open("a", encoding="utf-8", newline="\n") as fh:
+            fh.write(blob)
         log.info("recording_stored", session=batch.session, frames=len(batch.frames))
         return {"stored": len(batch.frames), "file": str(out)}
 
