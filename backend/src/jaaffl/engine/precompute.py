@@ -39,19 +39,34 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 
 # --- v1 defaults (documented; superseded by injection or the E-track calibration) ---------------
 
-# Per-position σ floor (season league points) for the projection band — a v1 PLACEHOLDER pending E3
-# calibration (design §3.1). Every domain Position is covered so a stray IDP row can never KeyError
-# inside ``assemble_projections``.
+# Per-position σ (season league points) for the projection band, in two roles: the ANCHOR that
+# ``league.xep`` scales by each player's own measured volatility, and the FALLBACK floor for
+# everyone it could not measure. Every domain Position is covered so a stray IDP row can never
+# KeyError inside ``assemble_projections``.
+#
+# QB/RB/WR/TE are MEASURED, not chosen: the SD of (realized season points − prior-season xEP),
+# scored under the owner-verified JAAFFL map, averaged over two independent year-pairs.
+# Reproduce verbatim with ``scripts/measure_projection_sigma.py`` (read-only; run 2026-07-25):
+#
+#   pos   2024→2025   2023→2024   used     n
+#   QB      103.9       108.8     106.3   42/45
+#   RB       54.6        63.5      59.0   81/91
+#   WR       42.4        44.1      43.3  130/141
+#   TE       26.2        32.3      29.2   75/73
+#
+# This replaces a flat ~50-for-everyone v1 placeholder that made a QB season look as predictable
+# as a WR season. K/DST/IDP stay UNMEASURED priors — ffopportunity covers skill positions only
+# (verified: zero DST rows, one stray K row), so there is nothing to measure them against yet.
 _DEFAULT_SIGMA_FLOOR: dict[Position, float] = {
-    Position.QB: 55.0,
-    Position.RB: 50.0,
-    Position.WR: 50.0,
-    Position.TE: 40.0,
-    Position.K: 20.0,
-    Position.DST: 25.0,
-    Position.DL: 25.0,
-    Position.LB: 25.0,
-    Position.DB: 25.0,
+    Position.QB: 106.3,
+    Position.RB: 59.0,
+    Position.WR: 43.3,
+    Position.TE: 29.2,
+    Position.K: 20.0,  # unmeasured prior
+    Position.DST: 25.0,  # unmeasured prior
+    Position.DL: 25.0,  # unmeasured prior
+    Position.LB: 25.0,  # unmeasured prior
+    Position.DB: 25.0,  # unmeasured prior
 }
 
 # ECR (expert-consensus rank) → league points: a monotonically decreasing v1 PLACEHOLDER (design

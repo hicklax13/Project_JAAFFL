@@ -86,10 +86,36 @@ def test_situation_mu_nudge_is_capped_and_widens_sigma() -> None:
     assert proj["wr_moved"].situation_flag == "new team"
 
 
+def test_sigma_prior_overrides_the_flat_position_floor() -> None:
+    """A measured per-player σ beats the per-position placeholder — that is the whole point of
+    deriving σ from history rather than a constant."""
+    proj = _assemble(
+        {"cbs": {"rb1": 200.0, "rb2": 200.0}},
+        {"rb1": Position.RB, "rb2": Position.RB},
+        sigma_floor={Position.RB: 50.0},
+        sigma_prior={"rb1": 31.0},  # rb2 has no measurement → keeps the floor
+    )
+    assert proj["rb1"].sigma == pytest.approx(31.0)
+    assert proj["rb2"].sigma == pytest.approx(50.0)
+
+
+def test_cross_source_disagreement_still_beats_a_lower_sigma_prior() -> None:
+    """σ is a floor stack: two sources that disagree by more than the prior widen the band."""
+    proj = _assemble(
+        {"xep": {"rb1": 100.0}, "ecr": {"rb1": 300.0}},
+        {"rb1": Position.RB},
+        sigma_floor={Position.RB: 50.0},
+        sigma_prior={"rb1": 31.0},
+    )
+    assert proj["rb1"].sigma == pytest.approx(100.0)  # pstdev([100, 300]) = 100
+
+
 class _FakeProvider(FantasyDataProvider):
-    def __init__(self, name, caps, *, projections=None, rankings=None):
+    def __init__(self, name, caps, *, projections=None, rankings=None, expected_points=None):
         self._name, self._caps = name, frozenset(caps)
         self._projections, self._rankings = projections or {}, rankings or {}
+        self._expected_points = expected_points
+        self.expected_points_seasons: list[int] = []
 
     @property
     def name(self):
@@ -104,6 +130,12 @@ class _FakeProvider(FantasyDataProvider):
 
     def rankings(self, season, week=None):
         return self._rankings
+
+    def expected_points(self, season, week=None):
+        self.expected_points_seasons.append(season)
+        if isinstance(self._expected_points, Exception):
+            raise self._expected_points
+        return self._expected_points
 
 
 def test_build_projections_blends_cbs_stat_lines_and_ecr() -> None:
@@ -134,3 +166,129 @@ def test_build_projections_blends_cbs_stat_lines_and_ecr() -> None:
     assert proj["wr1"].sources == {"cbs": pytest.approx(148.0), "ecr": pytest.approx(195.0)}
     assert proj["wr1"].mu == pytest.approx(171.5)
     assert proj["wr1"].stat_line == {"receiving_yards": 1000, "receiving_td": 8}
+
+
+# --- xEP as a live blend source (§3.1 Capability.EXPECTED_POINTS) --------------------------
+
+
+def _jaaffl_scored_settings():
+    rules, tiers, bonuses = jaaffl_scoring()
+    return jaaffl_settings().model_copy(
+        update={"scoring": rules, "scoring_tiers": tiers, "scoring_bonuses": bonuses}
+    )
+
+
+def _xep_rows(gsis: str, weeks: int = 17, **stats: float) -> list[dict]:
+    return [{"player_id": gsis, "week": float(w), **stats} for w in range(1, weeks + 1)]
+
+
+def test_build_projections_blends_real_xep_points_with_ecr() -> None:
+    """The core fix: μ stops being a linear function of expert rank because a REAL projection
+    source now sits in the blend."""
+    rows = _xep_rows("00-0039139", rush_yards_gained_exp=60.0, rush_touchdown_exp=0.5)
+    providers = [
+        _FakeProvider("nflverse", {Capability.RANKINGS, Capability.EXPECTED_POINTS},
+                      rankings={"gsis:00-0039139": 5.0}, expected_points=rows),
+    ]  # fmt: skip
+    players = {
+        "gsis:00-0039139": Player(
+            player_id="gsis:00-0039139", name="Jahmyr Gibbs", position=Position.RB
+        )
+    }
+    proj = build_projections(
+        _jaaffl_scored_settings(),
+        providers,
+        engine_params(),
+        2026,
+        players=players,
+        sigma_floor={Position.RB: 61.0},
+        ecr_to_points=lambda pos, e: 300.0 - e,
+    )
+    # xEP: 1020 rush yds × 0.1 + 8.5 rush TD × 6 = 153.0 ; ECR: 300 − 5 = 295.
+    p = proj["gsis:00-0039139"]
+    assert p.sources == {"xep": pytest.approx(153.0), "ecr": pytest.approx(295.0)}
+    assert p.mu == pytest.approx(224.0)
+    assert p.stat_line["rushing_yards"] == pytest.approx(1020.0)
+
+
+def test_expected_points_is_pulled_for_the_last_completed_season_not_the_draft_season() -> None:
+    """VERIFIED: nflreadpy raises ``ValueError: Season must be between 2006 and 2025`` for the
+    2026 draft season. xEP is retrospective, so the blend must ask for season − 1."""
+    provider = _FakeProvider(
+        "nflverse", {Capability.EXPECTED_POINTS},
+        expected_points=_xep_rows("00-0039139", rush_yards_gained_exp=60.0),
+    )  # fmt: skip
+    players = {
+        "gsis:00-0039139": Player(player_id="gsis:00-0039139", name="g", position=Position.RB)
+    }
+    build_projections(
+        _jaaffl_scored_settings(), [provider], engine_params(), 2026,
+        players=players, sigma_floor={Position.RB: 61.0},
+    )  # fmt: skip
+    assert provider.expected_points_seasons == [2025]
+
+
+def test_an_unavailable_xep_pull_degrades_to_ecr_only_rather_than_failing() -> None:
+    """Honest degradation: the player keeps a projection, and ``sources`` shows it is ECR-only —
+    it never silently pretends a real projection exists."""
+    provider = _FakeProvider(
+        "nflverse", {Capability.RANKINGS, Capability.EXPECTED_POINTS},
+        rankings={"gsis:00-0039139": 5.0},
+        expected_points=ValueError("Season must be between 2006 and 2025"),
+    )  # fmt: skip
+    players = {
+        "gsis:00-0039139": Player(player_id="gsis:00-0039139", name="g", position=Position.RB)
+    }
+    proj = build_projections(
+        _jaaffl_scored_settings(), [provider], engine_params(), 2026,
+        players=players, sigma_floor={Position.RB: 61.0},
+        ecr_to_points=lambda pos, e: 300.0 - e,
+    )  # fmt: skip
+    assert provider.expected_points_seasons == [2025]  # it really was attempted, then degraded
+    assert proj["gsis:00-0039139"].sources == {"ecr": pytest.approx(295.0)}
+    assert proj["gsis:00-0039139"].sigma == pytest.approx(61.0)  # falls back to the position floor
+
+
+def test_a_player_without_xep_coverage_is_marked_ecr_only() -> None:
+    """K/DST have no ffopportunity rows (verified: 1 stray K row, zero DST). They must degrade
+    visibly, not be handed a fabricated projection."""
+    providers = [
+        _FakeProvider("nflverse", {Capability.RANKINGS, Capability.EXPECTED_POINTS},
+                      rankings={"gsis:rb": 5.0, "gsis:k": 90.0},
+                      expected_points=_xep_rows("rb", rush_yards_gained_exp=60.0)),
+    ]  # fmt: skip
+    players = {
+        "gsis:rb": Player(player_id="gsis:rb", name="rb", position=Position.RB),
+        "gsis:k": Player(player_id="gsis:k", name="k", position=Position.K),
+    }
+    proj = build_projections(
+        _jaaffl_scored_settings(), providers, engine_params(), 2026,
+        players=players, sigma_floor={Position.RB: 61.0, Position.K: 20.0},
+        ecr_to_points=lambda pos, e: 300.0 - e,
+    )  # fmt: skip
+    assert set(proj["gsis:rb"].sources) == {"xep", "ecr"}
+    assert set(proj["gsis:k"].sources) == {"ecr"}
+
+
+def test_xep_sigma_reaches_the_projection_as_a_real_per_player_band() -> None:
+    """End-to-end: the measured weekly residual, not the flat floor, sets the 10/90 band."""
+    steady = _xep_rows("steady", rush_yards_gained_exp=100.0, rush_yards_gained=100.0)
+    volatile = [
+        {"player_id": "volatile", "week": float(w), "rush_yards_gained_exp": 100.0,
+         "rush_yards_gained": 100.0 + 400.0 * (w % 2)}
+        for w in range(1, 18)
+    ]  # fmt: skip
+    providers = [
+        _FakeProvider("nflverse", {Capability.EXPECTED_POINTS}, expected_points=steady + volatile)
+    ]
+    players = {
+        "gsis:steady": Player(player_id="gsis:steady", name="s", position=Position.RB),
+        "gsis:volatile": Player(player_id="gsis:volatile", name="v", position=Position.RB),
+    }
+    proj = build_projections(
+        _jaaffl_scored_settings(), providers, engine_params(), 2026,
+        players=players, sigma_floor={Position.RB: 61.0},
+    )  # fmt: skip
+    assert proj["gsis:steady"].mu == pytest.approx(proj["gsis:volatile"].mu)
+    assert proj["gsis:volatile"].sigma > proj["gsis:steady"].sigma
+    assert proj["gsis:steady"].sigma != pytest.approx(61.0)  # no longer the flat constant
