@@ -80,12 +80,12 @@ describe("parseDraftEvents — real CBS network protocol (docs/research/cbs-draf
   });
 
   describe("picks/completed → pick_made", () => {
-    // GROUND-TRUTH NOTE: the doc says "take the overall from newstate.opick" — but
-    // newstate.opick is the FORWARD-LOOKING current/next pick (paired with onclockteamid),
-    // not the pick just reported in payload.picks[]. Verified independently against BOTH
-    // fixtures via fullstatedelta.opickindex, fullstatedelta.results[<opick>], and
-    // fullstatedelta.teams[<team>].players[<id>].opick, which all agree the completed pick
-    // is newstate.opick MINUS the batch size. Flagged in the task report; not a guess.
+    // GROUND-TRUTH NOTE: the doc originally said "take the overall from newstate.opick" —
+    // but newstate.opick is the FORWARD-LOOKING current/next pick (paired with
+    // onclockteamid), not the pick just reported in payload.picks[]. The doc has since been
+    // corrected (commit 43b386b). overall = newstate.opick - picks.length + index is
+    // CONFIRMED against every pick of a full draft from the raw capture, including batched
+    // frames (batch sizes 1/2/5/7/9 observed) — 168/168 matches, 0 mismatches.
     it("numbers an autopick 1 (not 2 — newstate.opick's literal, un-adjusted value)", () => {
       const events = parseDraftEvents({
         via: "ws",
@@ -174,26 +174,81 @@ describe("parseDraftEvents — real CBS network protocol (docs/research/cbs-draf
     });
   });
 
-  describe("upcomingorder → draft-order event", () => {
-    it("maps a populated upcomingorder to a league_settings/order event carrying the REAL order verbatim", () => {
+  describe("fullstatedelta.order → draft-order event (NOT newstate.upcomingorder)", () => {
+    // SUPERSEDES an earlier (wrong) spec: "a populated upcomingorder maps to the order
+    // event". Confirmed against the full raw capture: newstate.upcomingorder is a ROLLING
+    // multi-round lookahead window (observed entry counts across one draft: 22, 17, 8, 1,
+    // 0 — never a stable one-per-team order) and MUST NOT drive draft_order, because
+    // opponents.py's snake math (_my_overall_picks) uses len(draft_order) AS the team
+    // count — a wrong-length order silently corrupts every "my next pick" calculation.
+    // payload.fullstatedelta.order is the correct, verified source: exactly ONE distinct
+    // value ("1,2,...,12") across all 40 fullstatedelta-bearing frames of a full draft.
+    it("maps fullstatedelta.order to a league_settings/order event with the real (stable) order", () => {
       const events = parseDraftEvents({
         via: "ws",
         body: cbsFrame("picks-completed.autopick.json"),
       });
       const order = events.find((e) => e.event_type === "league_settings");
-      expect(order?.data["draft_order"]).toEqual(
-        "2,3,4,5,6,7,8,9,10,11,12,12,11,10,9,8,7,6,5,4,3,2".split(","),
-      );
+      expect(order?.data["draft_order"]).toEqual([
+        "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
+      ]);
+      expect(order?.data["team_count"]).toBe(12);
       DraftEventSchema.parse(order);
     });
 
-    it("emits NO order event when upcomingorder is empty (A5: never synthesize a snake)", () => {
+    it("is stable — the same order on the terminal frame too", () => {
       const events = parseDraftEvents({ via: "ws", body: cbsFrame("picks-completed.final.json") });
+      const order = events.find((e) => e.event_type === "league_settings");
+      expect(order?.data["draft_order"]).toEqual([
+        "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
+      ]);
+    });
+
+    it("REGRESSION: a populated newstate.upcomingorder never becomes draft_order", () => {
+      // Hand-built: upcomingorder present (rolling-window shape) but no fullstatedelta at
+      // all. If someone re-wires the order event back onto upcomingorder, this must fail.
+      const body = JSON.stringify({
+        type: "picks",
+        subtype: "completed",
+        payload: {
+          picks: [{ playerid: "1", teamid: "1", source: "userpick" }],
+          newstate: { opick: "5", round: 1, rounds: 14, upcomingorder: "5,6,7" },
+        },
+      });
+      const events = parseDraftEvents({ via: "ws", body });
       expect(events.some((e) => e.event_type === "league_settings")).toBe(false);
     });
 
-    it("also emits no order event from the terminal subscribe/response resync (also empty)", () => {
+    it("emits NO order event when fullstatedelta is absent (e.g. a subscribe/response resync)", () => {
       const events = parseDraftEvents({ via: "ws", body: cbsFrame("subscribe-response.json") });
+      expect(events.some((e) => e.event_type === "league_settings")).toBe(false);
+    });
+
+    it("length guard: a wrong-length fullstatedelta.order emits NO event (never corrupts team_count)", () => {
+      const body = JSON.stringify({
+        type: "picks",
+        subtype: "completed",
+        payload: {
+          picks: [{ playerid: "1", teamid: "1", source: "userpick" }],
+          newstate: { opick: "5", round: 1, rounds: 14 },
+          fullstatedelta: { order: "1,2,3,4,5,6,7,8,9,10,11" }, // 11 entries, not 12
+        },
+      });
+      const events = parseDraftEvents({ via: "ws", body });
+      expect(events.some((e) => e.event_type === "league_settings")).toBe(false);
+    });
+
+    it("empty fullstatedelta.order emits NO event (A5: never a synthesized snake)", () => {
+      const body = JSON.stringify({
+        type: "picks",
+        subtype: "completed",
+        payload: {
+          picks: [{ playerid: "1", teamid: "1", source: "userpick" }],
+          newstate: { opick: "5", round: 1, rounds: 14 },
+          fullstatedelta: { order: "" },
+        },
+      });
+      const events = parseDraftEvents({ via: "ws", body });
       expect(events.some((e) => e.event_type === "league_settings")).toBe(false);
     });
   });

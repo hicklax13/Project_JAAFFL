@@ -121,8 +121,13 @@ interface CbsNewState {
   rounds?: string | number;
   onclockteamid?: string | number;
   ondeckteamid?: string | number;
-  upcomingorder?: string;
   state?: string;
+}
+
+/** payload.fullstatedelta — the delta CBS attaches to picks/completed frames. `order` is
+ * the STABLE, real entered round-1 order (see parseDraftOrder). */
+interface CbsFullStateDelta {
+  order?: string;
 }
 
 function cbsPlayerData(playerid: string | number | undefined): Record<string, unknown> {
@@ -137,26 +142,39 @@ function cbsTeamId(value: string | number | undefined): string | null {
   return String(value);
 }
 
-/** payload.newstate.upcomingorder → the REAL entered order, verbatim. Populated only
- * during the draft; CBS clears it to "" once state === "completed". Absent/empty both
- * degrade to no order event — NEVER synthesize a snake from team count (A5). */
-function parseUpcomingOrder(order: string | undefined): string[] | null {
+/**
+ * payload.fullstatedelta.order → the REAL entered round-1 order, verbatim.
+ *
+ * NOT payload.newstate.upcomingorder: that field is a ROLLING multi-round lookahead
+ * window (observed entry counts across one full draft: 22, 17, 8, 1, 0 — never a stable
+ * one-per-team order) and must never feed draft_order — opponents.py's snake math
+ * (_my_overall_picks) uses len(draft_order) AS the team count, so a wrong-length order
+ * silently corrupts every "my next pick" calculation. fullstatedelta.order, by contrast,
+ * is confirmed STABLE: exactly one distinct value ("1,2,...,12") across all
+ * fullstatedelta-bearing frames of a full draft.
+ *
+ * Length guard: only accept a parsed order of EXACTLY IMMUTABLE_TEAM_COUNT entries — that
+ * is the whole point (any other length, empty or otherwise, risks the same corruption the
+ * rolling window would have caused) — never synthesize a snake from team count either (A5).
+ */
+function parseDraftOrder(order: string | undefined): string[] | null {
   if (!order) return null;
   const teams = order
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  return teams.length > 0 ? teams : null;
+  return teams.length === IMMUTABLE_TEAM_COUNT ? teams : null;
 }
 
 /**
- * payload.picks[] → one pick_made per entry. GROUND-TRUTH CORRECTION vs. the doc's prose
- * ("take the overall from newstate.opick"): newstate.opick is the pick now on the clock
- * (paired with onclockteamid), i.e. ONE AHEAD of the pick(s) this same frame just
- * reported — verified independently against fullstatedelta.opickindex AND
- * fullstatedelta.results/teams in BOTH golden fixtures (autopick: opick=2, actual=1;
- * final: opick=169 sentinel, actual=168). Walking backward from opick by the batch size
- * also naturally avoids ever minting a phantom pick at the completion sentinel.
+ * payload.picks[] → one pick_made per entry. GROUND-TRUTH CORRECTION vs. the doc's
+ * original prose ("take the overall from newstate.opick", corrected in commit 43b386b):
+ * newstate.opick is the pick now on the clock (paired with onclockteamid), i.e. ONE AHEAD
+ * of the pick(s) this same frame just reported. overall = newstate.opick - picks.length +
+ * index is CONFIRMED against every pick of a full draft (168/168 matches, batch sizes
+ * 1/2/5/7/9 all included) via fullstatedelta.opickindex and fullstatedelta.results/teams.
+ * Walking backward from opick by the batch size also naturally avoids ever minting a
+ * phantom pick at the completion sentinel.
  */
 function cbsPickEvents(
   leagueId: string,
@@ -250,15 +268,20 @@ function parseNetworkFrame(via: NetworkVia, body: string): DraftEvent[] {
   }
 
   const newstate = payload["newstate"];
-  if (newstate && typeof newstate === "object") {
-    const ns = newstate as CbsNewState;
+  const ns = newstate && typeof newstate === "object" ? (newstate as CbsNewState) : null;
+  if (ns) {
     const stateEvent = cbsDraftStateEvent(leagueId, source, ns);
     if (stateEvent) events.push(stateEvent);
-    const order = parseUpcomingOrder(ns.upcomingorder);
+  }
+
+  const fullstatedelta = payload["fullstatedelta"];
+  if (fullstatedelta && typeof fullstatedelta === "object") {
+    const order = parseDraftOrder((fullstatedelta as CbsFullStateDelta).order);
     if (order) events.push(orderEvent(leagueId, source, order));
-    if (ns.state === "completed") {
-      events.push({ event_type: "draft_complete", league_id: leagueId, source, data: {} });
-    }
+  }
+
+  if (ns?.state === "completed") {
+    events.push({ event_type: "draft_complete", league_id: leagueId, source, data: {} });
   }
 
   return events;
