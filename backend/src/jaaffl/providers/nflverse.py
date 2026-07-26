@@ -33,6 +33,48 @@ log = structlog.get_logger(__name__)
 # authoritative non-PPR draft signal is FFC ADP (Standard) + CBS on-page.
 _ECR_PAGE_TYPE = "redraft-overall"
 
+# --- team defenses ------------------------------------------------------------------------------
+# ff_playerids is a table of PEOPLE and carries no team-defense rows at all (verified 2026-07-25
+# against nflreadpy 0.1.5: 0 rows for each of DST/DEF/D/ST, and no name contains 'Defense'), so a
+# universe built from it alone could never roster the DST this league starts. Defenses therefore
+# come from the separate free ``load_teams()`` dimension.
+#
+# load_teams() returns 36 rows: the 32 current franchises plus 4 legacy/relocation duplicates.
+# They MUST be dropped or one defense becomes draftable twice under two ids (e.g. dst:LV and
+# dst:OAK are the same team). Verified 2026-07-25 — 36 abbrs minus these 4 leaves exactly 32.
+_LEGACY_TEAM_ABBRS = frozenset({"OAK", "SD", "STL", "LA"})
+
+# Canonical id namespace for a team defense. Deliberately NOT ``gsis:`` — a team has no gsis id
+# and reusing that prefix would falsely imply one. ``team_abbr`` is stable across seasons, so a
+# persisted crosswalk link or manual override survives a re-seed.
+_DST_ID_PREFIX = "dst:"
+
+
+def _team_defenses(frame: pl.DataFrame) -> list[Player]:
+    """The 32 current team defenses as canonical ``dst:<team_abbr>`` :class:`Player`s.
+
+    Named with the full ``team_name`` ("San Francisco 49ers"): ``crosswalk.name_norm`` collapses a
+    DST to its nickname token, so the full name and the bare nickname both resolve identically
+    (verified: every DST on the FantasyPros redraft board scores 1.00 against both forms), and the
+    full name is what reads correctly on a draft board.
+    """
+    from jaaffl.domain import Player
+
+    defenses: list[Player] = []
+    for row in frame.iter_rows(named=True):
+        abbr = str(row.get("team_abbr") or "").strip().upper()
+        if not abbr or abbr in _LEGACY_TEAM_ABBRS:
+            continue
+        defenses.append(
+            Player(
+                player_id=f"{_DST_ID_PREFIX}{abbr}",
+                name=str(row.get("team_name") or abbr),
+                position="DST",
+                nfl_team=abbr,
+            )
+        )
+    return defenses
+
 
 def _import_nflreadpy():
     try:
@@ -98,13 +140,18 @@ class NflreadpyProvider(FantasyDataProvider):
         Loads the DynastyProcess ``ff_playerids`` dimension — the SAME source as
         :meth:`seed_crosswalk`, so the universe ids are exactly the ids the seed + :meth:`rankings`
         resolve to; the precompute join cannot silently empty out. Rows without a gsis id or with a
-        non-league position (incl. team DSTs, which have no gsis) are SKIPPED and logged, mirroring
-        :meth:`rankings`. ``season`` is accepted for protocol compatibility but does not filter this
-        dimension. Raises :class:`ProviderError` when the ``data`` extra is missing.
+        non-league position are SKIPPED and logged, mirroring :meth:`rankings`. Position codes are
+        aliased before that gate (``crosswalk._PLAYERID_POSITION_ALIASES``), which is what keeps
+        this table's ``PK`` kickers in the universe. The 32 team defenses are APPENDED from the
+        separate ``load_teams`` dimension (:func:`_team_defenses`) because ff_playerids has no
+        team-defense rows at all — so this method reads TWO tables, and the result covers every
+        position the league starts. ``season`` is accepted for protocol compatibility but does not
+        filter either dimension. Raises :class:`ProviderError` when the ``data`` extra is missing.
         """
         from jaaffl.data.crosswalk import player_from_playerid_row
 
-        frame = _import_nflreadpy().load_ff_playerids()
+        nflreadpy = _import_nflreadpy()
+        frame = nflreadpy.load_ff_playerids()
         universe: list[Player] = []
         skipped = 0
         for row in frame.iter_rows(named=True):
@@ -113,16 +160,35 @@ class NflreadpyProvider(FantasyDataProvider):
                 skipped += 1
                 continue
             universe.append(player)
+        defenses = _team_defenses(nflreadpy.load_teams())
+        universe.extend(defenses)
         if skipped:
-            log.info("nflverse_players_unresolved_skipped", skipped=skipped, kept=len(universe))
+            log.info(
+                "nflverse_players_unresolved_skipped",
+                skipped=skipped,
+                kept=len(universe),
+                defenses=len(defenses),
+            )
         return universe
 
     def seed_crosswalk(self) -> int:
         """Stage-A seed: pull the nflverse ``ff_playerids`` crosswalk (the DynastyProcess table
         carrying ``cbs_id``/``fantasypros_id``/… alongside ``gsis_id``) and register deterministic
-        source→canonical links. Returns the number of players seeded. Run once per draft-prep."""
-        df = _import_nflreadpy().load_ff_playerids()
-        return self._resolve_crosswalk().seed_from_playerids(df.iter_rows(named=True))
+        source→canonical links. Returns the number of players seeded. Run once per draft-prep.
+
+        Team defenses are registered too, from ``load_teams`` (ff_playerids has no team rows).
+        They carry no source ids to link, but they MUST exist as ``players`` rows: a live CBS
+        defense pick resolves by name+team+pos (:meth:`Crosswalk.resolve_name`), and that fuzzy
+        path can only match a candidate that is already in the table — otherwise a drafted DST
+        stays unresolved and is never masked out of the candidate pool.
+        """
+        nflreadpy = _import_nflreadpy()
+        crosswalk = self._resolve_crosswalk()
+        seeded = crosswalk.seed_from_playerids(nflreadpy.load_ff_playerids().iter_rows(named=True))
+        defenses = _team_defenses(nflreadpy.load_teams())
+        for defense in defenses:
+            crosswalk.upsert(defense)
+        return seeded + len(defenses)
 
     @staticmethod
     def _resolve_rank_row(cx: Crosswalk, row: dict) -> str | None:

@@ -200,9 +200,6 @@ def test_refresh_adp_returns_none_without_supporters(env: tuple) -> None:
 def test_refresh_nflverse_history_seeds_and_persists_parquet(
     env: tuple, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import sys
-    import types
-
     import polars as pl
 
     settings, wh, cx = env
@@ -220,14 +217,15 @@ def test_refresh_nflverse_history_seeds_and_persists_parquet(
     )
     stats = pl.DataFrame([{"player_id": "00-cmc", "fantasy_points": 300.0}])
     xep = pl.DataFrame([{"player_id": "00-cmc", "total_yards_gained_exp": 1500.0}])
-    monkeypatch.setitem(
-        sys.modules,
-        "nflreadpy",
-        types.SimpleNamespace(
-            load_ff_playerids=lambda: playerids,
-            load_player_stats=lambda seasons: stats,
-            load_ff_opportunity=lambda seasons: xep,
-        ),
+    # Shared helper rather than a hand-rolled SimpleNamespace: it defaults every table this
+    # provider reads (load_teams included), so adding a source doesn't break unrelated tests.
+    from tests.test_providers import fake_nflreadpy
+
+    fake_nflreadpy(
+        monkeypatch,
+        load_ff_playerids=lambda: playerids,
+        load_player_stats=lambda seasons: stats,
+        load_ff_opportunity=lambda seasons: xep,
     )
     from jaaffl.materialize import refresh_nflverse_history
     from jaaffl.providers.nflverse import NflreadpyProvider

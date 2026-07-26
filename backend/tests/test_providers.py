@@ -19,7 +19,20 @@ FREE_TIER = ["nflverse", "ffc", "cbs_onpage"]
 
 
 def fake_nflreadpy(monkeypatch: pytest.MonkeyPatch, **funcs) -> None:
-    """Install a stub nflreadpy module so no network I/O happens in tests."""
+    """Install a stub nflreadpy module so no network I/O happens in tests.
+
+    ``load_teams`` defaults to an EMPTY frame (with the real column names) because
+    ``NflreadpyProvider.players`` reads two tables — ff_playerids for people and load_teams for
+    team defenses. Tests about playerid mapping therefore need no teams fixture and see zero
+    DSTs; tests that exercise defenses pass their own ``load_teams``. The default is a test-only
+    convenience: production never tolerates a missing table, it raises.
+    """
+    import polars as pl
+
+    funcs.setdefault(
+        "load_teams",
+        lambda: pl.DataFrame(schema={"team_abbr": pl.String, "team_name": pl.String}),
+    )
     monkeypatch.setitem(sys.modules, "nflreadpy", types.SimpleNamespace(**funcs))
 
 

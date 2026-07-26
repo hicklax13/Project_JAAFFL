@@ -7,6 +7,8 @@ network — so it proves the 503→200 bridge end-to-end offline.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from jaaffl.config import Settings
@@ -115,6 +117,58 @@ def test_factory_builds_a_valid_context_from_fake_providers(tmp_path) -> None:
     assert ctx.adp_mean["rb0"] == pytest.approx(1.0)
     assert ctx.adp_sd["rb0"] == pytest.approx(3.0)  # FFC stdev
     assert ctx.adp_sd["wr0"] == pytest.approx(12.0)  # None stdev → wide default
+
+
+def _complete_providers():
+    """Like ``_providers()`` but covering every STARTABLE position (adds QB, K, DST)."""
+    universe = [
+        *_universe(),
+        Player(player_id="qb0", name="qb0", position=Position.QB),
+        Player(player_id="k0", name="k0", position=Position.K),
+        Player(player_id="dst0", name="dst0", position=Position.DST),
+    ]
+    return [
+        _CountingFake(
+            "nflverse",
+            {Capability.HISTORICAL_STATS, Capability.RANKINGS},
+            rankings={"rb0": 1.0, "wr0": 2.0, "te0": 20.0, "qb0": 8.0, "k0": 150.0, "dst0": 160.0},
+            players=universe,
+        ),
+    ]
+
+
+def test_context_build_warns_when_a_startable_position_is_missing_from_the_board(
+    tmp_path,
+) -> None:
+    """The drift alarm. The fake universe is RB/WR/TE only, so QB/K/DST cannot be started.
+
+    Crucially NON-FATAL: the context is still returned. A context can be rebuilt mid-draft (the
+    per-league cache is in-memory and a service restart empties it), and serving an incomplete
+    board beats serving none at all.
+    """
+    from structlog.testing import capture_logs
+
+    with capture_logs() as logs:
+        ctx = _source(_providers(), tmp_path)("cbs-local")
+
+    assert ctx is not None, "coverage gaps must degrade, never block the board"
+    warning = next(
+        (entry for entry in logs if entry["event"] == "precompute_position_coverage_gap"), None
+    )
+    assert warning is not None, "a missing startable position must be surfaced"
+    assert warning["log_level"] == "warning"
+    assert warning["missing"] == ["DST", "K", "QB"]
+
+
+def test_context_build_is_quiet_when_every_startable_position_is_on_the_board(tmp_path) -> None:
+    """The alarm must START GREEN — an alarm that always fires is one you learn to ignore."""
+    from structlog.testing import capture_logs
+
+    with capture_logs() as logs:
+        ctx = _source(_complete_providers(), tmp_path)("cbs-local")
+
+    assert ctx is not None
+    assert not [e for e in logs if e["event"] == "precompute_position_coverage_gap"]
 
 
 def test_factory_returns_none_when_universe_is_empty(tmp_path) -> None:
@@ -355,3 +409,34 @@ def test_precompute_seeds_real_cbs_links_into_the_warehouse_sqlite(monkeypatch, 
 
     # The exact lookup api/app.py performs for an ID-only CBS pick — now satisfied automatically.
     assert crosswalk.resolve("cbs", "2181292") == "gsis:00-0034796"
+
+
+@pytest.mark.skipif(
+    not os.environ.get("JAAFFL_RUN_NETWORK_TESTS"),
+    reason="opt-in: real nflverse network pull; set JAAFFL_RUN_NETWORK_TESTS=1 to run",
+)
+def test_live_default_universe_can_roster_every_league_position(tmp_path, monkeypatch) -> None:
+    """END-TO-END SEVERITY GUARD: the DEFAULT ($0-tier) live universe must cover every startable
+    position.
+
+    This is the wiring an actual draft uses — ``build_registry()`` with no keys yields
+    ``[nflverse, ffc, cbs_onpage]``, and ``_registry_player_loader`` picks the first
+    HISTORICAL_STATS provider (nflverse). Measured before the fixes (2026-07-25): 4426 players,
+    positions ``{WR, LB, RB, QB, TE, DL, DB}`` — **zero K and zero DST**, i.e. two of the nine
+    starting slots were unfillable. Kickers were dropped because db_playerids spells the position
+    ``PK``; defenses were absent because that table has no team rows at all. Every unit test
+    passed throughout, because each fixture spelled the positions ``K``/``DST`` — only the real
+    feed says otherwise.
+    """
+    pytest.importorskip("nflreadpy")
+    from jaaffl.engine.precompute import _registry_player_loader
+    from jaaffl.providers.registry import build_registry
+
+    monkeypatch.setenv("JAAFFL_DATA_DIR", str(tmp_path))  # never touch the owner's real db
+    universe = _registry_player_loader(build_registry())(2026)
+
+    positions = {str(p.position) for p in universe.values()}
+    missing = {"QB", "RB", "WR", "TE", "K", "DST"} - positions
+    assert not missing, (
+        f"live default universe cannot roster {sorted(missing)}; got {sorted(positions)}"
+    )

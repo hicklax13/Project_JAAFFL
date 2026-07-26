@@ -99,6 +99,27 @@ def test_player_from_playerid_row_keeps_idp_positions_in_enum() -> None:
     assert p is not None and p.position == "LB"
 
 
+def test_player_from_playerid_row_aliases_pk_to_canonical_k() -> None:
+    """REGRESSION: db_playerids spells kicker ``PK``, the domain spells it ``K``.
+
+    Verified against the live table (nflreadpy 0.1.5, 2026-07-25): position=='PK' has 282 rows
+    (151 with a gsis_id) and position=='K' has ZERO — so an un-aliased ``_VALID_POSITIONS``
+    check silently dropped EVERY kicker from both the seed and the player universe.
+    """
+    p = player_from_playerid_row(
+        playerid_row(gsis_id="00-0040074", position="PK", name="Tyler Loop", team="BAL")
+    )
+    assert p is not None, "a PK row must not be skipped — it is this league's kicker"
+    assert p.position == "K"
+    assert p.player_id == "gsis:00-0040074"
+
+
+def test_player_from_playerid_row_skips_punters_despite_pk_alias() -> None:
+    """``PN`` (punter, 217 live rows) is NOT a kicker and must stay skipped — a sloppy
+    'anything kicker-ish -> K' alias would flood the universe with unrosterable punters."""
+    assert player_from_playerid_row(playerid_row(gsis_id="00-pn", position="PN")) is None
+
+
 # --- name_norm -----------------------------------------------------------------------
 
 
@@ -170,6 +191,29 @@ def test_seed_skips_non_enum_positions_without_aborting_batch(cx: Crosswalk) -> 
     assert seeded == 1
     assert cx.resolve("cbs", "c-wr") == "gsis:00-wr"
     assert cx.resolve("cbs", "c-de") is None  # defensive lineman skipped
+
+
+def test_seed_from_playerids_lands_kickers_in_the_players_table(cx: Crosswalk) -> None:
+    """REGRESSION (db-level): a freshly seeded ``players`` table must contain kickers.
+
+    This is the exact query that exposed the bug — it returned 0 against a real seed because
+    db_playerids' ``PK`` code never matched the domain's ``K``.
+    """
+    seeded = cx.seed_from_playerids(
+        [
+            playerid_row(gsis_id="00-loop", cbs_id="c-k", position="PK", name="Tyler Loop"),
+            playerid_row(gsis_id="00-wr", cbs_id="c-wr", position="WR", name="A Receiver"),
+        ]
+    )
+    assert seeded == 2
+    conn = sqlite3.connect(cx.db_path)
+    try:
+        kickers = conn.execute("SELECT COUNT(*) FROM players WHERE position='K'").fetchone()[0]
+    finally:
+        conn.close()
+    assert kickers == 1, "seeded players table has no kickers"
+    # The kicker is reachable by its CBS id too, so a live CBS kicker pick can resolve.
+    assert cx.resolve("cbs", "c-k") == "gsis:00-loop"
 
 
 # --- Stage B fuzzy fallback ----------------------------------------------------------
