@@ -10,7 +10,7 @@
 
 import type { DraftEvent } from "@jaaffl/shared";
 
-import { parsePastedResults } from "../lib/parse";
+import { parsePastedReport } from "../lib/parse";
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -51,11 +51,23 @@ export function mountManualPaste(
   details.appendChild(status);
 
   button.addEventListener("click", () => {
-    const events = parsePastedResults(textarea.value);
+    const { events, skipped } = parsePastedReport(textarea.value);
     onPaste(events);
-    status.textContent = events.length
-      ? `${events.length} event(s) sent`
-      : "nothing parseable — check the line format";
+    if (!events.length) {
+      status.textContent = "nothing parseable — check the line format";
+    } else if (skipped.length) {
+      // A partial parse must NOT read as success. "21 event(s) sent" after 24 pasted picks
+      // is indistinguishable from a clean run unless the owner counts — and a pick that
+      // never arrives is a player who is never masked.
+      status.textContent =
+        `${events.length} event(s) sent · ${skipped.length} line(s) SKIPPED: ` +
+        skipped.slice(0, 2).join(" | ") +
+        (skipped.length > 2 ? " …" : "");
+      status.classList.add("is-warning");
+    } else {
+      status.textContent = `${events.length} event(s) sent`;
+      status.classList.remove("is-warning");
+    }
   });
 
   shadow.querySelector(".panel")?.appendChild(details);
