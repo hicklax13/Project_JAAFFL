@@ -124,6 +124,16 @@ Observed: `rounds: 14`, 12 teams → 168 real picks, but the terminal frame carr
 `169` is a **draft-over sentinel**, not a 15th-round pick. Treat `opick > rounds × teams` as
 "draft complete", exactly as `opponents.next_overall_pick` does with its own sentinel.
 
+Since Tier 3, `parse.ts` reads completion from **two independent signals**: CBS's own
+`state: "completed"` word *and* the structural overrun (`isDraftOver`). Either is sufficient, so a
+frame that overruns without the state word is not read as a live draft parked on a pick that
+cannot exist.
+
+The overrun value itself is passed through **verbatim**, deliberately not clamped to 168:
+`opponents.next_overall_pick` already returns `rounds × teams + 1` to mean "you have no picks
+left", so 169 is the same convention. Clamping to 168 would assert that the final pick is still on
+the clock after it was made.
+
 ### ⚠️ `upcomingorder` is a ROLLING WINDOW — do NOT use it as `draft_order`
 
 `upcomingorder` is the upcoming pick sequence from *right now*, spanning a partial round into the
@@ -165,6 +175,24 @@ shape, but it is the same rolling window and is likewise not a `draft_order`.
 
 This is a complete board snapshot — more valuable than replaying individual pick deltas, and the
 right source for a late-join resync.
+
+**Consumed since Tier 3.** `parse.ts::cbsSnapshotPicks` turns `fullstate.teams` into a single
+`draft_state` event carrying an explicit `picks` list, which `fold_state` treats as an
+authoritative full re-sync (a plain ticker `draft_state` deliberately leaves the board alone).
+
+### ⚠️ `fullstate` is the board; `fullstatedelta` is NOT
+
+Both carry a `teams` map of the same shape, so they are easy to confuse — and the mistake is
+expensive. `fullstatedelta.teams` holds **only the picks that frame reported** (measured across a
+168-pick draft: 1–9 entries per frame, never the full board). Treating it as a resync would
+replace the entire board with a handful of picks on every frame.
+
+### ⚠️ Recording can begin mid-draft — and then the deltas are NOT enough
+
+Observed in the owner's 2026-07-25 session: the client connected at `opick: 4`, so the delta
+stream covers overalls **4–168** and picks **1, 2, 3 exist only in the `subscribe` snapshot**.
+A resync that ignores the snapshot leaves three genuinely drafted players unmasked and
+recommendable. This is not a hypothetical reconnect — it is what the real capture did.
 
 ## 5. CBS player id → name / position / team
 
