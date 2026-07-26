@@ -97,6 +97,89 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 > the best pick and the dashboard banner; and MC-VONA is held off the push path by a
 > **structural** (mutation-verified) guard rather than a flaky wall-clock gate.
 >
+> **Tier 4 of the audit is merged** (PRs #47–#49) — *the E2/E6 calibration harness*. E2 kept
+> answering "keep baseline"; it turns out it could not have answered anything else. **Five**
+> independent reasons, each measured rather than reasoned:
+>
+> - **The objective could not reward risk.** `optimal_lineup_value` scores a finished roster on the
+>   deterministic μ and never reads `SimContext.sigma` — verified: σ×10, σ=0 and the shipped σ all
+>   return `915.200000`. So `λ·σ` moved the ranking away from the very μ the scorer paid out on:
+>   λ could be **penalised and never rewarded**. Replaced by sampling each player's season from
+>   `N(μ, σ)` — keyed by *player id*, so a player realizes the same season on every roster that
+>   holds him (common random numbers) — and scoring by **win probability**: `P(highest realized
+>   season total of the 12)`. That choice is the strategy definition, so the two alternatives are
+>   rejected *in tests*: a mean-outcome objective rises monotonically with σ (Jensen — the lineup is
+>   re-optimised after the fact) and a floor percentile falls monotonically; either fixes λ's sign
+>   globally and leaves the λ **schedule** — whose whole content is that λ flips sign between R1 and
+>   R17 — as unmeasurable as before. Plan §3.9 already named the target: playoff odds are "the true
+>   objective that λ only proxies". Scoped honestly as a **total-points** championship proxy —
+>   `config/league.json` specifies no playoff bracket, and inventing one would breach its
+>   `agent_usage_contract`.
+> - **The baseline had no risk term at all.** `EngineParams()` defaults `lambda_schedule` to `[]`.
+>   E2 used bare `EngineParams()` as its baseline arm and E6 as its "ours" contender, while the live
+>   engine loads `config/engine.json` (a five-band schedule, +0.3 → −0.4). **Every published E2
+>   baseline number described a vector the engine does not run**, and the pure-MLV control was not
+>   testing λ: the arm it was compared against already had none.
+> - **The fixture pools could not express any strategic term.** Across 96 (slot × seed ×
+>   opponent-field) cells on *both* `_demo_context()`s, turning κ, α **and** λ off left a
+>   **bit-identical roster in 96/96**: `cliff_bonus` was `{}`, σ took two values, there were no
+>   K/DST players for `reliability_shrinkage` to shrink, and a flat 40.0 baseline for every position
+>   inflated MLV into a band where λ·σ can never re-rank. E2 `--smoke` ran Optuna over a constant.
+> - **The simulated agent was not the shipped agent.** `ScoreAgent` hardcoded `candidate_cap=50`
+>   (config says 180) and capped by *raw value* where `recommend.py` caps by *MLV* — which hid K and
+>   DST entirely, so it could not draft a DST at all.
+> - **`--eval-seeds` was inert.** Every held-out opponent was deterministic; 1 and 6 eval seeds gave
+>   bit-identical numbers. Train/held-out are now disjoint *and* both stochastic (a new
+>   `SoftmaxVbdAgent` trains, `AdpNoiseAgent` moves to held-out).
+>
+> **What the corrected harness measures** (real xEP pool, 300 players, held-out
+> `[NeedBased, AdpNoise]`, 8 seeds, 800 sampled seasons/draft; win prob vs the σ-blind points view):
+>
+> | vector | win prob | Δ/slot | min slot | p | points | Δ/slot | p |
+> |---|---|---|---|---|---|---|---|
+> | committed baseline | 0.1077 | — | — | — | 1754.51 | — | — |
+> | **pure MLV** (κ=α=λ=0, rel=1) | **0.0624** | **−0.0454** | −0.0813 | 0.9998 | **1776.16** | **+21.65** | 0.0002 |
+> | λ OFF only | 0.0710 | −0.0367 | −0.0758 | 1.0000 | 1749.96 | −4.55 | 1.0000 |
+> | κ OFF only | 0.0993 | −0.0084 | −0.0886 | 0.8174 | 1771.67 | +17.16 | 0.0049 |
+> | α OFF only | 0.1077 | +0.0000 | +0.0000 | 1.0000 | 1754.51 | +0.00 | 1.0000 |
+> | reliability OFF | 0.1037 | −0.0040 | −0.0106 | 1.0000 | 1755.00 | +0.49 | 0.8438 |
+> | λ DOUBLED | 0.0920 | −0.0158 | −0.0789 | 0.9983 | 1750.76 | −3.75 | 0.6333 |
+>
+> **The 2026-07-25 headline reverses.** Pure-MLV still wins on points (+21.65/slot, p=0.0002 — it
+> *strengthens*), but it gives away **42% of its championship probability** (0.1077 → 0.0624,
+> p=0.9998). The old harness could only see the points half of that trade, which is exactly why it
+> concluded pure-MLV wins. **λ is the load-bearing term**: switching it off costs win probability
+> *and* points, and doubling it also hurts — so the shipped magnitude sits near a local optimum
+> rather than at a boundary. κ buys win probability with expected points (−0.0084 for +17.16 pts,
+> p=0.82 — a real trade, statistically unresolved at 8 seeds).
+>
+> **E2 re-run** (30 trials, seed 1, 2 train / 8 eval seeds, 800 draws) tuned to κ=0.736 α=0.430
+> λ=[0.228, 0.176, 0.0, −0.358, −0.386], rel K=0.194 DST=0.893 → win prob **0.1077 → 0.1207**,
+> `mean_diff +0.0130, p = 0.0029` (significant, which the old harness could never show) but
+> `min_slot_diff −0.0014` → **fails the non-negative leg only** → gate says **KEEP baseline**.
+> Nothing written; `config/engine.json` stays owner-adopted. Note the tuner keeps λ's sign structure
+> and near-shipped magnitudes — that is the first real evidence the shipped schedule is close to
+> right. It is also a fair criticism of the gate that a −0.0014 single-slot dip is inside MC noise.
+>
+> **E6 re-run** (fixture pool, 8 seeds, 800 draws): the previously published "our agent beats
+> VBD-only, p=0.0002" **does not reproduce**. On points ours 1588.3 vs vbd_only 1588.2 is a dead
+> heat (`+0.1, p=0.5750`); what reproduces at p=0.0002 is ours over **ADP-only** (`+16.4/slot`). On
+> win probability ours 0.1226 > adp_only 0.1148 > vbd_only 0.1036, `+0.0190 vs vbd_only, p=0.0320`
+> but `min_slot −0.0122`, so the gate still reports no edge. Read plainly: our agent's edge over
+> VBD-only is on **championship probability, not points**.
+>
+> **⚠️ α is structurally inert — on the LIVE path, not just in E2.** The `α OFF only` row above is
+> `+0.0000` on both measures because `cliff_bonus` has **293 entries and every one is 0.0**.
+> `assign_tiers` yields only **8 tier boundaries across the whole 510-player board** (DST gets a
+> single tier, so it has none), with tiers holding 25–54 players; only **102 of 510** players are
+> above replacement, so the weakest player of a tier and the best of the next tier are *both* below
+> replacement, where `lineup_value` floors MLV at 0 — every boundary computes `max(0, 0.00 − 0.00)`.
+> Consequence: `recommend.py`'s `applied_cliff = α · 0.0` is exactly 0.00 for every live pick, the
+> overlay's tier-cliff bar can never be non-zero, and `explain.py`'s "the talent drops off after
+> this tier" sentence can never render. **Not fixed here** — the fix is a tiering-policy decision
+> (how many tiers, over the draftable subset or the whole board, on ECR or on MLV) that changes live
+> recommendations and deserves its own design pass, not a bolt-on to a calibration PR.
+>
 > **What Tier 3 did NOT do** (scoped honestly): a **replay is not a live draft.** The pipeline has
 > now run end to end on real captured frames, but it has still never run against a LIVE CBS room —
 > no draft-night rehearsal against a room that is actually ticking. `ESTIMATED` is still driven by a
@@ -226,16 +309,21 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
       (`calibrate_flex_split.py`), **E3** projection-validation (`validate_projections.py`), and
       **E2** param tuning (`tune_engine_params.py` — Optuna study + no-regression gate; `--real`
       builds a precompute-backed pool), and the **E6** efficacy tournament (`run_tournament.py` —
-      our agent vs VBD-only / ADP-only baselines) all done + run live. **E2 re-run 2026-07-25**
-      against the real xEP-backed μ (the prior run had tuned against the `300 − ecr` placeholder,
-      fitting its "optimum" to synthetic value) — gate again says **KEEP baseline**
-      (`+3.18 pts/slot`, `min_slot −0.41`, `p = 0.41`). Nothing written; `config/engine.json`
-      stays owner-adopted. ⚠️ That re-run also exposed **two harness problems** (see
-      `docs/owner-manual-todo.md` §1): the held-out opponent `NeedBasedAgent` never consumes its
-      `rng`, so `--eval-seeds` is **inert** and the gate has zero simulation variance; and
-      **pure-MLV (κ=α=λ=0) PASSES that gate** (`+14.74/slot`, `min_slot +0.00`, `p = 0.0010`)
-      while the tuned vector fails it. E2 as configured therefore cannot validate the strategic
-      terms — a stochastic held-out mix is the remaining calibration follow-up
+      our agent vs VBD-only / ADP-only baselines) all done + run live. **Tier 4 (2026-07-26) rebuilt
+      the harness** after the 2026-07-25 re-run showed it could not validate the strategic terms at
+      all: the scorer was σ-blind, the baseline carried `lambda_schedule = []`, both fixture pools
+      were params-blind in 96/96 cells, the simulated agent was not the shipped agent, and
+      `--eval-seeds` was inert. Drafts are now scored by **win probability** over seasons sampled
+      from `N(μ, σ)`, against a **disjoint stochastic** held-out field, with the **committed**
+      `config/engine.json` as the baseline. The verdict is still **KEEP baseline** — but now for an
+      informative reason: the tuned vector is *significantly better* on win probability
+      (`+0.0130/slot, p = 0.0029`) and fails only the non-negative-at-every-slot leg
+      (`min_slot −0.0014`, inside MC noise). **Pure-MLV's apparent win reverses**: it gains
+      `+21.65 pts/slot` while shedding 42% of its championship probability. Full tables in the
+      status block above. ⚠️ **α is still structurally inert, and on the LIVE path** — all 293
+      `cliff_bonus` values are 0.0 because tiers are far too coarse (8 boundaries across 510
+      players) and fall below replacement where MLV is floored. That is the one calibration
+      follow-up still open
 - [x] **Projection σ measurement** — `scripts/measure_projection_sigma.py` (read-only) measures the
       per-position year-over-year projection error that anchors the risk band, replacing the flat
       v1 σ placeholder. Also settles season-sum vs rate×17 for μ with two-year-pair evidence
