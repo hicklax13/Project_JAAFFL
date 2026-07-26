@@ -117,23 +117,45 @@ in **Phase 4 (Stage 5 engine)** — two more things:
   Nothing was written — the CLI is dry-run unless you pass `--write`, and `config/engine.json`
   stays owner-adopted.
 
-  ⚠️ **Two things that re-run exposed about the E2 harness itself — READ BEFORE TRUSTING E2.**
-  Neither is fixed; both are decisions for you.
+  ✅ **Both warnings that re-run raised are now RESOLVED — Tier 4 rebuilt the harness (2026-07-26,
+  PRs #47–#49).** They were symptoms of five deeper problems, all measured:
 
-  1. **`--eval-seeds` is inert.** The held-out opponent set is `[NeedBasedAgent()]`, and
-     `NeedBasedAgent.pick` accepts `rng` and never uses it — it is fully deterministic. So the
-     held-out evaluation has **zero simulation variance**: 1 eval seed and 6 eval seeds produce
-     bit-identical numbers (measured twice; two studies with different trial counts and different
-     tuned vectors reported the same `+3.18 / −0.41 / p=0.4062`). The gate's Wilcoxon is therefore
-     a 12-slot paired test on ONE deterministic scenario, not a seed-varied estimate. Fix would be
-     a stochastic held-out mix (e.g. include `AdpNoiseAgent`, which does consume `rng`).
-  2. **Pure-MLV passes the gate that the tuned vector fails.** Turning every strategic term OFF
-     (κ=0, α=0, λ≡0, no K/DST shrinkage — i.e. rank purely on Marginal Lineup Value) scores
-     `+14.74 pts/slot` over the baseline with `min_slot_diff +0.00` and `p = 0.0010` —
-     `would_promote = True`. Read it narrowly: that is against ONE deterministic, exploitable
-     opponent archetype, and E6 separately shows the agent beating VBD-only/ADP-only baselines. It
-     does **not** mean VONA/cliff/risk are worthless. It does mean **E2 as currently configured
-     cannot validate them**, so "KEEP baseline" is a weak endorsement rather than a clean one.
+  1. The scorer read only μ and **never σ**, so `λ·σ` could be penalised and never rewarded.
+  2. The baseline was bare `EngineParams()`, whose `lambda_schedule` defaults to `[]` — so **every
+     previous E2 baseline, and E6's "ours" contender, was a risk-FREE agent**, not the vector in
+     `config/engine.json`.
+  3. Both fixture pools were **params-blind**: κ, α and λ all switched off left a bit-identical
+     roster in 96/96 cells.
+  4. The simulated agent capped candidates by raw value at 50, where the live engine caps by MLV at
+     180 — it **could not draft a DST at all**.
+  5. `--eval-seeds` was inert (every held-out opponent deterministic).
+
+  Drafts are now scored by **win probability** — `P(your roster posts the highest realized season
+  total of the 12)` over seasons sampled from `N(μ, σ)` — against a disjoint stochastic held-out
+  field, with the committed config as the baseline.
+
+  **The pure-MLV finding reverses.** On the real 2026 board (8 seeds, 800 sampled seasons/draft),
+  pure-MLV still gains `+21.65 pts/slot` (p=0.0002) — but it sheds **42% of its championship
+  probability** (0.1077 → 0.0624, p=0.9998). The old harness could only see the points half of that
+  trade. **λ is the load-bearing term**: switching it off costs *both* win probability and points,
+  and doubling it also hurts, so the shipped schedule sits near a local optimum.
+
+  **The re-run still says KEEP baseline**, but informatively: the tuned vector is *significantly*
+  better on win probability (`+0.0130/slot, p = 0.0029`) and fails only the
+  non-negative-at-every-slot leg by `−0.0014` — a margin inside Monte-Carlo noise. Nothing was
+  written; the CLI is dry-run unless you pass `--write`, and `config/engine.json` stays
+  owner-adopted. **No action needed from you** unless you want to revisit that gate leg.
+
+  ⚠️ **One new finding that IS worth your attention — α does nothing, on the live path.**
+  All 293 `cliff_bonus` values on the real board are exactly **0.0**, so the tier-cliff term
+  contributes `α × 0 = 0.00` to every recommendation you will see on draft night, the overlay's
+  tier-cliff bar can never be non-zero, and the "talent drops off after this tier" explanation can
+  never appear. Cause: `assign_tiers` produces only **8 tier boundaries across the whole
+  510-player board** (DST gets a single tier, so it has none), with tiers holding 25–54 players —
+  and only 102 of 510 players are above replacement, so both sides of every boundary sit in
+  sub-replacement territory where MLV is floored at 0. It is **not fixed**, because the fix is a
+  design choice about tiering (how many tiers, over the draftable subset or the whole board, on ECR
+  or on MLV) that changes live recommendations. Say the word and it gets its own pass.
 
 Steps (kept for the next capture — e.g. a settings-page capture, or re-verifying on draft night):
 1. Open a CBS mock draft with the extension loaded.
