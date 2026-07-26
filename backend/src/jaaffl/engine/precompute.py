@@ -26,6 +26,7 @@ from jaaffl.config import EngineParams, Settings
 from jaaffl.domain import Player, Position
 from jaaffl.engine.context import DraftContext, build_draft_context
 from jaaffl.league.constitution import resolve_league_settings
+from jaaffl.league.coverage import board_coverage_gaps
 from jaaffl.providers.base import Capability, FantasyDataProvider, ProviderError
 from jaaffl.providers.registry import build_registry
 
@@ -227,6 +228,22 @@ def build_registry_context_source(
         if not context.mu:  # no projections resolved → 503 rather than an empty board
             log.info("precompute_empty_projections", league_id=league_id)
             return None
+        # Drift alarm (league.coverage): is any STARTABLE position absent from the board? Checked
+        # against context.mu, not the universe — a player with no projection is loaded but can
+        # never be recommended. context.position spans the whole universe, so restrict it first.
+        # Deliberately NON-FATAL: this closure can run mid-draft (the per-league cache is
+        # in-memory, so a service restart empties it), where a degraded board beats no board. The
+        # owner-run scripts/preflight.py hard-fails on the same signal, hours earlier, when there
+        # is still time to fix it.
+        board = {pid: context.position[pid] for pid in context.mu if pid in context.position}
+        gaps = board_coverage_gaps(league_settings, board)
+        if gaps:
+            log.warning(
+                "precompute_position_coverage_gap",
+                league_id=league_id,
+                missing=[str(position) for position in gaps],
+                board=len(context.mu),
+            )
         log.info("precompute_context_built", league_id=league_id, players=len(context.mu))
         return context
 

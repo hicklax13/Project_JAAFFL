@@ -48,6 +48,20 @@ from jaaffl.domain import Player, Position
 # no IDP slots never drafts them, and both the enum and the SQLite CHECK reject them.
 _VALID_POSITIONS = frozenset(p.value for p in Position)
 
+# Source position code -> canonical Position value, applied BEFORE the _VALID_POSITIONS gate.
+# db_playerids (DynastyProcess) spells kicker "PK"; the domain spells it "K". Without this alias
+# the gate silently dropped EVERY kicker from BOTH the Stage-A seed and the live player universe
+# (NflreadpyProvider.players) — the engine could not rank or roster the K this league starts.
+# Verified against the live table (nflreadpy 0.1.5, 2026-07-25): position=='PK' is 282 rows (151
+# with a gsis_id) while position=='K' is 0 rows. PK is the ONLY divergent code that names a league
+# position — the table's other non-enum codes are CB/S/DT/DE (IDP), PN (punter), OT/C/T (o-line)
+# and XX/? (unknown), all correctly skipped by the gate — and the table carries NO team-defense
+# rows at all (DST/DEF/D/ST are 0 rows each), so DSTs are sourced elsewhere, not aliased here.
+# Aliasing first and keeping the enum-DERIVED gate (rather than a hand-written whitelist, as in
+# ffc._FFC_POSITION_MAP / cbs_extract._CBS_POSITION_MAP) means a new domain Position needs no
+# edit here — only a genuinely divergent source code does.
+_PLAYERID_POSITION_ALIASES = {"PK": "K"}
+
 # Method precedence: a lower-ranked method never overwrites a higher-ranked resolution.
 _RANK = {"fuzzy": 1, "deterministic": 2, "manual": 3}
 
@@ -118,15 +132,18 @@ def name_norm(name: str, position: str | None = None) -> str:
 def player_from_playerid_row(row: Mapping) -> Player | None:
     """Map one ``load_ff_playerids()`` row to a canonical :class:`Player`, or ``None`` to skip.
 
-    Canonical id = the stable ``gsis:<gsis_id>``. Rows without a gsis id, or whose position is
-    outside this league's :data:`_VALID_POSITIONS` (db_playerids carries DE/DT/CB/S/... IDP codes),
-    are skipped. This is the ONE mapper shared by :meth:`Crosswalk.seed_from_playerids` and
+    Canonical id = the stable ``gsis:<gsis_id>``. The raw source position is first normalized
+    through :data:`_PLAYERID_POSITION_ALIASES` (``PK`` -> ``K``; see that constant for why this
+    must happen BEFORE the gate), then rows without a gsis id, or whose position is outside this
+    league's :data:`_VALID_POSITIONS` (db_playerids carries DE/DT/CB/S/... IDP codes), are skipped.
+    This is the ONE mapper shared by :meth:`Crosswalk.seed_from_playerids` and
     ``NflreadpyProvider.players`` so the seeded ids and the loaded universe can never diverge.
     Returns ``None`` on a row that fails :class:`Player` validation, so one bad row can't abort
     a batch.
     """
     gsis = _clean(row.get("gsis_id"))
-    position = str(row.get("position") or "").upper()
+    raw_position = str(row.get("position") or "").upper()
+    position = _PLAYERID_POSITION_ALIASES.get(raw_position, raw_position)
     if gsis is None or position not in _VALID_POSITIONS:
         return None
     canonical = f"gsis:{gsis}"
