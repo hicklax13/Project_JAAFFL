@@ -30,18 +30,54 @@ of each build phase on purpose — nothing here blocks the automated build unles
 > draft night: the overlay's VONA was structurally **0.00** because nothing supplied your draft slot
 > to the push path.
 >
-> ### ⚠️ ONE THING TO DO BEFORE DRAFT NIGHT: set `JAAFFL_MY_TEAM_ID`
+> ### ⚠️ TWO THINGS TO DO BEFORE DRAFT NIGHT
 >
-> Put your CBS team slot (`"1"`–`"12"`, as CBS numbers the teams in the room) in `.env`. No CBS frame
-> names *your own* team, so the app cannot work it out from the live feed. Without it the engine
-> cannot tell when your next pick is, survival degrades to "everyone is still available", and every
-> recommendation reads `vona 0.00` — the scarcity half of the model is off. It still ranks on
-> Marginal Lineup Value and it now says so (the overlay foot shows `VONA degraded · no draft slot
-> set`), but you want the real number. One line:
+> **1. Set `JAAFFL_MY_TEAM_ID`.** Put your CBS team slot (`"1"`–`"12"`, as CBS numbers the teams in
+> the room) in `.env`. No CBS frame names *your own* team, so the app cannot work it out from the
+> live feed. Without it the engine cannot tell when your next pick is, survival degrades to
+> "everyone is still available", and every recommendation reads `vona 0.00` — the scarcity half of
+> the model is off. It still ranks on Marginal Lineup Value and it now says so (the overlay foot
+> shows `VONA degraded · no draft slot set`), but you want the real number. One line:
 >
 > ```
 > JAAFFL_MY_TEAM_ID=7
 > ```
+>
+> **2. Run the preflight — the morning of the draft, not the night before.** It pulls the live
+> feeds, so run it close enough to draft day that you are checking the data you will actually draft
+> against:
+>
+> ```
+> .venv/Scripts/python.exe scripts/preflight.py --seed
+> ```
+>
+> It builds the REAL draft context through the same wiring the live service uses, then prints how
+> many draftable players exist at each position and **exits non-zero** if any position you must
+> start has none. Healthy output looks like:
+>
+> ```
+> [preflight] draftable players on the board: 513
+> [preflight]   DST     31  (start)
+> [preflight]   K       32  (start)
+> [preflight]   QB      56  (start)
+> [preflight]   RB     128  (start)
+> [preflight]   TE      90  (start)
+> [preflight]   WR     176  (start)
+> [preflight] OK: every startable position (DST, K, QB, RB, TE, WR) is fillable.
+> ```
+>
+> If it fails, it names the position — treat that as a hard stop and fix it before drafting, because
+> the engine cannot recommend or roster what is not on the board, and any pick an opponent makes at
+> that position will not be masked from your candidate pool.
+>
+> **Why this exists (PR #45).** The board silently carried **zero kickers and zero defenses** — 2 of
+> your 9 starting slots — and nothing surfaced it. nflverse's crosswalk spells kicker `PK` while the
+> domain spells it `K`, so all 151 were dropped by a position gate; and that table carries no team
+> rows at all, so there were no defenses to drop in the first place. The whole suite was green
+> throughout, because every test fixture spelled the positions the way the code expected. The loader
+> did log `skipped=8040`, but ~8,000 of those are normal IDP rows, so the missing ones hid in the
+> noise. `engine/precompute.py` now also logs a non-fatal `precompute_position_coverage_gap` warning
+> if it ever recurs mid-draft — but the preflight is the one that catches it while you can still act.
 >
 > **Still open:** a **replay is not a live draft.** The pipeline has run end to end on real captured
 > frames; it has still never run against a LIVE CBS room that is actually ticking. Also still
