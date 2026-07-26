@@ -22,7 +22,9 @@ import argparse
 import sys
 from pathlib import Path
 
+from jaaffl.calibrate.pools import committed_engine_params, demo_sim_context
 from jaaffl.calibrate.tune import (
+    WinProbabilityObjective,
     cap_sim_pool,
     evaluate_params,
     promotion_decision,
@@ -30,69 +32,15 @@ from jaaffl.calibrate.tune import (
     sim_context_from_draft_context,
 )
 from jaaffl.config import EngineParams, get_settings
-from jaaffl.domain import LeagueSettings, Position, RosterSlot
-from jaaffl.engine.optimize import expand_starting_slots
 from jaaffl.engine.simulate import (
     AdpNoiseAgent,
     NeedBasedAgent,
     SimContext,
+    SoftmaxVbdAgent,
     VbdOnlyAgent,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def _demo_settings() -> LeagueSettings:
-    return LeagueSettings(
-        league_id="demo",
-        team_count=12,
-        roster_slots=[
-            RosterSlot(slot="QB", eligible_positions=[Position.QB], count=1, starting=True),
-            RosterSlot(slot="RB", eligible_positions=[Position.RB], count=1, starting=True),
-            RosterSlot(slot="WR", eligible_positions=[Position.WR], count=2, starting=True),
-            RosterSlot(
-                slot="WR/RB",
-                eligible_positions=[Position.WR, Position.RB],
-                count=1,
-                starting=True,
-            ),
-            RosterSlot(slot="TE", eligible_positions=[Position.TE], count=1, starting=True),
-            RosterSlot(
-                slot="BENCH",
-                eligible_positions=[Position.QB, Position.RB, Position.WR, Position.TE],
-                count=2,
-                starting=False,
-            ),
-        ],
-    )
-
-
-def _demo_context() -> SimContext:
-    """A deterministic fixture pool with a steep RB cliff (so risk/VONA params actually bite)."""
-    value, position, adp, adp_stdev, sigma = {}, {}, {}, {}, {}
-    plan = [(Position.RB, 45), (Position.WR, 55), (Position.QB, 24), (Position.TE, 24)]
-    idx = 0
-    for pos, count in plan:
-        for k in range(count):
-            pid = f"{pos.value.lower()}{k}"
-            # Steeper decay for RB → a real scarcity gradient the ScoreAgent's VONA can exploit.
-            decay = 3.2 if pos is Position.RB else 1.6
-            value[pid] = max(20.0, 260.0 - decay * idx)
-            position[pid] = pos
-            adp[pid] = float(idx + 1)
-            adp_stdev[pid] = 7.0
-            sigma[pid] = 35.0 if pos in (Position.RB, Position.WR) else 25.0
-            idx += 1
-    return SimContext(
-        value=value,
-        position=position,
-        baselines={p: 40.0 for p in Position},
-        slots=expand_starting_slots(_demo_settings()),
-        roster_size=8,
-        adp=adp,
-        adp_stdev=adp_stdev,
-        sigma=sigma,
-    )
 
 
 def _cap_pool(ctx: SimContext, cap: int) -> SimContext:
@@ -164,6 +112,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--pool-cap", type=int, default=300, help="Top-N players (--real).")
     parser.add_argument(
+        "--draws",
+        type=int,
+        default=400,
+        help="Sampled seasons per scored draft (win-probability objective).",
+    )
+    parser.add_argument(
         "--write",
         action="store_true",
         help="Persist to config/engine.json IF promoted (--real).",
@@ -172,16 +126,26 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     real = args.real and not args.smoke
-    ctx = _real_context(args.pool_cap) if real else _demo_context()
-    baseline = EngineParams()  # the frozen §10.3 defaults
-    train_opponents = [AdpNoiseAgent(), VbdOnlyAgent()]
-    heldout_opponents = [NeedBasedAgent()]  # held-out opponent — never the training mix
+    ctx = _real_context(args.pool_cap) if real else demo_sim_context()
+    # The vector the ENGINE runs, not bare EngineParams() — whose empty lambda_schedule silently
+    # made every previous E2 baseline a RISK-FREE agent, so the gate never saw the shipped lambda.
+    baseline = committed_engine_params()
+
+    # Train and held-out opponent sets stay disjoint BY TYPE, and both are now stochastic.
+    # AdpNoiseAgent moves to the held-out side so `--eval-seeds` varies the draft and the ADP-based
+    # survival model is scored against ADP-following opponents it was never tuned against; the
+    # training mix keeps a stochastic member (SoftmaxVbdAgent) so it does not collapse to a single
+    # deterministic archetype.
+    train_opponents = [VbdOnlyAgent(), SoftmaxVbdAgent()]
+    heldout_opponents = [NeedBasedAgent(), AdpNoiseAgent()]
     train_seeds = list(range(1, args.train_seeds + 1))
     heldout_seeds = list(range(1001, 1001 + args.eval_seeds))  # disjoint from the training seeds
+    objective = WinProbabilityObjective(n_draws=args.draws)
 
     print(
         f"[E2] study: {args.trials} trials, seed {args.seed}, "
-        f"{len(train_seeds)}x train / {len(heldout_seeds)}x eval seeds ...",
+        f"{len(train_seeds)}x train / {len(heldout_seeds)}x eval seeds, "
+        f"{args.draws} sampled seasons/draft ...",
         file=sys.stderr,
     )
     tuned = run_study(
@@ -190,21 +154,43 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         opponents=train_opponents,
         seeds=train_seeds,
+        base=baseline,
+        objective=objective,
     )
 
-    tuned_slots = evaluate_params(tuned, ctx, opponents=heldout_opponents, seeds=heldout_seeds)
-    base_slots = evaluate_params(baseline, ctx, opponents=heldout_opponents, seeds=heldout_seeds)
+    def _slots(params: EngineParams, obj: object | None) -> list[float]:
+        return evaluate_params(
+            params, ctx, opponents=heldout_opponents, seeds=heldout_seeds, objective=obj
+        )
+
+    # The gate runs on win probability; mean lineup value is reported alongside because it is the
+    # interpretable points-scale view AND the number every pre-Tier-4 run published.
+    tuned_slots, base_slots = _slots(tuned, objective), _slots(baseline, objective)
+    tuned_pts, base_pts = _slots(tuned, None), _slots(baseline, None)
     decision = promotion_decision(tuned_slots, base_slots)
+    points = promotion_decision(tuned_pts, base_pts)
 
     lam = [round(entry["lambda"], 3) for entry in tuned.lambda_schedule]
     rel = {k: round(v, 3) for k, v in tuned.reliability_shrinkage.items()}
+    base_lam = [round(entry["lambda"], 3) for entry in baseline.lambda_schedule]
+    print(f"[E2] baseline: kappa={baseline.kappa:.3f} alpha={baseline.alpha:.3f} lambda={base_lam}")
     print(f"[E2] tuned:    kappa={tuned.kappa:.3f} alpha={tuned.alpha:.3f} lambda={lam}")
     print(f"[E2] tuned:    reliability_shrinkage={rel}")
     print(
-        f"[E2] held-out: mean_diff={decision['mean_diff']:+.2f} pts/slot  "
-        f"min_slot_diff={decision['min_slot_diff']:+.2f}  p={decision['p_value']:.4f}"
+        f"[E2] held-out win prob:  {sum(base_slots) / len(base_slots):.4f} -> "
+        f"{sum(tuned_slots) / len(tuned_slots):.4f}   "
+        f"mean_diff={decision['mean_diff']:+.4f}  "
+        f"min_slot_diff={decision['min_slot_diff']:+.4f}  p={decision['p_value']:.4f}"
     )
-    print(f"[E2] promotion gate -> {'PROMOTE' if decision['promote'] else 'KEEP baseline'}")
+    print(
+        f"[E2] held-out points:    {sum(base_pts) / len(base_pts):.2f} -> "
+        f"{sum(tuned_pts) / len(tuned_pts):.2f}   "
+        f"mean_diff={points['mean_diff']:+.2f} pts/slot  "
+        f"min_slot_diff={points['min_slot_diff']:+.2f}  p={points['p_value']:.4f}"
+    )
+    print(
+        f"[E2] promotion gate (win prob) -> {'PROMOTE' if decision['promote'] else 'KEEP baseline'}"
+    )
 
     if decision["promote"] and real and args.write:
         _write_engine_params(args.config, tuned)

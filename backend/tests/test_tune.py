@@ -246,6 +246,30 @@ def test_sim_context_from_draft_context_maps_the_fields() -> None:
     assert sc.roster_size == sum(s.count for s in settings.roster_slots)
 
 
+def test_run_study_actually_uses_the_objective_it_is_given() -> None:
+    """`run_study`'s Optuna callback was itself named `objective`, shadowing the parameter — so the
+    study passed its own trial function down as the scorer and blew up with a TypeError the moment
+    a caller supplied a real objective. Caught only by running the CLI end to end."""
+    pytest.importorskip("optuna")
+    from jaaffl.calibrate.tune import run_study
+
+    seen: list[int] = []
+
+    def counting_objective(rosters, *, our_slot, ctx, seed):  # noqa: ANN001, ANN202
+        seen.append(our_slot)
+        return float(len(rosters[our_slot]))
+
+    run_study(
+        _small_ctx(),
+        n_trials=1,
+        seed=0,
+        opponents=[VbdOnlyAgent()],
+        seeds=[1],
+        objective=counting_objective,
+    )
+    assert sorted(set(seen)) == list(range(12))  # every slot scored, by OUR objective
+
+
 def test_smoke_study_returns_a_valid_in_range_param_vector() -> None:
     pytest.importorskip("optuna")
     from jaaffl.calibrate.tune import run_study

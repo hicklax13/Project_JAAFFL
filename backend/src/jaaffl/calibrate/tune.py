@@ -248,6 +248,7 @@ def run_tournament(
     seeds: Sequence[int],
     teams: int = 12,
     reference: str | None = None,
+    objective: SimObjective | None = None,
 ) -> dict:
     """E6 efficacy proof (design §9.3 / §3.9): evaluate each named contender across all 12 slots vs
     a common opponent field, then compare each other contender to the ``reference`` (default: the
@@ -255,7 +256,9 @@ def run_tournament(
     VBD-only and ADP-only baselines), never a vendor/literature claim. ``beats`` = the reference is
     significantly >= that baseline AND non-negative at every slot."""
     per_slot = {
-        name: evaluate_agent(agent, ctx, opponents=opponents, seeds=seeds, teams=teams)
+        name: evaluate_agent(
+            agent, ctx, opponents=opponents, seeds=seeds, teams=teams, objective=objective
+        )
         for name, agent in contenders.items()
     }
     ref = reference or next(iter(contenders))
@@ -315,15 +318,23 @@ def run_study(
     seeds: Sequence[int],
     base: EngineParams | None = None,
     teams: int = 12,
+    objective: SimObjective | None = None,
 ) -> EngineParams:
     """Optuna TPE study (``direction='maximize'``) over the canonical ranges; return the best
-    :class:`EngineParams`. Sampling stays INSIDE the §10.3 bands (do not widen)."""
+    :class:`EngineParams`. Sampling stays INSIDE the §10.3 bands (do not widen).
+
+    ``base`` should be the vector the engine actually runs (``config/engine.json``), not bare
+    ``EngineParams()`` — every field the trial does not set is carried from it, and the default's
+    empty ``lambda_schedule`` would silently seed a risk-free vector.
+    """
     import optuna
 
     base = base or EngineParams()
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-    def objective(trial: optuna.Trial) -> float:
+    # NOT named `objective` — that would shadow this function's own `objective` parameter and pass
+    # the trial callback down as the scorer.
+    def _trial(trial: optuna.Trial) -> float:
         kappa = trial.suggest_float("kappa", 0.5, 0.8)
         alpha = trial.suggest_float("alpha", 0.3, 0.5)
         lam = [
@@ -336,10 +347,12 @@ def run_study(
             "DST": trial.suggest_float("reliability_dst", 0.1, 1.0),
         }
         params = params_from_trial(kappa, alpha, lam, cap, base=base, reliability=reliability)
-        return objective_value(params, ctx, opponents=opponents, seeds=seeds, teams=teams)
+        return objective_value(
+            params, ctx, opponents=opponents, seeds=seeds, teams=teams, objective=objective
+        )
 
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed))
-    study.optimize(objective, n_trials=n_trials)
+    study.optimize(_trial, n_trials=n_trials)
     best = study.best_params
     lam = [best.get(f"lam{i}", lo) for i, (_r, (lo, _hi)) in enumerate(LAMBDA_BANDS)]
     reliability = {"K": best["reliability_k"], "DST": best["reliability_dst"]}

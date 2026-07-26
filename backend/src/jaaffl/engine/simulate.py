@@ -208,6 +208,37 @@ class AdpNoiseAgent:
         )
 
 
+class SoftmaxVbdAgent:
+    """Boltzmann-rational VBD: picks player ``p`` with probability proportional to
+    ``exp(VBD_p / temperature)`` over the top ``candidate_cap`` by VBD.
+
+    A *training* opponent, and a stochastic one. It exists because two requirements collide: the
+    held-out set must contain :class:`AdpNoiseAgent` (so ``--eval-seeds`` varies the DRAFT and the
+    ADP-based survival model is tested against opponents that follow ADP), while train and held-out
+    opponent sets must stay disjoint. Both hold only if ``AdpNoiseAgent`` LEAVES the training mix —
+    and the training mix must not then collapse to the fully deterministic :class:`VbdOnlyAgent`.
+
+    Behaviourally distinct from all three existing agents: the market (ADP), the slot-filler (need),
+    and greedy VBD. This is a human who mostly takes the best player available and sometimes
+    reaches — the standard quantal-response model of a real drafter.
+    """
+
+    def __init__(self, *, temperature: float = 4.0, candidate_cap: int = 25) -> None:
+        self._temperature = temperature
+        self._cap = candidate_cap
+
+    def pick(self, available, my_roster, ctx, rng=None) -> str:
+        candidates = sorted(available, key=lambda p: _vbd(p, ctx), reverse=True)[: self._cap]
+        if rng is None:  # no rng -> deterministic argmax, matching the other agents' convention
+            return candidates[0]
+        import numpy as np
+
+        scores = np.array([_vbd(p, ctx) for p in candidates], dtype=float)
+        # Shift by the max before exponentiating: raw VBD reaches the hundreds and exp() overflows.
+        weights = np.exp((scores - scores.max()) / self._temperature)
+        return str(rng.choice(candidates, p=weights / weights.sum()))
+
+
 def _phase_lambda(params: EngineParams, round_no: int) -> float:
     """The phase-default risk λ for ``round_no`` from ``params.lambda_schedule`` (the sim uses the
     phase default; the last-startable/surplus override is a hot-path refinement)."""
@@ -221,17 +252,24 @@ def _phase_lambda(params: EngineParams, round_no: int) -> float:
 class ScoreAgent:
     """Our agent: drafts by ``Score(p) = MLV + κ·max(0, VONA) − λ(round)·σ + α·cliff`` under trial
     params (design §10.3). VONA is a tractable within-position cliff — ``MLV(p)`` minus the best
-    OTHER same-position candidate's MLV — the "take the scarce one now" proxy. Candidates are capped
-    to the top ``candidate_cap`` available by value so a full-draft rollout stays tractable.
+    OTHER same-position candidate's MLV — the "take the scarce one now" proxy.
     ``σ`` / ``cliff`` come from the context (0 for the behavioral-opponent pools that omit them).
+
+    **Candidates match the shipped agent.** ``recommend.py`` keeps the top ``params.candidate_cap``
+    available **by MLV**; this used to keep the top 50 **by raw value**, and ``evaluate_params``
+    never passed a cap — so E2 tuned a config key (``candidate_cap: 180``) that its own agent
+    ignored, over a candidate set the live engine does not use. Ranking by raw value also hid K and
+    DST completely: their μ is low but their MLV jumps the moment their dedicated slot is empty. An
+    agent that can never draft a DST silently makes ``reliability_shrinkage`` — which ``run_study``
+    tunes — unable to change a single pick.
 
     **Reliability shrinkage (§3.10 R1):** MLV is computed on ``μ`` pulled toward each position's
     replacement by ``params.reliability_shrinkage`` (K/DST are noisy → deferred), so our DECISIONS
     defer high-variance positions while the OBJECTIVE scores raw μ — a real E2 tuning lever."""
 
-    def __init__(self, params: EngineParams, *, candidate_cap: int = 50) -> None:
+    def __init__(self, params: EngineParams, *, candidate_cap: int | None = None) -> None:
         self._params = params
-        self._cap = candidate_cap
+        self._cap = params.candidate_cap if candidate_cap is None else candidate_cap
         self._eff_cache_id: int | None = None
         self._eff_cache: Mapping[str, float] = {}
 
@@ -256,13 +294,16 @@ class ScoreAgent:
         params = self._params
         value = self._effective_value(ctx)
         base = lineup_value(list(my_roster), value, ctx.position, ctx.baselines, ctx.slots)
-        candidates = sorted(available, key=lambda p: value[p], reverse=True)[: self._cap]
-        mlv = {
+        all_mlv = {
             p: marginal_lineup_value(
                 p, my_roster, value, ctx.position, ctx.baselines, ctx.slots, base_value=base
             )
-            for p in candidates
+            for p in available
         }
+        # Cap by MLV, as recommend.py does — not by raw value, which hides K/DST behind deep bench
+        # skill players whose marginal contribution to the starting nine is zero.
+        candidates = sorted(available, key=lambda p: all_mlv[p], reverse=True)[: self._cap]
+        mlv = {p: all_mlv[p] for p in candidates}
         lam = _phase_lambda(params, len(my_roster) + 1)
 
         def vona(pid: str) -> float:

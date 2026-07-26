@@ -7,6 +7,8 @@ but it lives in `engine.simulate`; tests importorskip nothing (numpy is in the b
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 import pytest
 
@@ -185,6 +187,74 @@ def test_score_agent_reliability_shrinkage_defers_a_high_variance_dst() -> None:
     )
     # DST eff = 50 + 0.1·(200−50) = 65 → MLV 15 << RB MLV 140.
     assert ScoreAgent(shrink).pick(["rb_a", "dst_a"], [], ctx) == "rb_a"
+
+
+def test_score_agent_defaults_its_candidate_cap_to_the_configured_one() -> None:
+    """E2 tunes `EngineParams`, so the simulated agent must deliberate over the same candidate
+    set the shipped `recommend()` does. `ScoreAgent` hardcoded 50 while `config/engine.json` says
+    180 and `evaluate_params` never passed one — so E2's numbers described a non-shipping agent."""
+    assert ScoreAgent(EngineParams(candidate_cap=137))._cap == 137
+    assert ScoreAgent(EngineParams(candidate_cap=137), candidate_cap=9)._cap == 9  # explicit wins
+
+
+def test_score_agent_ranks_candidates_by_mlv_so_it_can_fill_a_k_or_dst_slot() -> None:
+    """`recommend()` caps by MLV; `ScoreAgent` capped by RAW VALUE. K and DST have low raw value but
+    high MLV the moment their dedicated slot is empty, so a value-ranked cap hides them entirely —
+    the simulated agent could not draft a DST at all, which silently made `reliability_shrinkage`
+    (a parameter `run_study` tunes) unable to affect a single pick."""
+    from jaaffl.engine.optimize import expand_starting_slots
+
+    # Twelve deep WRs outrank the only DST on raw value; with a cap of 3 a value-ranked agent never
+    # sees dst_a. On MLV, dst_a (fills an empty dedicated slot) beats a fourth-best WR.
+    value = {f"wr{i}": 150.0 - i for i in range(12)} | {"dst_a": 90.0}
+    position = {pid: (Position.DST if pid == "dst_a" else Position.WR) for pid in value}
+    ctx = SimContext(
+        value=value,
+        position=position,
+        baselines=dict.fromkeys(Position, 40.0),
+        slots=expand_starting_slots(_settings()),
+        roster_size=17,
+    )
+    params = EngineParams(kappa=0.0, alpha=0.0, lambda_schedule=[], reliability_shrinkage={})
+    roster = ["wr0", "wr1", "wr2", "wr3"]  # WR slots + flex already full → another WR adds nothing
+    agent = ScoreAgent(params, candidate_cap=3)
+    assert agent.pick(sorted(value), roster, ctx) == "dst_a"
+
+
+def test_softmax_vbd_agent_is_stochastic_but_still_prefers_value() -> None:
+    """The training opponent that lets `AdpNoiseAgent` move to the HELD-OUT set while keeping the
+    two sets disjoint. It must actually consume its rng — a second deterministic opponent would
+    reproduce the `--eval-seeds`-is-inert bug on the training side."""
+    from jaaffl.engine.simulate import SoftmaxVbdAgent
+
+    ctx = _big_ctx()
+    agent = SoftmaxVbdAgent()
+    pool = ["rb0", "rb1", "rb2", "rb30", "wr40", "qb20"]
+
+    picks = {agent.pick(pool, [], ctx, np.random.default_rng(seed)) for seed in range(40)}
+    assert len(picks) > 1, "a deterministic training opponent leaves the study seed-blind"
+
+    counts: dict[str, int] = {}
+    for seed in range(400):
+        choice = agent.pick(pool, [], ctx, np.random.default_rng(seed))
+        counts[choice] = counts.get(choice, 0) + 1
+    # Near-indifferent between adjacent-ranked players (a 1-point VBD gap), but it does not reach:
+    # rb30 is 30 points of VBD worse and qb20 is 200 worse.
+    assert counts.get("rb0", 0) + counts.get("rb1", 0) + counts.get("rb2", 0) > 380
+    assert counts.get("qb20", 0) == 0
+
+    # No rng -> deterministic argmax, matching every other agent's convention.
+    assert agent.pick(pool, [], ctx) == "rb0"
+
+
+def test_softmax_vbd_agent_survives_large_vbd_without_overflow() -> None:
+    """Raw VBD reaches the hundreds; `exp(600/4)` overflows to inf and poisons the weights."""
+    from jaaffl.engine.simulate import SoftmaxVbdAgent
+
+    ctx = _big_ctx()
+    huge = dataclasses.replace(ctx, value={pid: v * 50.0 for pid, v in ctx.value.items()})
+    choice = SoftmaxVbdAgent().pick(["rb0", "rb1", "wr0"], [], huge, np.random.default_rng(0))
+    assert choice in {"rb0", "rb1", "wr0"}
 
 
 def test_simulate_draft_produces_twelve_complete_disjoint_rosters() -> None:
