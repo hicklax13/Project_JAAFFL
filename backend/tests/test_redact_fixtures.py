@@ -11,8 +11,9 @@ properties matter and pull in opposite directions:
 Property 2 is the one that broke. ``safety_net`` replaced each sensitive literal as a bare
 SUBSTRING of the serialized fixture, which is safe only while every sensitive value happens to be
 long and unusual. The owner's 2026-07-25 capture contains a real one-character team display name
-(reproduced here as "x", not the observed character), and regenerating turned ``"upcomingorder"`` into ``"upcominTeam 5order"`` and ``"state":"picking"``
-into ``"state":"pickinTeam 5"`` — corrupting the two fields the parser reads to detect the draft
+(reproduced here as "x", not the character a real drafter chose), and regenerating turned
+``"upcomingorder"`` into ``"upcominTeam 5order"`` and ``"state":"picking"`` into
+``"state":"pickinTeam 5"`` — corrupting the two fields the parser reads to detect the draft
 order and completion, in a file whose whole purpose is to be ground truth.
 """
 
