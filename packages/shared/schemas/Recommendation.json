@@ -368,6 +368,19 @@
       "description": "Total roster spots (starters + bench) per the settings.",
       "title": "Roster Size"
     },
+    "survival_basis": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "What the survival/VONA model could actually condition on: 'my_slot' when the entered draft order AND my team are both known, 'degraded_no_slot' when they are not \u2014 in which case every player is treated as surviving and VONA collapses toward 0. Stated because a degraded 0.00 is indistinguishable from a computed 0.00 on the wire.",
+      "title": "Survival Basis"
+    },
     "vona_method": {
       "anyOf": [
         {

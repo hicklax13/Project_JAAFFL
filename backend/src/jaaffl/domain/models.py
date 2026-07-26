@@ -308,6 +308,13 @@ class Recommendation(BaseModel):
         description="Which VONA estimator produced these numbers: 'analytic' | 'monte_carlo'. "
         "Stated explicitly so an opt-in ?mc=true can never be a silent no-op again.",
     )
+    survival_basis: str | None = Field(
+        default=None,
+        description="What the survival/VONA model could actually condition on: 'my_slot' when "
+        "the entered draft order AND my team are both known, 'degraded_no_slot' when they are "
+        "not — in which case every player is treated as surviving and VONA collapses toward 0. "
+        "Stated because a degraded 0.00 is indistinguishable from a computed 0.00 on the wire.",
+    )
 
     @property
     def best(self) -> RecommendedPick | None:

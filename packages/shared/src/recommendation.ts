@@ -68,5 +68,12 @@ export const RecommendationSchema = z.object({
   roster_by_position: z.record(z.number().int()).optional(),
   /** Which VONA estimator produced these numbers, so `?mc=true` can never be a silent no-op. */
   vona_method: z.string().nullable().optional(),
+  /**
+   * What the survival/VONA model could condition on: `"my_slot"` when the entered draft order
+   * AND my team are both known, `"degraded_no_slot"` when they are not — in which case every
+   * player is treated as surviving and VONA collapses toward 0. Present because a degraded
+   * `0.00` is indistinguishable from a computed `0.00` on the wire.
+   */
+  survival_basis: z.string().nullable().optional(),
 });
 export type Recommendation = z.infer<typeof RecommendationSchema>;

@@ -250,6 +250,37 @@ describe("overlay foot — roster + freshness (§6.3 anatomy #6, §6.7 auditabil
     expect(foot().textContent).not.toContain("recompute");
     handle.destroy();
   });
+
+  it("warns when VONA was computed without knowing my draft slot", () => {
+    // No CBS frame names the VIEWER's own team, so an unconfigured slot degrades survival to
+    // "everyone available" and VONA collapses to 0.00 — a number that reads as computed.
+    // The overlay must say which basis produced it, or the caveat is invisible.
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update({ ...REC, survival_basis: "degraded_no_slot" });
+    const sync = shadow().querySelector(".ov-sync")!;
+    expect(sync.textContent).toMatch(/no draft slot/i);
+    expect(sync.classList.contains("is-degraded")).toBe(true);
+    handle.destroy();
+  });
+
+  it("stays quiet when the survival model did have my slot", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update({ ...REC, survival_basis: "my_slot" });
+    const sync = shadow().querySelector(".ov-sync")!;
+    expect(sync.textContent).not.toMatch(/no draft slot/i);
+    expect(sync.classList.contains("is-degraded")).toBe(false);
+    handle.destroy();
+  });
+
+  it("says nothing about the basis when the backend did not state one", () => {
+    // A pre-Tier-3 payload must not be labelled degraded on a guess.
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update(REC);
+    const sync = shadow().querySelector(".ov-sync")!;
+    expect(sync.textContent).not.toMatch(/no draft slot/i);
+    expect(sync.classList.contains("is-degraded")).toBe(false);
+    handle.destroy();
+  });
 });
 
 describe("overlay degraded modes — manual paste + ESTIMATED (§6.6)", () => {
