@@ -45,8 +45,105 @@ class SimContext:
 
 
 def optimal_lineup_value(roster: Sequence[str], ctx: SimContext) -> float:
-    """Flex-aware optimal 9-starter value of ``roster`` (§6.C.3) — the E2/E6 objective."""
+    """Flex-aware optimal 9-starter value of ``roster`` (§6.C.3) under the deterministic ``mu``.
+
+    **Sigma-blind by construction** — it reads ``ctx.value`` and never ``ctx.sigma``. Fine as a
+    *value* measure, but disqualifying as the sole E2/E6 objective: a risk term ``lambda*sigma``
+    that moves the ranking away from ``mu`` can only ever cost points against a scorer that pays
+    out on ``mu``, so lambda could be penalised and never rewarded. :func:`win_probability` over
+    :func:`sample_season_outcomes` is the objective that can price risk; this stays available as the
+    deterministic point-value view, and E2/E6 report both side by side.
+    """
     return lineup_value(roster, ctx.value, ctx.position, ctx.baselines, ctx.slots)
+
+
+@dataclass(frozen=True)
+class SeasonOutcomes:
+    """``n_draws`` sampled seasons for a whole pool: ``draws[d, index[pid]]`` is ``pid``'s realized
+    season total in draw ``d``. Sampled ONCE for the pool and keyed by player id, so a player who
+    appears on two different rosters realizes the *same* season in both — common random numbers,
+    which is what makes the 12-slot paired comparison sensitive enough to see a param change."""
+
+    order: tuple[str, ...]
+    index: Mapping[str, int]
+    draws: np.ndarray
+
+
+def sample_season_outcomes(ctx: SimContext, *, n_draws: int, seed: int) -> SeasonOutcomes:
+    """Draw ``n_draws`` season totals per player from ``N(mu_p, sigma_p)``, reproducible from
+    ``seed``.
+
+    Outcomes are NOT clipped at zero: :func:`optimize.lineup_value` already refuses to start a
+    sub-replacement player, so a bust is benched rather than scored negative — the option value of a
+    deep bench falls out of the lineup rule instead of being imposed here. A player absent from
+    ``ctx.sigma`` draws at ``sigma = 0`` (a fixed ``mu``), so a pool with partial sigma coverage
+    stays well defined.
+    """
+    import numpy as np
+
+    order = tuple(sorted(ctx.value))
+    mu = np.array([ctx.value[pid] for pid in order], dtype=float)
+    sigma = np.array([ctx.sigma.get(pid, 0.0) for pid in order], dtype=float)
+    rng = np.random.default_rng(seed)
+    draws = mu + rng.standard_normal((n_draws, len(order))) * sigma
+    return SeasonOutcomes(order=order, index={pid: i for i, pid in enumerate(order)}, draws=draws)
+
+
+def roster_season_values(
+    roster: Sequence[str], outcomes: SeasonOutcomes, ctx: SimContext
+) -> np.ndarray:
+    """``(n_draws,)`` optimal starting-lineup value of ``roster`` under each sampled season.
+
+    The lineup is re-optimised per draw (you start whoever actually produced), so this is the
+    season-long analogue of :func:`optimal_lineup_value` — and at ``sigma = 0`` it reproduces that
+    function exactly, making the stochastic scorer a strict generalisation of the deterministic one.
+    """
+    import numpy as np
+
+    ids = [pid for pid in roster if pid in outcomes.index]
+    if not ids:
+        empty = lineup_value([], ctx.value, ctx.position, ctx.baselines, ctx.slots)
+        return np.full(outcomes.draws.shape[0], empty, dtype=float)
+    realized = outcomes.draws[:, [outcomes.index[pid] for pid in ids]]
+    return np.array(
+        [
+            lineup_value(
+                ids, dict(zip(ids, row, strict=True)), ctx.position, ctx.baselines, ctx.slots
+            )
+            for row in realized
+        ],
+        dtype=float,
+    )
+
+
+def win_probability(
+    rosters: Sequence[Sequence[str]],
+    outcomes: SeasonOutcomes,
+    ctx: SimContext,
+    *,
+    our_slot: int,
+) -> float:
+    """``P(our roster posts the highest realized starting-lineup total of the field)``.
+
+    The E2/E6 objective. Plan §3.9 names playoff/championship odds as "the true objective that
+    lambda only proxies"; being **ordinal**, this escapes the two traps that disqualify the
+    alternatives. A *mean* outcome objective rewards spread monotonically (Jensen — the lineup is
+    re-optimised after the fact); a *floor percentile* punishes it monotonically. Either fixes the
+    sign of the optimal lambda for every round, which would leave the shipped lambda SCHEDULE —
+    whose entire content is that lambda flips sign between round 1 and round 17 — exactly as
+    unmeasurable as the deterministic scorer leaves it. Only a rank objective rewards variance when
+    you trail the field and punishes it when you lead.
+
+    **Scope, honestly:** a *total-points* championship proxy. ``config/league.json`` fixes the
+    roster and scoring but specifies **no** playoff bracket or head-to-head schedule, and inventing
+    would breach its ``agent_usage_contract``; "highest season total of the 12" needs no config that
+    does not exist. Ties split evenly, so a field of clones scores exactly ``1/teams``.
+    """
+    import numpy as np
+
+    totals = np.stack([roster_season_values(roster, outcomes, ctx) for roster in rosters])
+    winners = totals == totals.max(axis=0)
+    return float(np.mean(winners[our_slot] / winners.sum(axis=0)))
 
 
 def _dedicated_demand(ctx: SimContext) -> dict[Position, int]:
