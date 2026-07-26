@@ -558,6 +558,39 @@ describe("overlay projection provenance (§5 live-data honesty)", () => {
     handle.destroy();
   });
 
+  it("marks an ECR-only pick in the TOP-5 rows, not only the best pick", () => {
+    // Tier 2 shipped the chip on the best pick and the dashboard banner only. The alternates
+    // are exactly where the owner pivots when they disagree with #1 — an unmarked rank guess
+    // sitting next to a modeled projection is the same lie one row down.
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update({
+      ...REC,
+      ranked: [
+        { ...REC.ranked[0]!, name: "Backed Best", projection_sources: ["ecr", "xep"] },
+        { ...REC.ranked[1]!, name: "Guessy Alt", projection_sources: ["ecr"] },
+      ],
+    });
+    const rows = [...shadow().querySelectorAll(".alt")];
+    expect(rows).toHaveLength(1);
+    const chip = rows[0]!.querySelector(".prov-chip");
+    expect(chip).not.toBeNull();
+    expect(chip!.textContent).toMatch(/ECR only/i);
+    handle.destroy();
+  });
+
+  it("leaves a backed alternate unmarked, so the row-level flag means something", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update({
+      ...REC,
+      ranked: [
+        { ...REC.ranked[0]!, projection_sources: ["ecr"] },
+        { ...REC.ranked[1]!, name: "Backed Alt", projection_sources: ["ecr", "xep"] },
+      ],
+    });
+    expect(shadow().querySelector(".alt .prov-chip")).toBeNull();
+    handle.destroy();
+  });
+
   it("clears the mark when the next pick IS backed", () => {
     const handle = mountOverlay({ wsFactory: noopFactory });
     handle.update(withSources("Fallback Guy", ["ecr"]));

@@ -561,6 +561,16 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
       row.appendChild(chip);
       const nm = el("span", "nm", p.name ?? p.player_id);
       if (p.nfl_team) nm.appendChild(el("small", undefined, ` ${p.nfl_team}`));
+      // The alternates are exactly where the owner pivots when they disagree with #1, so an
+      // unbacked projection has to be marked here too — not only on the best pick.
+      // Same rule as the best pick: unknown provenance renders nothing, because "we don't
+      // know" and "we checked and it's degraded" are different claims.
+      const altProv = projectionProvenance(p.projection_sources);
+      if (altProv && !altProv.modeled) {
+        const altChip = el("span", "prov-chip", altProv.label);
+        altChip.title = altProv.detail;
+        nm.append(" ", altChip);
+      }
       row.appendChild(nm);
       const rt = p.next_turn_availability != null
         ? `${p.score.toFixed(1)} · ${formatPct(p.next_turn_availability)}`

@@ -24,10 +24,27 @@ of each build phase on purpose — nothing here blocks the automated build unles
 > real drafters' ids/team names.** Git-ignored; keep them local. Committed fixtures are redacted via
 > `scripts/redact_cbs_fixtures.py`.
 >
-> **Still open from this session:** live end-to-end resolution has **not** been exercised against a
-> real draft — the pieces are individually tested but have never run together on live frames. Tier 2
-> did not change this: it made the overlay tell the truth about the data it is given, which is a
-> different thing from proving the pipeline works on real CBS frames. That is **Tier 3**. Also still
+> **Tier 3 closed the replay gap (2026-07-25).** A complete captured 12×14 draft now runs the whole
+> pipeline end to end — raw frames → `parse.ts` → fold → resolve → `recommend()` — and asserts on
+> the rendered pick. It found four real defects (see `ROADMAP.md`), including one that mattered on
+> draft night: the overlay's VONA was structurally **0.00** because nothing supplied your draft slot
+> to the push path.
+>
+> ### ⚠️ ONE THING TO DO BEFORE DRAFT NIGHT: set `JAAFFL_MY_TEAM_ID`
+>
+> Put your CBS team slot (`"1"`–`"12"`, as CBS numbers the teams in the room) in `.env`. No CBS frame
+> names *your own* team, so the app cannot work it out from the live feed. Without it the engine
+> cannot tell when your next pick is, survival degrades to "everyone is still available", and every
+> recommendation reads `vona 0.00` — the scarcity half of the model is off. It still ranks on
+> Marginal Lineup Value and it now says so (the overlay foot shows `VONA degraded · no draft slot
+> set`), but you want the real number. One line:
+>
+> ```
+> JAAFFL_MY_TEAM_ID=7
+> ```
+>
+> **Still open:** a **replay is not a live draft.** The pipeline has run end to end on real captured
+> frames; it has still never run against a LIVE CBS room that is actually ticking. Also still
 > `TODO(capture)`: the **settings-page** parse and `CbsPageSnapshot` projections/injuries/rankings
 > (§4 below), which need a *settings/board* page capture rather than draft-room frames.
 >
@@ -133,6 +150,26 @@ Neither blocks anything; both are judgement calls rather than bugs.
   (2027) figures as the trigger. Nothing on the contract flags a forward-year projection today, so
   the badge is driven by the trigger we can actually detect: a manually-pasted or non-live board.
   Same badge, same treatment — say the word if you want a forward-year flag plumbed through too.
+  **Tier 3 re-checked this and left it deliberately:** projections are built with
+  `xep_season = season − 1` (nflreadpy *raises* for the current season — xEP is retrospective), so
+  there is **no forward-year figure anywhere in the system** for the trigger to fire on. Plumbing
+  the flag now would add a contract field that is always false. It becomes real work the day a
+  forward-year vendor feed is licensed.
+
+- **`Why?` is still local, not the Responses API.** §6.8 wants the explanation rendered through
+  `assistant/tools.py::explain_recommendation` over OpenAI. Your `OPENAI_API_KEY` now exists, so
+  this is unblocked — but Tier 3 did not take it, on purpose. `Why?` sits on the one surface that
+  must not stall mid-draft, and routing it through a network call adds a latency budget, a failure
+  mode, and a per-click cost to a panel that currently renders instantly and works with the backend
+  down. It deserves its own design (streaming? cached? pre-warmed at the pick?), not a bolt-on.
+  Say the word and it gets one. This remains the last key-gated piece in Stage 7.
+
+- **MC-VONA has no wall-clock CI gate, on purpose.** At the shipped `mc_rollouts = 2000` the local
+  p95 is 1.14 s against a 2 s budget — ~43% headroom, which a slower CI runner would eat. A gate
+  there would either flake or be loosened until it meant nothing. CI instead asserts the invariant
+  that actually protects draft night: **MC cannot reach the `/recs/ws` push path at all**
+  (`test_mc_off_hot_path.py`, verified by mutation — the guard was confirmed to fail when the push
+  path is made to request MC). The timing number stays a local measurement.
 
 ## 4. Stage 6 (UI) — live data + deferred panels
 
