@@ -67,14 +67,48 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 >   xEP-backed ones. Now on `RecommendedPick.projection_sources`, with one shared rule
 >   (`packages/shared/src/provenance.ts`) so overlay and dashboard cannot drift.
 >
-> **What Tier 2 did NOT do** (scoped honestly): the end-to-end path has **still never run against
-> live CBS frames** — every piece is individually tested and they have never run together on real
-> frames (Tier 3). `ESTIMATED` is driven by a degraded *board*, not by the forward-year trigger
-> §6.6 names, because no forward-year flag exists on the contract yet. `Why?` is local prose-free
-> decomposition, **not** wired to the Responses API (§6.8) — that stays key-gated. Provenance
-> renders on the best pick and the dashboard banner, **not** on the top-5 rows. And MC-VONA has no
-> CI latency gate at 2000 rollouts: local margin to the 2 s budget is ~43%, which a slower runner
-> would eat, so `mc_rollouts` is pinned as a working budget knob instead.
+> **Tier 3 of the audit is merged** (PRs #39–#44) — *draft-night readiness*. Every piece was
+> individually tested and none had ever run together on real frames. A complete captured 12×14
+> draft now replays end to end — raw NUL-terminated frames → `parse.ts` → `handle_event` →
+> `fold_state` → `resolve_pick_ids` → `recommend()` — asserting on the **rendered pick**, not on
+> health signals. It found four real defects, none of which any unit test could see:
+>
+> - **The overlay's VONA was structurally 0.00 on draft night.** No CBS frame names the *viewer's*
+>   own team, so `parse.ts` cannot emit `my_team_id`; `opponents._my_overall_picks` then raises and
+>   survival degrades to "everyone is available". `GET /recommendation?team_id=` supplies the slot —
+>   the `/recs/ws` **push** path that actually feeds the overlay did not. Measured on the real
+>   capture at pick 25: with the slot, best pick `mlv 83.00 − E[best avail next] 64.91 = vona 18.09`;
+>   without it, `E[best available next]` collapses onto the pick's own MLV and vona is exactly 0.00.
+>   Fixed via `JAAFFL_MY_TEAM_ID` **and** a new `Recommendation.survival_basis`, because a degraded
+>   0.00 is indistinguishable from a computed one on the wire.
+> - **Nothing consumed the `subscribe` snapshot.** Not hypothetical: the owner's 2026-07-25 session
+>   began recording mid-draft, so its deltas cover overalls **4–168** and picks 1–3 exist only in
+>   that snapshot. Replaying deltas alone left three drafted players unmasked and recommendable.
+> - **The manual-paste regex split on hyphenated surnames.** `9. 9 - Jaxon Smith-Njigba, WR, SEA`
+>   parsed to `team_id "9 - Jaxon Smith"` / `player_name "Njigba"` — a pick that resolves to nobody
+>   and is offered again. The code carried a *reasoned comment* defending the greedy match; real NFL
+>   rosters falsify it. The separator is space-surrounded; a surname hyphen is not.
+> - **The fixture redactor corrupted its own goldens.** A real one-character team display name in the
+>   new capture made `safety_net`'s substring pass rewrite every occurrence of that letter:
+>   `"upcomingorder"` → `"upcominTeam 5order"`, `"state":"picking"` → `"pickinTeam 5"` — the two
+>   fields the parser reads for draft order and completion.
+>
+> Also closed from Tier 2's leftovers: projection provenance now marks the **top-5 rows**, not only
+> the best pick and the dashboard banner; and MC-VONA is held off the push path by a
+> **structural** (mutation-verified) guard rather than a flaky wall-clock gate.
+>
+> **What Tier 3 did NOT do** (scoped honestly): a **replay is not a live draft.** The pipeline has
+> now run end to end on real captured frames, but it has still never run against a LIVE CBS room —
+> no draft-night rehearsal against a room that is actually ticking. `ESTIMATED` is still driven by a
+> degraded *board*, not the forward-year trigger §6.6 names: `xep_season = season − 1` is
+> retrospective, so **no forward-year figure exists to flag** — the trigger would have nothing to
+> fire on. `Why?` remains a local decomposition, **not** wired to the Responses API (§6.8); an
+> `OPENAI_API_KEY` now exists, but that path adds a network call, a cost, and a latency budget to the
+> one surface that must not stall mid-draft, so it wants its own design rather than a Tier-3
+> bolt-on. MC-VONA still has **no wall-clock CI gate** at 2000 rollouts — local margin to the 2 s
+> budget is ~43%, which a slower runner would eat, so the timing stays a local measurement and CI
+> asserts the invariant that actually protects the budget: MC cannot reach the push path at all.
+> The **settings-page** parse and `CbsPageSnapshot` remain capture-blocked.
 >
 > The `feat/post-v1-unblocked` branch adds, all TDD'd + verified: the **`GET /state` board +
 > pick-log** endpoint and its **dashboard panels**; the **Stage 7 assistant key-free core**
