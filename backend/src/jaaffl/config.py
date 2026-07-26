@@ -113,6 +113,17 @@ class Settings(BaseSettings):
     # GET /league/{id} serves the immutable constitution for THIS id (or any id that already has a
     # CBS snapshot or folded draft events); every other id is 404.
     jaaffl_league_id: str = "cbs-local"
+    # MY draft slot, as CBS numbers the teams in the room ("1".."12").
+    #
+    # No CBS frame names the VIEWER's own team, so parse.ts cannot emit it and the folded
+    # DraftState never carries one. Without it, opponents._my_overall_picks raises, survival
+    # degrades to "everyone available", and VONA collapses to 0.00 on the best pick.
+    # GET /recommendation?team_id= supplies it for a manual call; the /recs/ws PUSH path that
+    # actually feeds the overlay has no query string, so it reads this instead. Leave unset and
+    # the engine still ranks (on MLV) but reports survival_basis="degraded_no_slot" — degraded
+    # loudly rather than silently. The owner knows their slot: config/league.json records that
+    # the order is decided in person and entered into CBS.
+    jaaffl_my_team_id: str | None = None
     # Stage-3 ID crosswalk (data/crosswalk.py) Stage-B fuzzy fallback acceptance threshold τ:
     # a name-similarity score (0–1, rapidfuzz/100) at/above this — with exact position + team
     # (team-agnostic for FAs) — is accepted as a 'fuzzy' match; below it stays unresolved for

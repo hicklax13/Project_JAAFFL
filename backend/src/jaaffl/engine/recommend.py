@@ -248,13 +248,20 @@ def recommend(
     shift = board_adp_shift(run_pressure, context.position, beta=params.board_survival_weight)
     horizon = max(1, int(params.vona_horizon_picks))
 
+    # Whether survival could condition on MY slot at all. A degraded model still ranks (on
+    # MLV), but it reports vona 0.00 on the best pick — indistinguishable on the wire from a
+    # computed 0.00 unless the basis rides along. See Recommendation.survival_basis.
+    survival_basis = "my_slot"
+
     def _survival(h: int) -> dict[str, float]:
+        nonlocal survival_basis
         try:
             taken = pick_probabilities(
                 state, settings, available_adp, context.adp_sd, horizon=h, adp_shift=shift
             )
         except ValueError:
             taken = {}  # no draft_order / my_team_id (e.g. pre-draft) → treat everyone as available
+            survival_basis = "degraded_no_slot"
         return {pid: 1.0 - taken.get(pid, 0.0) for pid in available}
 
     survival_display = _survival(1)
@@ -411,6 +418,7 @@ def recommend(
         roster_size=roster_size or None,
         roster_by_position={pos.value: n for pos, n in roster_by_position.items()},
         vona_method=vona_method,
+        survival_basis=survival_basis,
         # Measured LAST so it covers the whole recompute — this is the <200ms budget (§6.7)
         # made auditable on the surface rather than asserted only in a test.
         recompute_ms=(time.perf_counter() - started) * 1000.0,

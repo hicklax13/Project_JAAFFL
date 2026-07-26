@@ -106,6 +106,9 @@ const OVERLAY_CSS = `
 /* An overdue push is amber in the foot too, so freshness reads the same from the status pill
    and from the sync line. Never colour-alone — the age in seconds carries the same fact. */
 .ov-sync.is-stale { color: var(--warning); }
+/* Survival ran without knowing my draft slot, so VONA is 0.00 by degradation rather than by
+   computation. Amber + a bordered treatment, but the WORDS carry the fact (§6.7 CVD). */
+.ov-sync.is-degraded { color: var(--warning); font-weight: 700; }
 /* §6.6 — sits directly under the brass score it qualifies, so the caveat travels with the number. */
 /* Degraded-projection marker: word + border, never colour alone (§6.7 CVD). */
 .prov-chip { display: inline-block; font-size: var(--fs-xxs); font-weight: 700; letter-spacing: .04em;
@@ -379,6 +382,9 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
   let currentBest: RecommendedPick | null = null;
   let receivedAt: number | null = null; // CLIENT-side receipt clock — see renderSync()
   let recomputeMs: number | null = null;
+  /** Which survival model produced this rec's VONA (Recommendation.survival_basis).
+   * null = the backend said nothing, which is NOT the same as saying it was degraded. */
+  let survivalBasis: string | null = null;
   let socketState: OverlaySyncState = "waiting";
   let whyOpen = false;
   let lastReasoning: string | null = null;
@@ -403,8 +409,16 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
     const ageMs = Date.now() - receivedAt;
     const parts = [`synced ${(ageMs / 1000).toFixed(1)}s ago`];
     if (recomputeMs !== null) parts.push(`recompute ${Math.round(recomputeMs)}ms`);
+    // No CBS frame names the viewer's own team, so without a configured slot the engine
+    // cannot work out when my next pick is: survival degrades to "everyone available" and
+    // VONA collapses to 0.00. That zero is indistinguishable from a computed zero unless it
+    // is labelled here. Only ever shown when the backend actually SAID so — an older payload
+    // that omits survival_basis is not accused of being degraded.
+    const degraded = survivalBasis === "degraded_no_slot";
+    if (degraded) parts.push("VONA degraded · no draft slot set");
     footSync.textContent = parts.join(" · ");
     footSync.classList.toggle("is-stale", ageMs >= STALE_AFTER_MS);
+    footSync.classList.toggle("is-degraded", degraded);
   }
 
   // Repaint on a timer, not only on push: without this the age would freeze at "0.0s ago" the
@@ -500,6 +514,7 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
     lastReasoning = rec.reasoning ?? null;
     receivedAt = Date.now();
     recomputeMs = rec.recompute_ms ?? null;
+    survivalBasis = rec.survival_basis ?? null;
     renderRoster(rec);
     renderSync();
     const name = best.name ?? best.player_id;

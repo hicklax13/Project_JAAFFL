@@ -143,9 +143,14 @@ def create_app(
         per league for the draft-complete recommendations.jsonl export."""
         if result.seq is None or event.event_type not in _STATE_ADVANCING:
             return
-        recommendation = app.state.rec_engine.recommend(
-            _resolve_state(result.state, event.league_id)
-        )
+        state = _resolve_state(result.state, event.league_id)
+        # The overlay never sends a query string — it just receives pushes — so the draft slot
+        # has to come from config here. Without it survival degrades to "everyone available"
+        # and the pushed recommendation carries vona 0.00 on its best pick while looking
+        # perfectly healthy (the recommendation says so via survival_basis either way).
+        if state.my_team_id is None and settings.jaaffl_my_team_id:
+            state = state.model_copy(update={"my_team_id": settings.jaaffl_my_team_id})
+        recommendation = app.state.rec_engine.recommend(state)
         if recommendation is not None:
             app.state.recs_hub.publish(recommendation)
             app.state.rec_history.setdefault(event.league_id, []).append(recommendation)
