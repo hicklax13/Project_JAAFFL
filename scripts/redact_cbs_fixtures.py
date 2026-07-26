@@ -26,6 +26,21 @@ them as-is. Selection covers the real CBS frame vocabulary:
   - heartbeat.json                  -- the bare-numeric, NON-JSON heartbeat frame
   - pick-request.json               -- an outbound (ws-send) pick/request
 
+TIER 3 also emits multi-frame REPLAY corpora (JSONL, one envelope per line) so the pipeline
+can be driven end to end on real data instead of one hand-picked frame at a time:
+
+  - full-draft.deltas.jsonl         -- every picks/completed frame of a capture whose deltas
+                                        alone cover the WHOLE draft (168/168 picks)
+  - late-join.deltas.jsonl          -- the deltas of a capture whose recording began
+                                        mid-draft, so picks 1..3 are MISSING from them
+  - late-join.snapshot.json         -- that capture's own mid-draft subscribe/response, the
+                                        only place those missing picks exist
+  - subscribe-complete.json         -- an UNTRUNCATED subscribe/response carrying a full
+                                        12-team board (168 roster entries), the resync source
+
+Selection is rule-based (delta coverage vs. draft geometry), never hardcoded to a capture's
+filename, so a future re-capture regenerates the same categories.
+
 Redaction (consistent across every emitted fixture -- the same raw value always maps to
 the same replacement, so cross-references between files still line up):
   - ownerid-shaped values (bare ``ownerid`` fields, ``auth.id``, the sibling ``id`` next to
@@ -205,16 +220,68 @@ def redact(node: Any, owner_map: dict[str, str], name_map: dict[str, str]) -> An
     return node
 
 
+# Below this length a sensitive literal cannot be substring-replaced in serialized JSON
+# without risking the frame's own vocabulary. The owner's 2026-07-25 capture contains a real
+# ONE-CHARACTER team display name; blind replacement turned "upcomingorder" into
+# "upcominTeam 5order" and "state":"picking" into "state":"pickinTeam 5" -- corrupting the two
+# fields parse.ts reads for draft order and completion. Opaque ownerid tokens (observed 7-12
+# chars, high entropy) sit above this and cannot collide; human-chosen display names can be any
+# length, so they are scrubbed by VALUE (below) rather than by substring.
+MIN_SUBSTRING_TOKEN_LEN = 6
+
+
+def scrub_values(node: Any, sensitive: dict[str, str]) -> Any:
+    """Whole-VALUE net: replace a string that IS a sensitive value, or a comma-separated token
+    that is one. Runs over the parsed frame, so it can never rewrite a JSON key or a substring
+    of unrelated protocol text -- unlike `safety_net`, which is why short tokens are routed here.
+
+    This is still a real net, not a no-op: it catches a sensitive value sitting at a key path
+    `redact()` doesn't know about (a novel field, or a bare list of names)."""
+    if isinstance(node, dict):
+        return {key: scrub_values(value, sensitive) for key, value in node.items()}
+    if isinstance(node, list):
+        return [scrub_values(item, sensitive) for item in node]
+    if isinstance(node, str):
+        if node in sensitive:
+            return sensitive[node]
+        if "," in node:
+            tokens = node.split(",")
+            if any(tok.strip() in sensitive for tok in tokens):
+                return ",".join(sensitive.get(tok.strip(), tok) for tok in tokens)
+    return node
+
+
 def safety_net(text: str, owner_map: dict[str, str], name_map: dict[str, str]) -> str:
-    """Defense-in-depth: string-replace any leftover literal occurrence of a known
-    sensitive value in the SERIALIZED fixture text, longest-first (avoids partial-token
-    collisions), then scrub anything email-shaped. Should be a no-op after `redact()` --
-    kept as a net for whatever the structural pass didn't anticipate."""
-    for raw, replacement in sorted(owner_map.items(), key=lambda kv: -len(kv[0])):
-        text = text.replace(raw, replacement)
-    for raw, replacement in sorted(name_map.items(), key=lambda kv: -len(kv[0])):
-        text = text.replace(raw, replacement)
+    """Defense-in-depth over the SERIALIZED fixture text, for a sensitive value embedded inside
+    a longer string (e.g. "session for <ownerid> started") that `scrub_values` can't match as a
+    whole value. Only tokens at least MIN_SUBSTRING_TOKEN_LEN long are eligible -- see that
+    constant for the corruption a shorter one causes. Emails are matched by a structural regex,
+    so they are always safe to replace in place."""
+    candidates = {**owner_map, **name_map}
+    for raw, replacement in sorted(candidates.items(), key=lambda kv: -len(kv[0])):
+        if len(raw) >= MIN_SUBSTRING_TOKEN_LEN:
+            text = text.replace(raw, replacement)
     return EMAIL_RE.sub("[redacted-email]", text)
+
+
+def leaked_values(text: str, owner_map: dict[str, str], name_map: dict[str, str]) -> list[str]:
+    """Sensitive literals still present in a serialized fixture, using the SAME matching
+    semantics the scrubbers use -- a short token counts as leaked only when it appears as a whole
+    JSON string value (or comma token), not merely as a letter inside another word."""
+    leaks: list[str] = []
+    for raw in list(owner_map) + list(name_map):
+        if not raw:
+            continue
+        if len(raw) >= MIN_SUBSTRING_TOKEN_LEN:
+            if raw in text:
+                leaks.append(raw)
+            continue
+        # Short token: only a whole-value (or comma-token) occurrence is a real leak.
+        if re.search(rf'(?<=")({re.escape(raw)})(?=")', text) or re.search(
+            rf'(?<=[",]){re.escape(raw)}(?=[",])', text
+        ):
+            leaks.append(raw)
+    return leaks
 
 
 def truncate_fullstate(frame: dict, max_teams: int, max_players: int, max_results: int) -> None:
@@ -248,6 +315,132 @@ def truncate_fullstate(frame: dict, max_teams: int, max_players: int, max_result
 # --------------------------------------------------------------------------------------- #
 
 Selected = dict[str, tuple[Path, int, dict, bool]]  # name -> (file, lineno, envelope, truncate)
+
+# name -> (source file, [(lineno, envelope), ...]) -- a whole ordered frame SEQUENCE, emitted
+# as JSONL (one recorder envelope per line) rather than a single-frame *.json fixture.
+SelectedSeq = dict[str, tuple[Path, list[tuple[int, dict]]]]
+
+
+def pick_overalls(frame: dict) -> dict[int, str]:
+    """overall -> playerid for one picks/completed frame.
+
+    ``newstate.opick`` is FORWARD-LOOKING (the pick now on the clock) and ``payload.picks``
+    is BATCHED, so the overall of entry *i* is ``opick - len(picks) + i`` -- verified here
+    against CBS's own ``fullstatedelta.results`` for every pick of two complete drafts
+    (168/168 and 165/165, zero mismatches). See docs/research/cbs-draft-protocol.md section 3.
+    """
+    payload = frame.get("payload") or {}
+    picks = payload.get("picks") or []
+    newstate = payload.get("newstate") or {}
+    try:
+        nxt = int(newstate["opick"])
+    except (KeyError, TypeError, ValueError):
+        return {}
+    return {nxt - len(picks) + i: str(p.get("playerid")) for i, p in enumerate(picks)}
+
+
+class CaptureShape:
+    """What one raw capture file actually contains, so replay selection can be rule-based."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.pick_frames: list[tuple[int, dict]] = []  # (lineno, envelope), capture order
+        self.overalls: dict[int, str] = {}
+        self.rounds: int | None = None
+        self.team_count: int | None = None
+        # (lineno, envelope, board_size, is_midbraft) for each subscribe/response
+        self.snapshots: list[tuple[int, dict, int, bool]] = []
+
+    @property
+    def expected_picks(self) -> int | None:
+        if self.rounds is None or self.team_count is None:
+            return None
+        return self.rounds * self.team_count
+
+    @property
+    def is_complete_delta_stream(self) -> bool:
+        """Every pick of the draft present in the DELTAS alone (no snapshot needed)."""
+        total = self.expected_picks
+        return bool(total) and set(self.overalls) == set(range(1, total + 1))
+
+
+def analyze_captures(raw_files: list[Path]) -> list[CaptureShape]:
+    """One CaptureShape per raw file: pick frames, pick coverage, geometry, snapshots."""
+    shapes: dict[Path, CaptureShape] = {f: CaptureShape(f) for f in sorted(raw_files)}
+    for f, lineno, envelope, frame in iter_ws_frames(raw_files):
+        if frame is None:
+            continue
+        shape = shapes[f]
+        ftype, fsub = frame_kind(frame)
+        payload = frame.get("payload") or {}
+        newstate = payload.get("newstate") or {}
+        if isinstance(newstate.get("rounds"), int):
+            shape.rounds = newstate["rounds"]
+        order = (payload.get("fullstatedelta") or {}).get("order")
+        if isinstance(order, str) and order.strip():
+            shape.team_count = len([t for t in order.split(",") if t.strip()])
+        if ftype == "picks" and fsub == "completed" and envelope["kind"] == "ws-message":
+            shape.pick_frames.append((lineno, envelope))
+            shape.overalls.update(pick_overalls(frame))
+        elif ftype == "subscribe" and fsub == "response":
+            teams = (payload.get("fullstate") or {}).get("teams") or {}
+            board = sum(len((t or {}).get("players") or {}) for t in teams.values())
+            midbraft = newstate.get("state") not in (None, "completed")
+            shape.snapshots.append((lineno, envelope, board, midbraft))
+            if isinstance((payload.get("fullstate") or {}).get("order"), str):
+                fs_order = payload["fullstate"]["order"]
+                if fs_order.strip():
+                    shape.team_count = len([t for t in fs_order.split(",") if t.strip()])
+    return list(shapes.values())
+
+
+def select_replay_sequences(shapes: list[CaptureShape]) -> tuple[SelectedSeq, Selected]:
+    """Choose the multi-frame replay fixtures (TIER 3).
+
+    Rule-based, never hardcoded to a capture's filename, so a re-capture regenerates:
+
+    * ``full-draft.deltas.jsonl`` -- the delta stream of a capture whose picks/completed
+      frames alone cover EVERY pick of the draft. This is the Task-1 replay corpus.
+    * ``late-join.deltas.jsonl`` + ``late-join.snapshot.json`` -- a capture whose recording
+      began mid-draft, so its deltas have a HOLE at the front that only the subscribe
+      snapshot can fill. This is the Task-2 resync corpus, and it is a real observed
+      scenario, not a constructed one.
+    * ``subscribe-complete.json`` -- an UNTRUNCATED subscribe/response carrying a full
+      board (every team's roster), the late-join-at-any-point resync source.
+    """
+    sequences: SelectedSeq = {}
+    singles: Selected = {}
+
+    complete = [s for s in shapes if s.is_complete_delta_stream]
+    if complete:
+        best = max(complete, key=lambda s: len(s.pick_frames))
+        sequences["full-draft.deltas.jsonl"] = (best.path, best.pick_frames)
+
+    # A late-join capture: has deltas, has a mid-draft snapshot, and the deltas alone are
+    # missing picks that the snapshot supplies.
+    for shape in shapes:
+        if not shape.pick_frames or shape.is_complete_delta_stream:
+            continue
+        midbraft = [s for s in shape.snapshots if s[3] and s[2] > 0]
+        if not midbraft:
+            continue
+        lineno, envelope, _board, _mid = midbraft[0]
+        sequences["late-join.deltas.jsonl"] = (shape.path, shape.pick_frames)
+        singles["late-join.snapshot.json"] = (shape.path, lineno, envelope, False)
+        break
+
+    # The fullest board any snapshot carries, kept verbatim (no truncation) -- Task 2 folds
+    # it into a complete DraftState with no deltas at all.
+    fullest: tuple[Path, int, dict, int] | None = None
+    for shape in shapes:
+        for lineno, envelope, board, _mid in shape.snapshots:
+            if fullest is None or board > fullest[3]:
+                fullest = (shape.path, lineno, envelope, board)
+    if fullest and fullest[3] > 0:
+        path, lineno, envelope, _board = fullest
+        singles["subscribe-complete.json"] = (path, lineno, envelope, False)
+
+    return sequences, singles
 
 
 def select_fixtures(raw_files: list[Path]) -> Selected:
@@ -337,6 +530,7 @@ def build_fixture(
     if stripped.startswith("{"):
         frame = json.loads(stripped)
         frame = redact(frame, owner_map, name_map)
+        frame = scrub_values(frame, {**owner_map, **name_map})
         if truncate:
             truncate_fullstate(frame, max_teams, max_players, max_results)
         new_body = json.dumps(frame, separators=(",", ":"), ensure_ascii=False)
@@ -370,11 +564,36 @@ def verify_fixture(path: Path, owner_map: dict[str, str], name_map: dict[str, st
             json.loads(stripped)
         except json.JSONDecodeError as exc:
             problems.append(f"{path.name}: payload.body does not round-trip after NUL-strip: {exc}")
-    for raw in list(owner_map) + list(name_map):
-        if raw and raw in text:
-            problems.append(f"{path.name}: leftover literal sensitive value {raw!r}")
+    for raw in leaked_values(text, owner_map, name_map):
+        problems.append(f"{path.name}: leftover literal sensitive value {raw!r}")
     if EMAIL_RE.search(re.sub(r"\[redacted-email]", "", text)):
         problems.append(f"{path.name}: leftover email-shaped string")
+    return problems
+
+
+def verify_sequence(path: Path, owner_map: dict[str, str], name_map: dict[str, str]) -> list[str]:
+    """Round-trip + leak check on a JSONL replay sequence: every line must be one envelope
+    whose NUL-stripped body still parses, and no line may leak a sensitive literal."""
+    problems: list[str] = []
+    for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            envelope = json.loads(line)
+        except json.JSONDecodeError as exc:
+            problems.append(f"{path.name}:{lineno}: line is not valid JSON: {exc}")
+            continue
+        body = envelope.get("payload", {}).get("body", "")
+        stripped = body.rstrip("\x00").strip()
+        if stripped.startswith("{"):
+            try:
+                json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                problems.append(f"{path.name}:{lineno}: body does not round-trip: {exc}")
+        for raw in leaked_values(line, owner_map, name_map):
+            problems.append(f"{path.name}:{lineno}: leftover literal sensitive value {raw!r}")
+        if EMAIL_RE.search(re.sub(r"\[redacted-email]", "", line)):
+            problems.append(f"{path.name}:{lineno}: leftover email-shaped string")
     return problems
 
 
@@ -414,6 +633,18 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     selected = select_fixtures(raw_files)
+    shapes = analyze_captures(raw_files)
+    sequences, seq_singles = select_replay_sequences(shapes)
+    selected.update(seq_singles)
+    for shape in shapes:
+        if shape.pick_frames:
+            print(
+                f"[redact] {shape.path.name}: {len(shape.pick_frames)} pick frame(s), "
+                f"{len(shape.overalls)} pick(s) in deltas, geometry "
+                f"{shape.team_count}x{shape.rounds}, "
+                f"complete={shape.is_complete_delta_stream}",
+                file=sys.stderr,
+            )
     if not selected:
         print(
             "[redact] no fixture-worthy frames found -- capture shape may have changed",
@@ -422,7 +653,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    stale = [p for p in args.out_dir.glob("*.json") if p.name not in selected]
+    # full-draft.events.json is GENERATED by apps/extension/tests/replay.test.ts (parse.ts's
+    # own output, drift-guarded there) -- not a redaction product, so never treat it as stale.
+    generated = {"full-draft.events.json"}
+    stale = [
+        p for p in args.out_dir.glob("*.json") if p.name not in selected and p.name not in generated
+    ]
+    stale += [p for p in args.out_dir.glob("*.jsonl") if p.name not in sequences]
     for p in stale:
         print(f"[redact] removing stale fixture from a prior run: {p.name}", file=sys.stderr)
         p.unlink()
@@ -446,9 +683,32 @@ def main(argv: list[str] | None = None) -> int:
         size = out_path.stat().st_size
         print(f"[redact] wrote {name:<34} <- {src_file.name}:{src_line}  ({size} bytes)")
 
+    written_seq: list[Path] = []
+    for name, (src_file, frames) in sorted(sequences.items()):
+        out_path = args.out_dir / name
+        with out_path.open("w", encoding="utf-8", newline="\n") as fh:
+            for _lineno, envelope in frames:
+                fixture = build_fixture(
+                    envelope,
+                    owner_map,
+                    name_map,
+                    False,
+                    args.max_teams,
+                    args.max_players_per_team,
+                    args.max_results,
+                )
+                fh.write(json.dumps(fixture, separators=(",", ":"), ensure_ascii=False))
+                fh.write("\n")
+        written_seq.append(out_path)
+        size = out_path.stat().st_size
+        print(f"[redact] wrote {name:<34} <- {src_file.name}  ({len(frames)} frames, {size} bytes)")
+
     problems: list[str] = []
     for path in written:
         problems.extend(verify_fixture(path, owner_map, name_map))
+    for path in written_seq:
+        problems.extend(verify_sequence(path, owner_map, name_map))
+    written += written_seq
     if problems:
         print("[redact] SELF-VERIFY FAILED:", file=sys.stderr)
         for p in problems:
