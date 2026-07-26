@@ -116,10 +116,54 @@ def lookup(db: Path, ids: set[str]) -> dict[str, dict]:
     }
 
 
+def write_manual_paste(players: dict[str, dict], picks: int) -> int:
+    """Write a manual-paste results block for the FIRST ``picks`` picks of the real draft.
+
+    The draft-day fallback is a textarea the owner pastes CBS's copied results into. The
+    2026-07-25 session captured draft-room SOCKET frames, not a clipboard payload, so CBS's
+    own export layout has no golden — the format here is the one ``parse.ts::parsePastedResults``
+    documents. What IS real is the content: the players, teams and pick numbers of a genuine
+    captured draft, so the paste path can be compared against the live path pick for pick.
+
+    A pick whose CBS id the crosswalk cannot link (K/DST) is skipped rather than invented,
+    which is why this stops at the first two rounds — they are all skill positions there.
+    """
+    events_path = FIXTURE_DIR / EVENT_FILES[0]
+    if not events_path.exists():
+        return 0
+    events = json.loads(events_path.read_text(encoding="utf-8"))
+    lines = ["ORDER: " + ", ".join(str(i) for i in range(1, 13))]
+    written = 0
+    for event in events:
+        if event.get("event_type") != "pick_made":
+            continue
+        overall = event.get("pick_number")
+        if overall is None or overall > picks:
+            continue
+        info = players.get(str((event.get("data") or {}).get("cbs_player_id")))
+        if not info:
+            continue  # unlinked (K/DST) -- never fabricate a name
+        data = event["data"]
+        lines.append(
+            f"{overall}. {data['team_id']} - {info['name']}, {info['position']}, {info['nfl_team']}"
+        )
+        written += 1
+    out = FIXTURE_DIR / "manual-paste.txt"
+    with out.open("w", encoding="utf-8", newline="\n") as fh:
+        fh.write("\n".join(lines) + "\n")
+    return written
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--paste-picks",
+        type=int,
+        default=24,
+        help="how many picks to render into the manual-paste fixture (default: 2 rounds)",
+    )
     args = parser.parse_args(argv)
 
     if not args.db.exists():
@@ -149,6 +193,10 @@ def main(argv: list[str] | None = None) -> int:
     with args.out.open("w", encoding="utf-8", newline="\n") as fh:
         json.dump(doc, fh, indent=2, ensure_ascii=False, sort_keys=False)
         fh.write("\n")
+
+    pasted = write_manual_paste(players, args.paste_picks)
+    if pasted:
+        print(f"[replay-players] wrote manual-paste.txt ({pasted} real picks)")
 
     missing = len(ids) - len(players)
     print(f"[replay-players] wrote {args.out.relative_to(REPO_ROOT)}")

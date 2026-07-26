@@ -283,6 +283,36 @@ describe("overlay degraded modes — manual paste + ESTIMATED (§6.6)", () => {
     handle.destroy();
   });
 
+  it("says so on the panel when it could not read every pasted line", () => {
+    // A partial parse rendered as "N event(s) sent" is indistinguishable from a clean run.
+    // Asserted on the RENDERED text, because that is the only thing the owner sees.
+    const handle = mountOverlay({ wsFactory: noopFactory, onPaste: () => {} });
+    const box = shadow().querySelector<HTMLTextAreaElement>(".paste textarea")!;
+    const send = shadow().querySelector<HTMLButtonElement>(".paste button")!;
+    box.value = ["1. 1 - Puka Nacua, WR, LAR", "2. 2 -- mangled line"].join("\n");
+    send.click();
+
+    const status = shadow().querySelector(".paste .status")!;
+    expect(status.textContent).toMatch(/1 event\(s\) sent/);
+    expect(status.textContent).toMatch(/1 line\(s\) SKIPPED/);
+    expect(status.textContent).toContain("2. 2 -- mangled line");
+    expect(status.classList.contains("is-warning")).toBe(true);
+    handle.destroy();
+  });
+
+  it("reports a clean paste without a skipped-line warning", () => {
+    const handle = mountOverlay({ wsFactory: noopFactory, onPaste: () => {} });
+    const box = shadow().querySelector<HTMLTextAreaElement>(".paste textarea")!;
+    const send = shadow().querySelector<HTMLButtonElement>(".paste button")!;
+    box.value = "1. 1 - Jaxon Smith-Njigba, WR, SEA";
+    send.click();
+
+    const status = shadow().querySelector(".paste .status")!;
+    expect(status.textContent).toBe("1 event(s) sent");
+    expect(status.classList.contains("is-warning")).toBe(false);
+    handle.destroy();
+  });
+
   it("keeps the manual flag latched when a live push follows", () => {
     // The recs socket can be perfectly healthy while the BOARD came from a human paste.
     // Provenance is a property of the board, so it must not be cleared by a fresh rec.

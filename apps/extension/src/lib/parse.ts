@@ -470,27 +470,56 @@ function parseBoard(root: ParentNode): DraftEvent[] {
  * ------------------------------------------------------------------------------------ */
 
 const ORDER_LINE = /^ORDER\s*:\s*(.+)$/i;
-// Team capture is GREEDY so matching anchors on the LAST dash — a user-chosen team name
-// may contain a hyphen ("Steel-Curtain Squad"), the trailing "player, POS, NFL" segment
-// almost never does.
-const PICK_LINE = /^\s*(\d+)[.)]\s*(.+)\s*[-–—]\s*(.+?)\s*$/;
+/**
+ * `<overall>. <team> - <player>, <POS>, <NFL>`
+ *
+ * The separator dash MUST be surrounded by whitespace. An earlier form matched any dash and
+ * relied on greediness plus the assumption that "the trailing player segment almost never"
+ * contains one — which real NFL rosters falsify. Replaying a real captured draft through the
+ * paste path split `9. 9 - Jaxon Smith-Njigba, WR, SEA` on the SURNAME, yielding
+ * team_id "9 - Jaxon Smith" and player_name "Njigba": a pick that then resolves to nobody,
+ * is never masked, and is recommended again. Amon-Ra St. Brown and Ray-Ray McCloud break it
+ * the same way.
+ *
+ * Requiring whitespace keeps the case that motivated greediness — a hyphenated TEAM name
+ * ("Steel-Curtain Squad") writes its hyphen without spaces — while the team capture stays
+ * greedy so a team name containing a spaced dash still anchors on the last separator.
+ */
+const PICK_LINE = /^\s*(\d+)[.)]\s*(.+)\s+[-–—]\s+(.+?)\s*$/;
+
+/** What a paste actually yielded — including what it could NOT read. */
+export interface PastedReport {
+  events: DraftEvent[];
+  /** Non-blank lines that matched neither an ORDER nor a pick line. Surfaced because a
+   * partial parse reported as "N event(s) sent" reads as success: the owner would have to
+   * count picks to notice one went missing, and by then it has cost them a player. */
+  skipped: string[];
+}
 
 /** Manual-paste path: many events from a copied results table / pick log; each stamped
  * source:"paste". Supported lines: `ORDER: T1, T2, ...` (the in-person draft order) and
- * `<overall>. <team> - <player>, <POS>, <NFL>`. Garbage lines are ignored. */
-export function parsePastedResults(text: string): DraftEvent[] {
+ * `<overall>. <team> - <player>, <POS>, <NFL>`. Unreadable lines are REPORTED, not dropped
+ * silently — see PastedReport.skipped. */
+export function parsePastedReport(text: string): PastedReport {
   const events: DraftEvent[] = [];
+  const skipped: string[] = [];
   for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue; // blank: nothing was there to lose
     const order = line.match(ORDER_LINE);
     if (order?.[1]) {
       const teams = order[1].split(/[,\s]+/).filter(Boolean);
       if (teams.length > 0) {
         events.push(orderEvent("manual", "paste", teams));
+      } else {
+        skipped.push(line);
       }
       continue;
     }
     const pick = line.match(PICK_LINE);
-    if (!pick) continue;
+    if (!pick) {
+      skipped.push(line);
+      continue;
+    }
     const overall = Number(pick[1]);
     const teamId = pick[2]!.trim();
     const playerPart = pick[3]!.trim();
@@ -518,7 +547,13 @@ export function parsePastedResults(text: string): DraftEvent[] {
       }),
     );
   }
-  return events;
+  return { events, skipped };
+}
+
+/** Events-only view of {@link parsePastedReport}, for callers that route straight into the
+ * shared forward() tail. Prefer the report where the user can be told what was skipped. */
+export function parsePastedResults(text: string): DraftEvent[] {
+  return parsePastedReport(text).events;
 }
 
 /* ------------------------------------------------------------------------------------ *

@@ -1,0 +1,385 @@
+[
+  {
+    "event_type": "league_settings",
+    "league_id": "manual",
+    "source": "paste",
+    "data": {
+      "league_id": "manual",
+      "team_count": 12,
+      "draft_order": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12"
+      ]
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 1,
+    "source": "paste",
+    "data": {
+      "overall": 1,
+      "round": 1,
+      "pick_in_round": 1,
+      "team_id": "1",
+      "player_name": "Jahmyr Gibbs",
+      "position": "RB",
+      "player_team": "DET"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 2,
+    "source": "paste",
+    "data": {
+      "overall": 2,
+      "round": 1,
+      "pick_in_round": 2,
+      "team_id": "2",
+      "player_name": "Bijan Robinson",
+      "position": "RB",
+      "player_team": "ATL"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 3,
+    "source": "paste",
+    "data": {
+      "overall": 3,
+      "round": 1,
+      "pick_in_round": 3,
+      "team_id": "3",
+      "player_name": "Jonathan Taylor",
+      "position": "RB",
+      "player_team": "IND"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 4,
+    "source": "paste",
+    "data": {
+      "overall": 4,
+      "round": 1,
+      "pick_in_round": 4,
+      "team_id": "4",
+      "player_name": "Derrick Henry",
+      "position": "RB",
+      "player_team": "BAL"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 5,
+    "source": "paste",
+    "data": {
+      "overall": 5,
+      "round": 1,
+      "pick_in_round": 5,
+      "team_id": "5",
+      "player_name": "Puka Nacua",
+      "position": "WR",
+      "player_team": "LAR"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 6,
+    "source": "paste",
+    "data": {
+      "overall": 6,
+      "round": 1,
+      "pick_in_round": 6,
+      "team_id": "6",
+      "player_name": "De'Von Achane",
+      "position": "RB",
+      "player_team": "MIA"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 7,
+    "source": "paste",
+    "data": {
+      "overall": 7,
+      "round": 1,
+      "pick_in_round": 7,
+      "team_id": "7",
+      "player_name": "Christian McCaffrey",
+      "position": "RB",
+      "player_team": "SFO"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 8,
+    "source": "paste",
+    "data": {
+      "overall": 8,
+      "round": 1,
+      "pick_in_round": 8,
+      "team_id": "8",
+      "player_name": "Ja'Marr Chase",
+      "position": "WR",
+      "player_team": "CIN"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 9,
+    "source": "paste",
+    "data": {
+      "overall": 9,
+      "round": 1,
+      "pick_in_round": 9,
+      "team_id": "9",
+      "player_name": "Jaxon Smith-Njigba",
+      "position": "WR",
+      "player_team": "SEA"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 10,
+    "source": "paste",
+    "data": {
+      "overall": 10,
+      "round": 1,
+      "pick_in_round": 10,
+      "team_id": "10",
+      "player_name": "James Cook",
+      "position": "RB",
+      "player_team": "BUF"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 11,
+    "source": "paste",
+    "data": {
+      "overall": 11,
+      "round": 1,
+      "pick_in_round": 11,
+      "team_id": "11",
+      "player_name": "Ashton Jeanty",
+      "position": "RB",
+      "player_team": "LVR"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 12,
+    "source": "paste",
+    "data": {
+      "overall": 12,
+      "round": 1,
+      "pick_in_round": 12,
+      "team_id": "12",
+      "player_name": "Drake London",
+      "position": "WR",
+      "player_team": "ATL"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 13,
+    "source": "paste",
+    "data": {
+      "overall": 13,
+      "round": 2,
+      "pick_in_round": 1,
+      "team_id": "12",
+      "player_name": "Chase Brown",
+      "position": "RB",
+      "player_team": "CIN"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 14,
+    "source": "paste",
+    "data": {
+      "overall": 14,
+      "round": 2,
+      "pick_in_round": 2,
+      "team_id": "11",
+      "player_name": "Saquon Barkley",
+      "position": "RB",
+      "player_team": "PHI"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 15,
+    "source": "paste",
+    "data": {
+      "overall": 15,
+      "round": 2,
+      "pick_in_round": 3,
+      "team_id": "10",
+      "player_name": "Amon-Ra St. Brown",
+      "position": "WR",
+      "player_team": "DET"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 16,
+    "source": "paste",
+    "data": {
+      "overall": 16,
+      "round": 2,
+      "pick_in_round": 4,
+      "team_id": "9",
+      "player_name": "Josh Jacobs",
+      "position": "RB",
+      "player_team": "GBP"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 17,
+    "source": "paste",
+    "data": {
+      "overall": 17,
+      "round": 2,
+      "pick_in_round": 5,
+      "team_id": "8",
+      "player_name": "Omarion Hampton",
+      "position": "RB",
+      "player_team": "LAC"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 18,
+    "source": "paste",
+    "data": {
+      "overall": 18,
+      "round": 2,
+      "pick_in_round": 6,
+      "team_id": "7",
+      "player_name": "Kyren Williams",
+      "position": "RB",
+      "player_team": "LAR"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 19,
+    "source": "paste",
+    "data": {
+      "overall": 19,
+      "round": 2,
+      "pick_in_round": 7,
+      "team_id": "6",
+      "player_name": "George Pickens",
+      "position": "WR",
+      "player_team": "DAL"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 20,
+    "source": "paste",
+    "data": {
+      "overall": 20,
+      "round": 2,
+      "pick_in_round": 8,
+      "team_id": "5",
+      "player_name": "Cam Skattebo",
+      "position": "RB",
+      "player_team": "NYG"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 21,
+    "source": "paste",
+    "data": {
+      "overall": 21,
+      "round": 2,
+      "pick_in_round": 9,
+      "team_id": "4",
+      "player_name": "Rashee Rice",
+      "position": "WR",
+      "player_team": "KCC"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 22,
+    "source": "paste",
+    "data": {
+      "overall": 22,
+      "round": 2,
+      "pick_in_round": 10,
+      "team_id": "3",
+      "player_name": "Breece Hall",
+      "position": "RB",
+      "player_team": "NYJ"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 23,
+    "source": "paste",
+    "data": {
+      "overall": 23,
+      "round": 2,
+      "pick_in_round": 11,
+      "team_id": "2",
+      "player_name": "D'Andre Swift",
+      "position": "RB",
+      "player_team": "CHI"
+    }
+  },
+  {
+    "event_type": "pick_made",
+    "league_id": "manual",
+    "pick_number": 24,
+    "source": "paste",
+    "data": {
+      "overall": 24,
+      "round": 2,
+      "pick_in_round": 12,
+      "team_id": "1",
+      "player_name": "Josh Allen",
+      "position": "QB",
+      "player_team": "BUF"
+    }
+  }
+]

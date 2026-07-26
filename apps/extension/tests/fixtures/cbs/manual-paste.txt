@@ -1,0 +1,25 @@
+ORDER: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+1. 1 - Jahmyr Gibbs, RB, DET
+2. 2 - Bijan Robinson, RB, ATL
+3. 3 - Jonathan Taylor, RB, IND
+4. 4 - Derrick Henry, RB, BAL
+5. 5 - Puka Nacua, WR, LAR
+6. 6 - De'Von Achane, RB, MIA
+7. 7 - Christian McCaffrey, RB, SFO
+8. 8 - Ja'Marr Chase, WR, CIN
+9. 9 - Jaxon Smith-Njigba, WR, SEA
+10. 10 - James Cook, RB, BUF
+11. 11 - Ashton Jeanty, RB, LVR
+12. 12 - Drake London, WR, ATL
+13. 12 - Chase Brown, RB, CIN
+14. 11 - Saquon Barkley, RB, PHI
+15. 10 - Amon-Ra St. Brown, WR, DET
+16. 9 - Josh Jacobs, RB, GBP
+17. 8 - Omarion Hampton, RB, LAC
+18. 7 - Kyren Williams, RB, LAR
+19. 6 - George Pickens, WR, DAL
+20. 5 - Cam Skattebo, RB, NYG
+21. 4 - Rashee Rice, WR, KCC
+22. 3 - Breece Hall, RB, NYJ
+23. 2 - D'Andre Swift, RB, CHI
+24. 1 - Josh Allen, QB, BUF
