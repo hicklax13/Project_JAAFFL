@@ -1,0 +1,1365 @@
+[
+  {
+    "event_type": "draft_state",
+    "league_id": "cbs-live",
+    "source": "ws",
+    "data": {
+      "current_overall_pick": 169,
+      "round": 15,
+      "on_the_clock_team_id": null,
+      "on_deck_team_id": null,
+      "picks": [
+        {
+          "overall": 1,
+          "round": 1,
+          "pick_in_round": 1,
+          "team_id": "1",
+          "player_id": "cbs:3162723",
+          "cbs_player_id": "3162723"
+        },
+        {
+          "overall": 2,
+          "round": 1,
+          "pick_in_round": 2,
+          "team_id": "2",
+          "player_id": "cbs:3168163",
+          "cbs_player_id": "3168163"
+        },
+        {
+          "overall": 3,
+          "round": 1,
+          "pick_in_round": 3,
+          "team_id": "3",
+          "player_id": "cbs:2866395",
+          "cbs_player_id": "2866395"
+        },
+        {
+          "overall": 4,
+          "round": 1,
+          "pick_in_round": 4,
+          "team_id": "4",
+          "player_id": "cbs:2061188",
+          "cbs_player_id": "2061188"
+        },
+        {
+          "overall": 5,
+          "round": 1,
+          "pick_in_round": 5,
+          "team_id": "5",
+          "player_id": "cbs:3121687",
+          "cbs_player_id": "3121687"
+        },
+        {
+          "overall": 6,
+          "round": 1,
+          "pick_in_round": 6,
+          "team_id": "6",
+          "player_id": "cbs:3171161",
+          "cbs_player_id": "3171161"
+        },
+        {
+          "overall": 7,
+          "round": 1,
+          "pick_in_round": 7,
+          "team_id": "7",
+          "player_id": "cbs:2136743",
+          "cbs_player_id": "2136743"
+        },
+        {
+          "overall": 8,
+          "round": 1,
+          "pick_in_round": 8,
+          "team_id": "8",
+          "player_id": "cbs:3162959",
+          "cbs_player_id": "3162959"
+        },
+        {
+          "overall": 9,
+          "round": 1,
+          "pick_in_round": 9,
+          "team_id": "9",
+          "player_id": "cbs:28874008",
+          "cbs_player_id": "28874008"
+        },
+        {
+          "overall": 10,
+          "round": 1,
+          "pick_in_round": 10,
+          "team_id": "10",
+          "player_id": "cbs:3127902",
+          "cbs_player_id": "3127902"
+        },
+        {
+          "overall": 11,
+          "round": 1,
+          "pick_in_round": 11,
+          "team_id": "11",
+          "player_id": "cbs:2975698",
+          "cbs_player_id": "2975698"
+        },
+        {
+          "overall": 12,
+          "round": 1,
+          "pick_in_round": 12,
+          "team_id": "12",
+          "player_id": "cbs:2965160",
+          "cbs_player_id": "2965160"
+        },
+        {
+          "overall": 13,
+          "round": 2,
+          "pick_in_round": 1,
+          "team_id": "12",
+          "player_id": "cbs:2185957",
+          "cbs_player_id": "2185957"
+        },
+        {
+          "overall": 14,
+          "round": 2,
+          "pick_in_round": 2,
+          "team_id": "11",
+          "player_id": "cbs:2966320",
+          "cbs_player_id": "2966320"
+        },
+        {
+          "overall": 15,
+          "round": 2,
+          "pick_in_round": 3,
+          "team_id": "10",
+          "player_id": "cbs:2257876",
+          "cbs_player_id": "2257876"
+        },
+        {
+          "overall": 16,
+          "round": 2,
+          "pick_in_round": 4,
+          "team_id": "9",
+          "player_id": "cbs:2967690",
+          "cbs_player_id": "2967690"
+        },
+        {
+          "overall": 17,
+          "round": 2,
+          "pick_in_round": 5,
+          "team_id": "8",
+          "player_id": "cbs:3121836",
+          "cbs_player_id": "3121836"
+        },
+        {
+          "overall": 18,
+          "round": 2,
+          "pick_in_round": 6,
+          "team_id": "7",
+          "player_id": "cbs:3123212",
+          "cbs_player_id": "3123212"
+        },
+        {
+          "overall": 19,
+          "round": 2,
+          "pick_in_round": 7,
+          "team_id": "6",
+          "player_id": "cbs:26697012",
+          "cbs_player_id": "26697012"
+        },
+        {
+          "overall": 20,
+          "round": 2,
+          "pick_in_round": 8,
+          "team_id": "5",
+          "player_id": "cbs:3124978",
+          "cbs_player_id": "3124978"
+        },
+        {
+          "overall": 21,
+          "round": 2,
+          "pick_in_round": 9,
+          "team_id": "4",
+          "player_id": "cbs:3123469",
+          "cbs_player_id": "3123469"
+        },
+        {
+          "overall": 22,
+          "round": 2,
+          "pick_in_round": 10,
+          "team_id": "3",
+          "player_id": "cbs:28908905",
+          "cbs_player_id": "28908905"
+        },
+        {
+          "overall": 23,
+          "round": 2,
+          "pick_in_round": 11,
+          "team_id": "2",
+          "player_id": "cbs:2871710",
+          "cbs_player_id": "2871710"
+        },
+        {
+          "overall": 24,
+          "round": 2,
+          "pick_in_round": 12,
+          "team_id": "1",
+          "player_id": "cbs:26693770",
+          "cbs_player_id": "26693770"
+        },
+        {
+          "overall": 25,
+          "round": 3,
+          "pick_in_round": 1,
+          "team_id": "1",
+          "player_id": "cbs:2258303",
+          "cbs_player_id": "2258303"
+        },
+        {
+          "overall": 26,
+          "round": 3,
+          "pick_in_round": 2,
+          "team_id": "2",
+          "player_id": "cbs:2181054",
+          "cbs_player_id": "2181054"
+        },
+        {
+          "overall": 27,
+          "round": 3,
+          "pick_in_round": 3,
+          "team_id": "3",
+          "player_id": "cbs:2809206",
+          "cbs_player_id": "2809206"
+        },
+        {
+          "overall": 28,
+          "round": 3,
+          "pick_in_round": 4,
+          "team_id": "4",
+          "player_id": "cbs:29133405",
+          "cbs_player_id": "29133405"
+        },
+        {
+          "overall": 29,
+          "round": 3,
+          "pick_in_round": 5,
+          "team_id": "5",
+          "player_id": "cbs:2963666",
+          "cbs_player_id": "2963666"
+        },
+        {
+          "overall": 30,
+          "round": 3,
+          "pick_in_round": 6,
+          "team_id": "6",
+          "player_id": "cbs:2961719",
+          "cbs_player_id": "2961719"
+        },
+        {
+          "overall": 31,
+          "round": 3,
+          "pick_in_round": 7,
+          "team_id": "7",
+          "player_id": "cbs:2878193",
+          "cbs_player_id": "2878193"
+        },
+        {
+          "overall": 32,
+          "round": 3,
+          "pick_in_round": 8,
+          "team_id": "8",
+          "player_id": "cbs:26732838",
+          "cbs_player_id": "26732838"
+        },
+        {
+          "overall": 33,
+          "round": 3,
+          "pick_in_round": 9,
+          "team_id": "9",
+          "player_id": "cbs:3127049",
+          "cbs_player_id": "3127049"
+        },
+        {
+          "overall": 34,
+          "round": 3,
+          "pick_in_round": 10,
+          "team_id": "10",
+          "player_id": "cbs:3121372",
+          "cbs_player_id": "3121372"
+        },
+        {
+          "overall": 35,
+          "round": 3,
+          "pick_in_round": 11,
+          "team_id": "11",
+          "player_id": "cbs:28878286",
+          "cbs_player_id": "28878286"
+        },
+        {
+          "overall": 36,
+          "round": 3,
+          "pick_in_round": 12,
+          "team_id": "12",
+          "player_id": "cbs:2809208",
+          "cbs_player_id": "2809208"
+        },
+        {
+          "overall": 37,
+          "round": 4,
+          "pick_in_round": 1,
+          "team_id": "12",
+          "player_id": "cbs:2865251",
+          "cbs_player_id": "2865251"
+        },
+        {
+          "overall": 38,
+          "round": 4,
+          "pick_in_round": 2,
+          "team_id": "11",
+          "player_id": "cbs:2965664",
+          "cbs_player_id": "2965664"
+        },
+        {
+          "overall": 39,
+          "round": 4,
+          "pick_in_round": 3,
+          "team_id": "10",
+          "player_id": "cbs:26697761",
+          "cbs_player_id": "26697761"
+        },
+        {
+          "overall": 40,
+          "round": 4,
+          "pick_in_round": 4,
+          "team_id": "9",
+          "player_id": "cbs:2252798",
+          "cbs_player_id": "2252798"
+        },
+        {
+          "overall": 41,
+          "round": 4,
+          "pick_in_round": 5,
+          "team_id": "8",
+          "player_id": "cbs:2139279",
+          "cbs_player_id": "2139279"
+        },
+        {
+          "overall": 42,
+          "round": 4,
+          "pick_in_round": 6,
+          "team_id": "7",
+          "player_id": "cbs:2871343",
+          "cbs_player_id": "2871343"
+        },
+        {
+          "overall": 43,
+          "round": 4,
+          "pick_in_round": 7,
+          "team_id": "6",
+          "player_id": "cbs:26696165",
+          "cbs_player_id": "26696165"
+        },
+        {
+          "overall": 44,
+          "round": 4,
+          "pick_in_round": 8,
+          "team_id": "5",
+          "player_id": "cbs:28875230",
+          "cbs_player_id": "28875230"
+        },
+        {
+          "overall": 45,
+          "round": 4,
+          "pick_in_round": 9,
+          "team_id": "4",
+          "player_id": "cbs:2963385",
+          "cbs_player_id": "2963385"
+        },
+        {
+          "overall": 46,
+          "round": 4,
+          "pick_in_round": 10,
+          "team_id": "3",
+          "player_id": "cbs:3125968",
+          "cbs_player_id": "3125968"
+        },
+        {
+          "overall": 47,
+          "round": 4,
+          "pick_in_round": 11,
+          "team_id": "2",
+          "player_id": "cbs:26699547",
+          "cbs_player_id": "26699547"
+        },
+        {
+          "overall": 48,
+          "round": 4,
+          "pick_in_round": 12,
+          "team_id": "1",
+          "player_id": "cbs:26693971",
+          "cbs_player_id": "26693971"
+        },
+        {
+          "overall": 49,
+          "round": 5,
+          "pick_in_round": 1,
+          "team_id": "1",
+          "player_id": "cbs:2261252",
+          "cbs_player_id": "2261252"
+        },
+        {
+          "overall": 50,
+          "round": 5,
+          "pick_in_round": 2,
+          "team_id": "2",
+          "player_id": "cbs:2866975",
+          "cbs_player_id": "2866975"
+        },
+        {
+          "overall": 51,
+          "round": 5,
+          "pick_in_round": 3,
+          "team_id": "3",
+          "player_id": "cbs:3162979",
+          "cbs_player_id": "3162979"
+        },
+        {
+          "overall": 52,
+          "round": 5,
+          "pick_in_round": 4,
+          "team_id": "4",
+          "player_id": "cbs:28877124",
+          "cbs_player_id": "28877124"
+        },
+        {
+          "overall": 53,
+          "round": 5,
+          "pick_in_round": 5,
+          "team_id": "5",
+          "player_id": "cbs:3121207",
+          "cbs_player_id": "3121207"
+        },
+        {
+          "overall": 54,
+          "round": 5,
+          "pick_in_round": 6,
+          "team_id": "6",
+          "player_id": "cbs:3123864",
+          "cbs_player_id": "3123864"
+        },
+        {
+          "overall": 55,
+          "round": 5,
+          "pick_in_round": 7,
+          "team_id": "7",
+          "player_id": "cbs:2865693",
+          "cbs_player_id": "2865693"
+        },
+        {
+          "overall": 56,
+          "round": 5,
+          "pick_in_round": 8,
+          "team_id": "8",
+          "player_id": "cbs:2184011",
+          "cbs_player_id": "2184011"
+        },
+        {
+          "overall": 57,
+          "round": 5,
+          "pick_in_round": 9,
+          "team_id": "9",
+          "player_id": "cbs:28874696",
+          "cbs_player_id": "28874696"
+        },
+        {
+          "overall": 58,
+          "round": 5,
+          "pick_in_round": 10,
+          "team_id": "10",
+          "player_id": "cbs:2181169",
+          "cbs_player_id": "2181169"
+        },
+        {
+          "overall": 59,
+          "round": 5,
+          "pick_in_round": 11,
+          "team_id": "11",
+          "player_id": "cbs:1893167",
+          "cbs_player_id": "1893167"
+        },
+        {
+          "overall": 60,
+          "round": 5,
+          "pick_in_round": 12,
+          "team_id": "12",
+          "player_id": "cbs:3125832",
+          "cbs_player_id": "3125832"
+        },
+        {
+          "overall": 61,
+          "round": 6,
+          "pick_in_round": 1,
+          "team_id": "12",
+          "player_id": "cbs:26695757",
+          "cbs_player_id": "26695757"
+        },
+        {
+          "overall": 62,
+          "round": 6,
+          "pick_in_round": 2,
+          "team_id": "11",
+          "player_id": "cbs:3123337",
+          "cbs_player_id": "3123337"
+        },
+        {
+          "overall": 63,
+          "round": 6,
+          "pick_in_round": 3,
+          "team_id": "10",
+          "player_id": "cbs:2132551",
+          "cbs_player_id": "2132551"
+        },
+        {
+          "overall": 64,
+          "round": 6,
+          "pick_in_round": 4,
+          "team_id": "9",
+          "player_id": "cbs:1824864",
+          "cbs_player_id": "1824864"
+        },
+        {
+          "overall": 65,
+          "round": 6,
+          "pick_in_round": 5,
+          "team_id": "8",
+          "player_id": "cbs:3133332",
+          "cbs_player_id": "3133332"
+        },
+        {
+          "overall": 66,
+          "round": 6,
+          "pick_in_round": 6,
+          "team_id": "7",
+          "player_id": "cbs:26694019",
+          "cbs_player_id": "26694019"
+        },
+        {
+          "overall": 67,
+          "round": 6,
+          "pick_in_round": 7,
+          "team_id": "6",
+          "player_id": "cbs:2964514",
+          "cbs_player_id": "2964514"
+        },
+        {
+          "overall": 68,
+          "round": 6,
+          "pick_in_round": 8,
+          "team_id": "5",
+          "player_id": "cbs:2179798",
+          "cbs_player_id": "2179798"
+        },
+        {
+          "overall": 69,
+          "round": 6,
+          "pick_in_round": 9,
+          "team_id": "4",
+          "player_id": "cbs:2218461",
+          "cbs_player_id": "2218461"
+        },
+        {
+          "overall": 70,
+          "round": 6,
+          "pick_in_round": 10,
+          "team_id": "3",
+          "player_id": "cbs:2961306",
+          "cbs_player_id": "2961306"
+        },
+        {
+          "overall": 71,
+          "round": 6,
+          "pick_in_round": 11,
+          "team_id": "2",
+          "player_id": "cbs:28874444",
+          "cbs_player_id": "28874444"
+        },
+        {
+          "overall": 72,
+          "round": 6,
+          "pick_in_round": 12,
+          "team_id": "1",
+          "player_id": "cbs:26701883",
+          "cbs_player_id": "26701883"
+        },
+        {
+          "overall": 73,
+          "round": 7,
+          "pick_in_round": 1,
+          "team_id": "1",
+          "player_id": "cbs:1909",
+          "cbs_player_id": "1909"
+        },
+        {
+          "overall": 74,
+          "round": 7,
+          "pick_in_round": 2,
+          "team_id": "2",
+          "player_id": "cbs:28900882",
+          "cbs_player_id": "28900882"
+        },
+        {
+          "overall": 75,
+          "round": 7,
+          "pick_in_round": 3,
+          "team_id": "3",
+          "player_id": "cbs:3168800",
+          "cbs_player_id": "3168800"
+        },
+        {
+          "overall": 76,
+          "round": 7,
+          "pick_in_round": 4,
+          "team_id": "4",
+          "player_id": "cbs:2240246",
+          "cbs_player_id": "2240246"
+        },
+        {
+          "overall": 77,
+          "round": 7,
+          "pick_in_round": 5,
+          "team_id": "5",
+          "player_id": "cbs:2961906",
+          "cbs_player_id": "2961906"
+        },
+        {
+          "overall": 78,
+          "round": 7,
+          "pick_in_round": 6,
+          "team_id": "6",
+          "player_id": "cbs:2967185",
+          "cbs_player_id": "2967185"
+        },
+        {
+          "overall": 79,
+          "round": 7,
+          "pick_in_round": 7,
+          "team_id": "7",
+          "player_id": "cbs:3124197",
+          "cbs_player_id": "3124197"
+        },
+        {
+          "overall": 80,
+          "round": 7,
+          "pick_in_round": 8,
+          "team_id": "8",
+          "player_id": "cbs:2142052",
+          "cbs_player_id": "2142052"
+        },
+        {
+          "overall": 81,
+          "round": 7,
+          "pick_in_round": 9,
+          "team_id": "9",
+          "player_id": "cbs:2804420",
+          "cbs_player_id": "2804420"
+        },
+        {
+          "overall": 82,
+          "round": 7,
+          "pick_in_round": 10,
+          "team_id": "10",
+          "player_id": "cbs:3126535",
+          "cbs_player_id": "3126535"
+        },
+        {
+          "overall": 83,
+          "round": 7,
+          "pick_in_round": 11,
+          "team_id": "11",
+          "player_id": "cbs:2818265",
+          "cbs_player_id": "2818265"
+        },
+        {
+          "overall": 84,
+          "round": 7,
+          "pick_in_round": 12,
+          "team_id": "12",
+          "player_id": "cbs:2982991",
+          "cbs_player_id": "2982991"
+        },
+        {
+          "overall": 85,
+          "round": 8,
+          "pick_in_round": 1,
+          "team_id": "12",
+          "player_id": "cbs:3163962",
+          "cbs_player_id": "3163962"
+        },
+        {
+          "overall": 86,
+          "round": 8,
+          "pick_in_round": 2,
+          "team_id": "11",
+          "player_id": "cbs:2869806",
+          "cbs_player_id": "2869806"
+        },
+        {
+          "overall": 87,
+          "round": 8,
+          "pick_in_round": 3,
+          "team_id": "10",
+          "player_id": "cbs:2967536",
+          "cbs_player_id": "2967536"
+        },
+        {
+          "overall": 88,
+          "round": 8,
+          "pick_in_round": 4,
+          "team_id": "9",
+          "player_id": "cbs:2962110",
+          "cbs_player_id": "2962110"
+        },
+        {
+          "overall": 89,
+          "round": 8,
+          "pick_in_round": 5,
+          "team_id": "8",
+          "player_id": "cbs:2179328",
+          "cbs_player_id": "2179328"
+        },
+        {
+          "overall": 90,
+          "round": 8,
+          "pick_in_round": 6,
+          "team_id": "7",
+          "player_id": "cbs:3126952",
+          "cbs_player_id": "3126952"
+        },
+        {
+          "overall": 91,
+          "round": 8,
+          "pick_in_round": 7,
+          "team_id": "6",
+          "player_id": "cbs:3168820",
+          "cbs_player_id": "3168820"
+        },
+        {
+          "overall": 92,
+          "round": 8,
+          "pick_in_round": 8,
+          "team_id": "5",
+          "player_id": "cbs:1824909",
+          "cbs_player_id": "1824909"
+        },
+        {
+          "overall": 93,
+          "round": 8,
+          "pick_in_round": 9,
+          "team_id": "4",
+          "player_id": "cbs:2260185",
+          "cbs_player_id": "2260185"
+        },
+        {
+          "overall": 94,
+          "round": 8,
+          "pick_in_round": 10,
+          "team_id": "3",
+          "player_id": "cbs:3162609",
+          "cbs_player_id": "3162609"
+        },
+        {
+          "overall": 95,
+          "round": 8,
+          "pick_in_round": 11,
+          "team_id": "2",
+          "player_id": "cbs:3177368",
+          "cbs_player_id": "3177368"
+        },
+        {
+          "overall": 96,
+          "round": 8,
+          "pick_in_round": 12,
+          "team_id": "1",
+          "player_id": "cbs:26695775",
+          "cbs_player_id": "26695775"
+        },
+        {
+          "overall": 97,
+          "round": 9,
+          "pick_in_round": 1,
+          "team_id": "1",
+          "player_id": "cbs:3132164",
+          "cbs_player_id": "3132164"
+        },
+        {
+          "overall": 98,
+          "round": 9,
+          "pick_in_round": 2,
+          "team_id": "2",
+          "player_id": "cbs:2071937",
+          "cbs_player_id": "2071937"
+        },
+        {
+          "overall": 99,
+          "round": 9,
+          "pick_in_round": 3,
+          "team_id": "3",
+          "player_id": "cbs:2183835",
+          "cbs_player_id": "2183835"
+        },
+        {
+          "overall": 100,
+          "round": 9,
+          "pick_in_round": 4,
+          "team_id": "4",
+          "player_id": "cbs:2968948",
+          "cbs_player_id": "2968948"
+        },
+        {
+          "overall": 101,
+          "round": 9,
+          "pick_in_round": 5,
+          "team_id": "5",
+          "player_id": "cbs:3169147",
+          "cbs_player_id": "3169147"
+        },
+        {
+          "overall": 102,
+          "round": 9,
+          "pick_in_round": 6,
+          "team_id": "6",
+          "player_id": "cbs:3162290",
+          "cbs_player_id": "3162290"
+        },
+        {
+          "overall": 103,
+          "round": 9,
+          "pick_in_round": 7,
+          "team_id": "7",
+          "player_id": "cbs:2818150",
+          "cbs_player_id": "2818150"
+        },
+        {
+          "overall": 104,
+          "round": 9,
+          "pick_in_round": 8,
+          "team_id": "8",
+          "player_id": "cbs:3124107",
+          "cbs_player_id": "3124107"
+        },
+        {
+          "overall": 105,
+          "round": 9,
+          "pick_in_round": 9,
+          "team_id": "9",
+          "player_id": "cbs:26730706",
+          "cbs_player_id": "26730706"
+        },
+        {
+          "overall": 106,
+          "round": 9,
+          "pick_in_round": 10,
+          "team_id": "10",
+          "player_id": "cbs:3169252",
+          "cbs_player_id": "3169252"
+        },
+        {
+          "overall": 107,
+          "round": 9,
+          "pick_in_round": 11,
+          "team_id": "11",
+          "player_id": "cbs:2965181",
+          "cbs_player_id": "2965181"
+        },
+        {
+          "overall": 108,
+          "round": 9,
+          "pick_in_round": 12,
+          "team_id": "12",
+          "player_id": "cbs:2964667",
+          "cbs_player_id": "2964667"
+        },
+        {
+          "overall": 109,
+          "round": 10,
+          "pick_in_round": 1,
+          "team_id": "12",
+          "player_id": "cbs:2963970",
+          "cbs_player_id": "2963970"
+        },
+        {
+          "overall": 110,
+          "round": 10,
+          "pick_in_round": 2,
+          "team_id": "11",
+          "player_id": "cbs:2250863",
+          "cbs_player_id": "2250863"
+        },
+        {
+          "overall": 111,
+          "round": 10,
+          "pick_in_round": 3,
+          "team_id": "10",
+          "player_id": "cbs:3122949",
+          "cbs_player_id": "3122949"
+        },
+        {
+          "overall": 112,
+          "round": 10,
+          "pick_in_round": 4,
+          "team_id": "9",
+          "player_id": "cbs:28900885",
+          "cbs_player_id": "28900885"
+        },
+        {
+          "overall": 113,
+          "round": 10,
+          "pick_in_round": 5,
+          "team_id": "8",
+          "player_id": "cbs:2186328",
+          "cbs_player_id": "2186328"
+        },
+        {
+          "overall": 114,
+          "round": 10,
+          "pick_in_round": 6,
+          "team_id": "7",
+          "player_id": "cbs:2967762",
+          "cbs_player_id": "2967762"
+        },
+        {
+          "overall": 115,
+          "round": 10,
+          "pick_in_round": 7,
+          "team_id": "6",
+          "player_id": "cbs:2960940",
+          "cbs_player_id": "2960940"
+        },
+        {
+          "overall": 116,
+          "round": 10,
+          "pick_in_round": 8,
+          "team_id": "5",
+          "player_id": "cbs:3162970",
+          "cbs_player_id": "3162970"
+        },
+        {
+          "overall": 117,
+          "round": 10,
+          "pick_in_round": 9,
+          "team_id": "4",
+          "player_id": "cbs:3163990",
+          "cbs_player_id": "3163990"
+        },
+        {
+          "overall": 118,
+          "round": 10,
+          "pick_in_round": 10,
+          "team_id": "3",
+          "player_id": "cbs:2963637",
+          "cbs_player_id": "2963637"
+        },
+        {
+          "overall": 119,
+          "round": 10,
+          "pick_in_round": 11,
+          "team_id": "2",
+          "player_id": "cbs:2961886",
+          "cbs_player_id": "2961886"
+        },
+        {
+          "overall": 120,
+          "round": 10,
+          "pick_in_round": 12,
+          "team_id": "1",
+          "player_id": "cbs:2240188",
+          "cbs_player_id": "2240188"
+        },
+        {
+          "overall": 121,
+          "round": 11,
+          "pick_in_round": 1,
+          "team_id": "1",
+          "player_id": "cbs:2180514",
+          "cbs_player_id": "2180514"
+        },
+        {
+          "overall": 122,
+          "round": 11,
+          "pick_in_round": 2,
+          "team_id": "2",
+          "player_id": "cbs:3171045",
+          "cbs_player_id": "3171045"
+        },
+        {
+          "overall": 123,
+          "round": 11,
+          "pick_in_round": 3,
+          "team_id": "3",
+          "player_id": "cbs:2969119",
+          "cbs_player_id": "2969119"
+        },
+        {
+          "overall": 124,
+          "round": 11,
+          "pick_in_round": 4,
+          "team_id": "4",
+          "player_id": "cbs:26730787",
+          "cbs_player_id": "26730787"
+        },
+        {
+          "overall": 125,
+          "round": 11,
+          "pick_in_round": 5,
+          "team_id": "5",
+          "player_id": "cbs:1932",
+          "cbs_player_id": "1932"
+        },
+        {
+          "overall": 126,
+          "round": 11,
+          "pick_in_round": 6,
+          "team_id": "6",
+          "player_id": "cbs:3121171",
+          "cbs_player_id": "3121171"
+        },
+        {
+          "overall": 127,
+          "round": 11,
+          "pick_in_round": 7,
+          "team_id": "7",
+          "player_id": "cbs:3124276",
+          "cbs_player_id": "3124276"
+        },
+        {
+          "overall": 128,
+          "round": 11,
+          "pick_in_round": 8,
+          "team_id": "8",
+          "player_id": "cbs:29124411",
+          "cbs_player_id": "29124411"
+        },
+        {
+          "overall": 129,
+          "round": 11,
+          "pick_in_round": 9,
+          "team_id": "9",
+          "player_id": "cbs:3123810",
+          "cbs_player_id": "3123810"
+        },
+        {
+          "overall": 130,
+          "round": 11,
+          "pick_in_round": 10,
+          "team_id": "10",
+          "player_id": "cbs:3163170",
+          "cbs_player_id": "3163170"
+        },
+        {
+          "overall": 131,
+          "round": 11,
+          "pick_in_round": 11,
+          "team_id": "11",
+          "player_id": "cbs:3162599",
+          "cbs_player_id": "3162599"
+        },
+        {
+          "overall": 132,
+          "round": 11,
+          "pick_in_round": 12,
+          "team_id": "12",
+          "player_id": "cbs:29123772",
+          "cbs_player_id": "29123772"
+        },
+        {
+          "overall": 133,
+          "round": 12,
+          "pick_in_round": 1,
+          "team_id": "12",
+          "player_id": "cbs:2741201",
+          "cbs_player_id": "2741201"
+        },
+        {
+          "overall": 134,
+          "round": 12,
+          "pick_in_round": 2,
+          "team_id": "11",
+          "player_id": "cbs:28900714",
+          "cbs_player_id": "28900714"
+        },
+        {
+          "overall": 135,
+          "round": 12,
+          "pick_in_round": 3,
+          "team_id": "10",
+          "player_id": "cbs:2967232",
+          "cbs_player_id": "2967232"
+        },
+        {
+          "overall": 136,
+          "round": 12,
+          "pick_in_round": 4,
+          "team_id": "9",
+          "player_id": "cbs:26708551",
+          "cbs_player_id": "26708551"
+        },
+        {
+          "overall": 137,
+          "round": 12,
+          "pick_in_round": 5,
+          "team_id": "8",
+          "player_id": "cbs:3121848",
+          "cbs_player_id": "3121848"
+        },
+        {
+          "overall": 138,
+          "round": 12,
+          "pick_in_round": 6,
+          "team_id": "7",
+          "player_id": "cbs:2006951",
+          "cbs_player_id": "2006951"
+        },
+        {
+          "overall": 139,
+          "round": 12,
+          "pick_in_round": 7,
+          "team_id": "6",
+          "player_id": "cbs:28916212",
+          "cbs_player_id": "28916212"
+        },
+        {
+          "overall": 140,
+          "round": 12,
+          "pick_in_round": 8,
+          "team_id": "5",
+          "player_id": "cbs:2966551",
+          "cbs_player_id": "2966551"
+        },
+        {
+          "overall": 141,
+          "round": 12,
+          "pick_in_round": 9,
+          "team_id": "4",
+          "player_id": "cbs:3122588",
+          "cbs_player_id": "3122588"
+        },
+        {
+          "overall": 142,
+          "round": 12,
+          "pick_in_round": 10,
+          "team_id": "3",
+          "player_id": "cbs:2180820",
+          "cbs_player_id": "2180820"
+        },
+        {
+          "overall": 143,
+          "round": 12,
+          "pick_in_round": 11,
+          "team_id": "2",
+          "player_id": "cbs:1926",
+          "cbs_player_id": "1926"
+        },
+        {
+          "overall": 144,
+          "round": 12,
+          "pick_in_round": 12,
+          "team_id": "1",
+          "player_id": "cbs:2741207",
+          "cbs_player_id": "2741207"
+        },
+        {
+          "overall": 145,
+          "round": 13,
+          "pick_in_round": 1,
+          "team_id": "1",
+          "player_id": "cbs:3162347",
+          "cbs_player_id": "3162347"
+        },
+        {
+          "overall": 146,
+          "round": 13,
+          "pick_in_round": 2,
+          "team_id": "2",
+          "player_id": "cbs:28877974",
+          "cbs_player_id": "28877974"
+        },
+        {
+          "overall": 147,
+          "round": 13,
+          "pick_in_round": 3,
+          "team_id": "3",
+          "player_id": "cbs:1923",
+          "cbs_player_id": "1923"
+        },
+        {
+          "overall": 148,
+          "round": 13,
+          "pick_in_round": 4,
+          "team_id": "4",
+          "player_id": "cbs:1921",
+          "cbs_player_id": "1921"
+        },
+        {
+          "overall": 149,
+          "round": 13,
+          "pick_in_round": 5,
+          "team_id": "5",
+          "player_id": "cbs:26693436",
+          "cbs_player_id": "26693436"
+        },
+        {
+          "overall": 150,
+          "round": 13,
+          "pick_in_round": 6,
+          "team_id": "6",
+          "player_id": "cbs:1916",
+          "cbs_player_id": "1916"
+        },
+        {
+          "overall": 151,
+          "round": 13,
+          "pick_in_round": 7,
+          "team_id": "7",
+          "player_id": "cbs:1902",
+          "cbs_player_id": "1902"
+        },
+        {
+          "overall": 152,
+          "round": 13,
+          "pick_in_round": 8,
+          "team_id": "8",
+          "player_id": "cbs:1917",
+          "cbs_player_id": "1917"
+        },
+        {
+          "overall": 153,
+          "round": 13,
+          "pick_in_round": 9,
+          "team_id": "9",
+          "player_id": "cbs:1903",
+          "cbs_player_id": "1903"
+        },
+        {
+          "overall": 154,
+          "round": 13,
+          "pick_in_round": 10,
+          "team_id": "10",
+          "player_id": "cbs:1930",
+          "cbs_player_id": "1930"
+        },
+        {
+          "overall": 155,
+          "round": 13,
+          "pick_in_round": 11,
+          "team_id": "11",
+          "player_id": "cbs:1931",
+          "cbs_player_id": "1931"
+        },
+        {
+          "overall": 156,
+          "round": 13,
+          "pick_in_round": 12,
+          "team_id": "12",
+          "player_id": "cbs:1910",
+          "cbs_player_id": "1910"
+        },
+        {
+          "overall": 157,
+          "round": 14,
+          "pick_in_round": 1,
+          "team_id": "12",
+          "player_id": "cbs:2169640",
+          "cbs_player_id": "2169640"
+        },
+        {
+          "overall": 158,
+          "round": 14,
+          "pick_in_round": 2,
+          "team_id": "11",
+          "player_id": "cbs:1996562",
+          "cbs_player_id": "1996562"
+        },
+        {
+          "overall": 159,
+          "round": 14,
+          "pick_in_round": 3,
+          "team_id": "10",
+          "player_id": "cbs:2815718",
+          "cbs_player_id": "2815718"
+        },
+        {
+          "overall": 160,
+          "round": 14,
+          "pick_in_round": 4,
+          "team_id": "9",
+          "player_id": "cbs:3131541",
+          "cbs_player_id": "3131541"
+        },
+        {
+          "overall": 161,
+          "round": 14,
+          "pick_in_round": 5,
+          "team_id": "8",
+          "player_id": "cbs:410721",
+          "cbs_player_id": "410721"
+        },
+        {
+          "overall": 162,
+          "round": 14,
+          "pick_in_round": 6,
+          "team_id": "7",
+          "player_id": "cbs:3173439",
+          "cbs_player_id": "3173439"
+        },
+        {
+          "overall": 163,
+          "round": 14,
+          "pick_in_round": 7,
+          "team_id": "6",
+          "player_id": "cbs:2961997",
+          "cbs_player_id": "2961997"
+        },
+        {
+          "overall": 164,
+          "round": 14,
+          "pick_in_round": 8,
+          "team_id": "5",
+          "player_id": "cbs:2132690",
+          "cbs_player_id": "2132690"
+        },
+        {
+          "overall": 165,
+          "round": 14,
+          "pick_in_round": 9,
+          "team_id": "4",
+          "player_id": "cbs:3162619",
+          "cbs_player_id": "3162619"
+        },
+        {
+          "overall": 166,
+          "round": 14,
+          "pick_in_round": 10,
+          "team_id": "3",
+          "player_id": "cbs:2165272",
+          "cbs_player_id": "2165272"
+        },
+        {
+          "overall": 167,
+          "round": 14,
+          "pick_in_round": 11,
+          "team_id": "2",
+          "player_id": "cbs:3121084",
+          "cbs_player_id": "3121084"
+        },
+        {
+          "overall": 168,
+          "round": 14,
+          "pick_in_round": 12,
+          "team_id": "1",
+          "player_id": "cbs:3174704",
+          "cbs_player_id": "3174704"
+        }
+      ]
+    }
+  },
+  {
+    "event_type": "draft_complete",
+    "league_id": "cbs-live",
+    "source": "ws",
+    "data": {}
+  }
+]
