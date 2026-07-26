@@ -210,12 +210,65 @@ function cbsPickEvents(
   return events;
 }
 
+/** One entry of subscribe's per-team board: fullstate.teams.<team>.players.<playerid>. CBS
+ * records its OWN opick/round/pick per roster entry — read them, never re-derive. */
+interface CbsRosterEntry {
+  id?: string | number;
+  opick?: string | number;
+  round?: string | number;
+  pick?: string | number;
+  team_id?: string | number;
+  rosterpos?: string;
+  elig?: string;
+}
+
+/**
+ * payload.fullstate.teams → the complete board, as a single authoritative resync.
+ *
+ * This is the late-join / reconnect source (protocol doc §4 "Full roster state"): every team's
+ * roster keyed by CBS player id. It is emitted as a `draft_state` carrying an explicit `picks`
+ * list, which `ingest/log.py::fold_state` treats as a full re-sync — as opposed to the ticker
+ * `draft_state` most frames carry, which deliberately leaves previously folded picks alone.
+ *
+ * ⚠️ Read `fullstate`, NOT `fullstatedelta`. Both have a `teams` map of the same shape, but
+ * `fullstatedelta.teams` holds only the picks THAT FRAME reported (measured: 1-9 entries on a
+ * 168-pick draft). Treating a delta as a full resync would replace the whole board with a
+ * handful of picks on every frame.
+ */
+function cbsSnapshotPicks(payload: Record<string, unknown>): Record<string, unknown>[] {
+  const fullstate = payload["fullstate"];
+  if (!fullstate || typeof fullstate !== "object") return [];
+  const teams = (fullstate as Record<string, unknown>)["teams"];
+  if (!teams || typeof teams !== "object") return [];
+
+  const picks: Record<string, unknown>[] = [];
+  for (const [teamId, team] of Object.entries(teams as Record<string, unknown>)) {
+    const players = (team as Record<string, unknown> | null)?.["players"];
+    if (!players || typeof players !== "object") continue;
+    for (const [playerId, raw] of Object.entries(players as Record<string, unknown>)) {
+      const entry = raw as CbsRosterEntry;
+      const overall = Number(entry.opick);
+      if (!isValidOverall(overall)) continue;
+      const arithmetic = roundFromOverall(overall);
+      picks.push({
+        overall,
+        round: Number(entry.round ?? arithmetic.round),
+        pick_in_round: Number(entry.pick ?? arithmetic.pick_in_round),
+        team_id: String(entry.team_id ?? teamId),
+        ...cbsPlayerData(entry.id ?? playerId),
+      });
+    }
+  }
+  return picks.sort((a, b) => Number(a["overall"]) - Number(b["overall"]));
+}
+
 /** payload.newstate → draft_state (current pick / round / on-the-clock / on-deck). Unlike
  * pick_made, NO adjustment is needed here — newstate IS "the current state," by design. */
 function cbsDraftStateEvent(
   leagueId: string,
   source: DraftEvent["source"],
   newstate: CbsNewState,
+  picks?: Record<string, unknown>[],
 ): DraftEvent | null {
   if (!isValidOverall(newstate.opick)) return null;
   return {
@@ -223,12 +276,28 @@ function cbsDraftStateEvent(
     league_id: leagueId,
     source,
     data: {
+      // Verbatim, INCLUDING the draft-over overrun (opick 169 on a 168-pick draft). That is
+      // the same "no picks left" sentinel opponents.next_overall_pick returns; clamping it to
+      // 168 would claim the final pick is still on the clock after it was made.
       current_overall_pick: Number(newstate.opick),
       round: newstate.round != null ? Number(newstate.round) : null,
       on_the_clock_team_id: cbsTeamId(newstate.onclockteamid),
       on_deck_team_id: cbsTeamId(newstate.ondeckteamid),
+      // Present ONLY for a real full-board snapshot — its presence is what tells fold_state
+      // this is an authoritative resync rather than a ticker tick.
+      ...(picks && picks.length > 0 ? { picks } : {}),
     },
   };
+}
+
+/** True when the clock has run past the last real pick (rounds x teams). CBS's terminal frame
+ * carries opick 169 on a 14-round, 12-team draft — a draft-over sentinel, not a 15th round.
+ * Structural, so completion is detected even if the `state` word is absent or changes. */
+function isDraftOver(newstate: CbsNewState, teamCount: number): boolean {
+  const rounds = Number(newstate.rounds);
+  const opick = Number(newstate.opick);
+  if (!Number.isInteger(rounds) || rounds <= 0 || !Number.isInteger(opick)) return false;
+  return opick > rounds * teamCount;
 }
 
 function parseNetworkFrame(via: NetworkVia, body: string): DraftEvent[] {
@@ -269,8 +338,10 @@ function parseNetworkFrame(via: NetworkVia, body: string): DraftEvent[] {
 
   const newstate = payload["newstate"];
   const ns = newstate && typeof newstate === "object" ? (newstate as CbsNewState) : null;
+  // A subscribe/response's full board — the late-join resync source (§4). Never fullstatedelta.
+  const snapshot = cbsSnapshotPicks(payload);
   if (ns) {
-    const stateEvent = cbsDraftStateEvent(leagueId, source, ns);
+    const stateEvent = cbsDraftStateEvent(leagueId, source, ns, snapshot);
     if (stateEvent) events.push(stateEvent);
   }
 
@@ -280,7 +351,9 @@ function parseNetworkFrame(via: NetworkVia, body: string): DraftEvent[] {
     if (order) events.push(orderEvent(leagueId, source, order));
   }
 
-  if (ns?.state === "completed") {
+  // Two independent completion signals: CBS's own state word, and the structural overrun of
+  // the clock past the last real pick. Either one is enough.
+  if (ns && (ns.state === "completed" || isDraftOver(ns, IMMUTABLE_TEAM_COUNT))) {
     events.push({ event_type: "draft_complete", league_id: leagueId, source, data: {} });
   }
 
