@@ -7,16 +7,28 @@ on a one-sided Wilcoxon across the 12 slots AND is non-negative at every slot.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 
 import pytest
 
-from jaaffl.calibrate.tune import evaluate_params, objective_value, promotion_decision
+from jaaffl.calibrate.tune import (
+    WinProbabilityObjective,
+    evaluate_params,
+    objective_value,
+    promotion_decision,
+)
 from jaaffl.config import EngineParams
 from jaaffl.domain import LeagueSettings, Position, RosterSlot
 from jaaffl.engine.optimize import expand_starting_slots
-from jaaffl.engine.simulate import AdpNoiseAgent, ScoreAgent, SimContext, VbdOnlyAgent
+from jaaffl.engine.simulate import (
+    AdpNoiseAgent,
+    NeedBasedAgent,
+    ScoreAgent,
+    SimContext,
+    VbdOnlyAgent,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -66,10 +78,50 @@ def _small_ctx() -> SimContext:
     )
 
 
+def _sigma_ctx() -> SimContext:
+    """``_small_ctx`` plus PER-PLAYER sigma, so a season can actually be sampled from it."""
+    ctx = _small_ctx()
+    return dataclasses.replace(
+        ctx, sigma={pid: 10.0 + 0.5 * (i % 23) for i, pid in enumerate(sorted(ctx.value))}
+    )
+
+
 def test_evaluate_params_returns_one_value_per_slot() -> None:
     per_slot = evaluate_params(EngineParams(), _small_ctx(), opponents=[VbdOnlyAgent()], seeds=[1])
     assert len(per_slot) == 12
     assert all(v > 0 for v in per_slot)
+
+
+def test_deterministic_objective_is_seed_blind_against_a_deterministic_field() -> None:
+    """The Tier-4 defect, pinned as a regression. ``NeedBasedAgent`` never consumes its ``rng``, so
+    with the sigma-blind scorer the WHOLE held-out evaluation is a constant function of the seed:
+    ``--eval-seeds`` bought nothing and the gate's Wilcoxon ran on one frozen scenario."""
+    ctx = _sigma_ctx()
+    one = evaluate_params(EngineParams(), ctx, opponents=[NeedBasedAgent()], seeds=[1001])
+    six = evaluate_params(
+        EngineParams(), ctx, opponents=[NeedBasedAgent()], seeds=list(range(1001, 1007))
+    )
+    assert one == six  # bit-identical: zero simulation variance
+
+
+def test_win_probability_objective_restores_seed_variance_to_a_deterministic_field() -> None:
+    """...and the stochastic scorer fixes it on its own. Even when every opponent is deterministic
+    (so the DRAFT is frozen), each seed now draws a different season, so ``--eval-seeds`` is a real
+    estimate rather than the same number repeated."""
+    ctx = _sigma_ctx()
+    objective = WinProbabilityObjective(n_draws=200)
+    one = evaluate_params(
+        EngineParams(), ctx, opponents=[NeedBasedAgent()], seeds=[1001], objective=objective
+    )
+    six = evaluate_params(
+        EngineParams(),
+        ctx,
+        opponents=[NeedBasedAgent()],
+        seeds=list(range(1001, 1007)),
+        objective=objective,
+    )
+    assert one != six
+    assert all(0.0 <= v <= 1.0 for v in one + six)
 
 
 def test_objective_value_is_the_mean_across_slots() -> None:

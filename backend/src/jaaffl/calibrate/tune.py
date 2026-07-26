@@ -16,15 +16,18 @@ import dataclasses
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from statistics import mean
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from jaaffl.config import EngineParams
 from jaaffl.engine.simulate import (
     DraftAgent,
     ScoreAgent,
+    SeasonOutcomes,
     SimContext,
     optimal_lineup_value,
+    sample_season_outcomes,
     simulate_draft,
+    win_probability,
 )
 
 if TYPE_CHECKING:
@@ -83,6 +86,63 @@ LAMBDA_BANDS: list[tuple[tuple[int, int], tuple[float, float]]] = [
 ]
 
 
+class SimObjective(Protocol):
+    """Scores ONE finished draft. Takes every roster (not just ours) so a rank-based objective can
+    see the field, and the ``seed`` so a stochastic objective stays reproducible."""
+
+    def __call__(
+        self,
+        rosters: Sequence[Sequence[str]],
+        *,
+        our_slot: int,
+        ctx: SimContext,
+        seed: int,
+    ) -> float: ...
+
+
+def mean_lineup_value_objective(
+    rosters: Sequence[Sequence[str]], *, our_slot: int, ctx: SimContext, seed: int
+) -> float:
+    """The legacy objective: our final roster's optimal-9 value under the deterministic ``mu``.
+
+    **Sigma-blind, therefore risk-blind.** It cannot reward ``lambda*sigma`` — any risk aversion
+    just moves the ranking away from the very ``mu`` it pays out on, so lambda can be penalised and
+    never rewarded. Kept because it is the interpretable points-scale view (and the number every
+    pre-Tier-4 E2 run reported), but it must not be the sole gate: see
+    :class:`WinProbabilityObjective`.
+    """
+    return optimal_lineup_value(rosters[our_slot], ctx)
+
+
+class WinProbabilityObjective:
+    """``P(our roster posts the highest realized season total of the 12)`` over ``n_draws`` sampled
+    seasons — the objective that can actually price risk (plan §3.9 names playoff/championship odds
+    as "the true objective that lambda only proxies").
+
+    The sampled block is built once per ``(ctx, seed)`` and reused across all 12 slots, so a player
+    realizes the same season everywhere — common random numbers, which is what keeps the 12-slot
+    paired gate sensitive enough to see a param change rather than sampling noise. The cache holds a
+    strong reference to ``ctx`` so its ``id`` cannot be recycled under it.
+    """
+
+    def __init__(self, *, n_draws: int = 400) -> None:
+        self._n_draws = n_draws
+        self._cache: dict[tuple[int, int], tuple[SimContext, SeasonOutcomes]] = {}
+
+    def _outcomes(self, ctx: SimContext, seed: int) -> SeasonOutcomes:
+        key = (id(ctx), seed)
+        cached = self._cache.get(key)
+        if cached is None or cached[0] is not ctx:
+            cached = (ctx, sample_season_outcomes(ctx, n_draws=self._n_draws, seed=seed))
+            self._cache[key] = cached
+        return cached[1]
+
+    def __call__(
+        self, rosters: Sequence[Sequence[str]], *, our_slot: int, ctx: SimContext, seed: int
+    ) -> float:
+        return win_probability(rosters, self._outcomes(ctx, seed), ctx, our_slot=our_slot)
+
+
 def evaluate_agent(
     agent: DraftAgent,
     ctx: SimContext,
@@ -90,17 +150,25 @@ def evaluate_agent(
     opponents: Sequence[DraftAgent],
     seeds: Sequence[int],
     teams: int = 12,
+    objective: SimObjective | None = None,
 ) -> list[float]:
-    """Per-slot mean optimal starting-lineup value of ``agent`` across ``seeds`` — one entry per
-    draft slot. Placing the agent at each seat in turn avoids slot-specific overfit."""
+    """Per-slot mean score of ``agent`` across ``seeds`` — one entry per draft slot. Placing the
+    agent at each seat in turn avoids slot-specific overfit.
+
+    ``objective`` defaults to :func:`mean_lineup_value_objective` (the legacy, sigma-blind measure);
+    pass :class:`WinProbabilityObjective` for the risk-pricing gate. Callers should report both.
+    """
+    score = objective or mean_lineup_value_objective
     per_slot: list[float] = []
     for slot in range(teams):
         values = [
-            optimal_lineup_value(
+            score(
                 simulate_draft(
                     ctx, our_slot=slot, our_agent=agent, opponents=opponents, seed=seed, teams=teams
-                )[slot],
-                ctx,
+                ),
+                our_slot=slot,
+                ctx=ctx,
+                seed=seed,
             )
             for seed in seeds
         ]
@@ -115,9 +183,17 @@ def evaluate_params(
     opponents: Sequence[DraftAgent],
     seeds: Sequence[int],
     teams: int = 12,
+    objective: SimObjective | None = None,
 ) -> list[float]:
     """Per-slot evaluation of a ``ScoreAgent(params)`` — the E2 objective input."""
-    return evaluate_agent(ScoreAgent(params), ctx, opponents=opponents, seeds=seeds, teams=teams)
+    return evaluate_agent(
+        ScoreAgent(params),
+        ctx,
+        opponents=opponents,
+        seeds=seeds,
+        teams=teams,
+        objective=objective,
+    )
 
 
 def objective_value(
@@ -127,9 +203,14 @@ def objective_value(
     opponents: Sequence[DraftAgent],
     seeds: Sequence[int],
     teams: int = 12,
+    objective: SimObjective | None = None,
 ) -> float:
-    """The scalar Optuna maximizes: mean starting-lineup value across all 12 slots."""
-    return mean(evaluate_params(params, ctx, opponents=opponents, seeds=seeds, teams=teams))
+    """The scalar Optuna maximizes: the mean per-slot score across all 12 slots."""
+    return mean(
+        evaluate_params(
+            params, ctx, opponents=opponents, seeds=seeds, teams=teams, objective=objective
+        )
+    )
 
 
 def promotion_decision(
