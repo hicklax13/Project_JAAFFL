@@ -215,6 +215,16 @@ in **Phase 4 (Stage 5 engine)** — two more things:
   on half the evidence is exactly the mistake this audit keeps finding. Details in `ROADMAP.md` §6;
   the missing measurement is the next tier's job. **Nothing has been changed.**
 
+  ⛔ **Tier 7 update — those numbers are now OUT OF DATE, including the `alpha = 0` recommendation
+  above.** Tier 7 fixed the measuring stick itself (see §1b): a roster that cannot field a legal
+  lineup used to score almost as well as one that can, and *every* calibration number in this
+  section was produced with that broken stick. They are not wrong so much as **no longer
+  comparable** — the whole scale moved. Re-measuring is the next tier's first job.
+
+  **What this means for you: there is currently NO knob recommendation on the table.** The
+  `alpha = 0` suggestion above is suspended until it is re-measured, not withdrawn. Leaving
+  `config/engine.json` exactly as it is remains the right call, and is what the code ships with.
+
 ## 1b. ⛔ READ BEFORE DRAFT NIGHT — the engine goes blind in the late rounds  `[NEW — Tier 6]`
 
 **You must fill QB, K and DST yourself. The engine will not tell you to.**
@@ -227,12 +237,14 @@ R1:TE R2:WR R3:WR R4:WR R5:TE R6:TE R7:TE R8:TE R9:TE R10:RB R11:TE R12:TE R13:T
 -> 13 tight ends, 3 WR, 1 RB.  ZERO QB, ZERO K, ZERO DST.
 ```
 
-That roster **cannot field a legal starting lineup** — three of your nine starting slots would be
-empty. It happens identically whether the other eleven teams draft greedily or realistically, so it
-is not an artifact of the simulation. And the players were there for the taking: at your round-17
-pick there were **21 kickers available** and the best one was ranked **53rd**; at round 16, **20
-defenses** available, best ranked **55th**; **38 quarterbacks** available at round 10, best ranked
-**150th**.
+That roster **cannot field a legal starting lineup** — **four** of your nine starting slots would be
+empty. (Tier 6 said three. It counted the missing *positions* — QB, K, DST — and forgot the
+**WR/RB flex**: your 1 RB and 3 WR fill the RB slot and the three WR slots exactly, leaving the
+flex with nobody. Corrected in Tier 7.) It happens identically whether the other eleven teams draft
+greedily or realistically, so it is not an artifact of the simulation. And the players were there
+for the taking: at your round-17 pick there were **21 kickers available** and the best one was
+ranked **53rd**; at round 16, **20 defenses** available, best ranked **55th**; **38 quarterbacks**
+available at round 10, best ranked **150th**.
 
 **Why.** From about round 5, every remaining player at every position you still need is projected
 below "replacement level", and the engine measures a player by how much he adds to your *starting*
@@ -253,9 +265,37 @@ points** over one projected for **83**.
 The overlay is honest about this if you look: those picks show `MLV 0.00` and the rationale reads
 `risk tilt` rather than `value`. That is the engine telling you it has no value opinion.
 
-**This is not fixed.** Fixing it changes live recommendations and needs the calibration harness plus
-the no-regression gate to sign off, which is the next tier's headline job. It is written down here
-because the draft may come first.
+✅ **MOSTLY FIXED IN TIER 7 (2026-07-27) — but read the one remaining case below.**
+
+The engine now understands that a replacement-level player is only worth counting **while you still
+have a pick left to draft him**. Two things were wrong, and neither was what Tier 6 guessed:
+
+1. Once a position was fully spoken for league-wide, the engine measured the best available
+   quarterback **against himself**, so his value came out at exactly zero every single round.
+2. The measuring stick used to test the whole engine could not tell a roster with no quarterback
+   from one with a replacement quarterback. On your real board it reported a **+15.34**-point gap
+   where the true gap was **+260.77** — it could see 5.9% of the problem. That is why six rounds of
+   calibration never caught this: the test could not fail.
+
+Walking the same draft again on your real board, from the same seat:
+
+| | roster | legal? |
+|---|---|---|
+| before | `{RB:1, TE:13, WR:3}` | ✗ four empty starting slots |
+| after | `{DST:1, K:1, QB:1, RB:2, TE:8, WR:4}` | ✅ **all nine** |
+| after, vs. realistic opponents | `{DST:1, QB:2, RB:1, TE:9, WR:4}` | ✗ **no kicker** |
+
+⚠️ **The one case still broken: it can take a second QB instead of a kicker.** In the last rounds
+the engine gets a bonus for drafting *high-uncertainty* players (sensible for a bench flier). That
+bonus is currently paid even for a player you could never start — a **second** quarterback, when
+you can only ever play one. At round 16 that bonus was worth **+68** points to a backup QB, against
+a kicker worth **+2.6**, so the kicker lost. Fixing it means changing a dial in
+`config/engine.json`, which is **yours**, and it needs the calibration harness to sign off first —
+so it is the next tier's job and nothing was changed for you.
+
+**So the 30-second rule above still applies, with one change:** you can now trust the engine to
+take a QB, K and DST on its own in the last few rounds — but **at round 16 and 17, if you still
+have no kicker, take one yourself.**
 
 ✅ **Also new in Tier 6 (no action needed):** the overlay's **bye-week chip now actually works**. It
 was declared, styled and rendered all along, but nothing ever filled it in, so it could never

@@ -13,6 +13,106 @@ order — later stages assume the earlier contracts exist.
 
 Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` done
 
+## 📍 Status — 2026-07-27 · Tier 7 (the engine could not fill a legal roster, and the objective could not see why)
+
+> **Tier 7 of the audit is merged** (PR #58). Tier 6 *found* the late-round defect and wrote it
+> down as an owner warning. Tier 7 asked why six tiers of calibration never caught it, and the
+> answer was that **the measuring instrument was blind to it**: the E2/E6 objective scored a roster
+> with no quarterback exactly as highly as one with a replacement quarterback. The fix had to start
+> there, not at the symptom.
+
+### The root cause is NOT what Tier 6 recorded
+
+Tier 6's one-line root cause — "`max(0, ·)` in MLV makes an empty REQUIRED slot worth exactly what
+a thirteenth tight end is worth" — is **wrong as a mechanism**. Instrumenting the real 510-player
+board found three separate defects:
+
+1. **The baseline collapsed onto the candidate himself.** `dynamic_replacement_values` floors
+   remaining startable demand at 0, so a saturated position took `_value_at_rank(ranked, 1)` — the
+   **best available player** — and `lineup_value` credits `max(μ, baseline)` either way, so his own
+   MLV was *exactly* `0.0000` by construction. Measured QB `μ_best − baseline` by round:
+   `+51.15 · +9.40 · +0.32 · 0.0000 · 0.0000 …` from R4 on, never recovering. The function's own
+   docstring already said it pointed one past remaining demand precisely to avoid "collapsing onto
+   the best remaining candidate's own μ" — the zero floor defeated its own stated intent.
+2. **The risk term outranked value.** `lambda_slot_override` pays a SURPLUS candidate `λ = −0.4`
+   — **+18.69** at the clamp-saturated `σ = 46.72` — while charging the LAST_OPEN_STARTABLE
+   candidate `+0.4`. At R17 the kicker's MLV had *not* collapsed; it was **+13.16**, and he still
+   lost, because `13.16 < 18.69`. **Fixing the baseline alone would not have produced a legal
+   roster.**
+3. **The objective could not see either.** `roster_season_values` delegates to the same
+   `lineup_value`, which credited `baselines[QB] = 230.64` for an empty slot.
+
+### The measurement that explains six tiers of silence
+
+Real board, swapping the 3 worst tight ends for the *actual* R15–R17 leftovers (Davis Mills QB
+μ=83.60 · Brandon Aubrey K μ=89.98 · Buffalo DST μ=87.19):
+
+| | points |
+|---|---|
+| what the objective reported | **+15.34** |
+| what the swap is actually worth | **+260.77** |
+| visible fraction | **5.9%** |
+
+The visible +15.34 is *entirely* the kicker (89.98 − 74.64). The QB and the DST contributed
+**exactly zero**. **No E2/E6 gate could ever have promoted a fix**, because the instrument could
+not measure the thing being fixed. That is the whole answer to "why did this survive six tiers".
+
+### The fix, and what it does not claim
+
+One parameter-free rule: **a replacement phantom is only worth counting while a pick remains to
+draft it.** `lineup_value` takes `picks_remaining` (`None` = today's behaviour, bit-identical);
+`marginal_lineup_value` spends the pick it costs, `L*(R ∪ p, k−1) − L*(R, k)`. It is provably
+**inert while `k − 1 ≥ u`**, i.e. rounds 1–14 are unchanged, so the measured early-draft behaviour
+is preserved and only the endgame moves. The objective passes `k = 0` — the draft is over. A slot
+whose phantom is unaffordable falls back to the best sub-replacement leftover, without which a
+rostered-but-weak QB would still score 0 and the blindness would reappear in a new form.
+
+Real-board walk from seat 6, before → after:
+
+```
+before                                  {RB:1, TE:13, WR:3}              4 unfillable slots
+after (best-available opponents)        {DST:1,K:1,QB:1,RB:2,TE:8,WR:4}  LEGAL, all 9
+after (need-based opponents)            {DST:1,QB:2,RB:1,TE:9,WR:4}      K still missing
+```
+
+**A carried-forward finding is corrected: that roster leaves FOUR starting slots unfillable, not
+three.** Tier 6 counted missing *positions* (QB/K/DST) and forgot the WR/RB flex, which the 1 RB
+and 3 WR drain before it is reached. `docs/owner-manual-todo.md` §1b said "three of your nine" and
+has been fixed.
+
+**The residual, stated plainly.** Under need-based opponents the engine still misses a kicker. At
+R16 it takes a second quarterback (MLV **−72.06**, σ **170.08**) over the best kicker (MLV
+**+2.58**, σ 20.0): the surplus-stash `λ = −0.4` pays **+68.03** for variance a second QB can
+never use — you start only one, and the flex is WR/RB — while the last-open-startable `+0.4`
+charges the kicker −8.00. So the kicker loses by 1.4 points on risk alone. That is defect 2, it
+touches an owner-adopted coefficient, and it needs E2/E6 evidence with `--replicates >= 3`. It is
+Tier 8's, and nothing in `config/engine.json` was edited.
+
+### ⚠️ Findings B, C and D are SUPERSEDED, not confirmed
+
+Tier 6's noise floor (B), its kappa/reliability resolution (C) and its §10.3 sweeps (D) were all
+measured **under the blind objective**. Changing what a roster is worth changes every one of those
+numbers, so they are **not comparable to anything measured after this change** and must be re-run
+before any of them is quoted again. They have deliberately NOT been re-measured here — a re-run
+costs 5 seed blocks per arm and would have been reported on a half-finished engine, which is the
+exact mistake this audit keeps finding. **Tier 7 therefore does not carry a kappa, lambda, alpha
+or reliability recommendation of any kind.**
+
+### What Tier 7 did NOT do
+
+* **Goal 2 (points for the kappa/lambda sweeps) — not done, and deliberately so.** It is blocked by
+  the objective change above: measuring points under an instrument that is about to change would
+  produce a number with a two-hour shelf life.
+* **Goal 3 (the σ clamp) — measured, not changed.** `VOL_RATIO_MAX` saturation is now *implicated*
+  rather than cosmetic: σ = 46.72 six times in R12–17 makes the late-round tiebreak arbitrary, and
+  σ = 170.08 on a surplus QB is what still beats a kicker. Recorded, not tuned.
+* **Goal 4 (what the objective cannot see) — unchanged and still true.** `sample_season_outcomes`
+  draws one season total per player independently, so there is still **no week axis** and **no
+  cross-player correlation**. `bye_stack`, `handcuff_synergy` and `sos` remain unmeasurable and
+  unimplemented. Tier 7 makes the objective see *roster legality*; it does not give it a calendar.
+* **Timing is not claimed to be optimal.** The fix guarantees a *legal* roster; whether the engine
+  should take a QB at R10 rather than R15 is now measurable for the first time, and is unmeasured.
+
 ## 📍 Status — 2026-07-27 · Tier 6 (the remaining terms, and what the harness can actually measure)
 
 > **Tier 6 of the audit is merged** (PRs #53–#56). Tier 5 asked whether any *other* term was dead.
