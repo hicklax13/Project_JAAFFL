@@ -317,10 +317,27 @@ class ScoreAgent:
     def pick(self, available, my_roster, ctx, rng=None) -> str:
         params = self._params
         value = self._effective_value(ctx)
-        base = lineup_value(list(my_roster), value, ctx.position, ctx.baselines, ctx.slots)
+        # Picks left, including this one. A replacement phantom you have no pick left to draft is
+        # not a player, so MLV stops pricing an unfillable slot as though it were free (Tier 7).
+        picks_remaining = max(0, ctx.roster_size - len(my_roster))
+        base = lineup_value(
+            list(my_roster),
+            value,
+            ctx.position,
+            ctx.baselines,
+            ctx.slots,
+            picks_remaining=picks_remaining,
+        )
         all_mlv = {
             p: marginal_lineup_value(
-                p, my_roster, value, ctx.position, ctx.baselines, ctx.slots, base_value=base
+                p,
+                my_roster,
+                value,
+                ctx.position,
+                ctx.baselines,
+                ctx.slots,
+                base_value=base,
+                picks_remaining=picks_remaining,
             )
             for p in available
         }

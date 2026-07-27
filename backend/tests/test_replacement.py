@@ -154,3 +154,54 @@ def test_dynamic_baseline_is_monotonic_nondecreasing_in_draft_count() -> None:
         )
         assert base[Position.RB] >= prev
         prev = base[Position.RB]
+
+
+# --- Tier 7: the baseline must never BE the best available player ------------------------------
+
+
+def test_a_saturated_position_does_not_price_replacement_at_the_best_available() -> None:
+    """The collapse that zeroed every needed position's MLV for six tiers.
+
+    ``remaining = max(0, demand - drafted)`` bottoms out at 0, so ``_value_at_rank(ranked, 1)``
+    returned **the best available player himself** — making his own MLV exactly ``0.0000`` by
+    construction, because ``lineup_value`` credits ``max(mu, baseline)`` either way. Measured on
+    the real board, QB ``mu_best - baseline`` went ``+51.15, +9.40, +0.32, 0.0000, 0.0000, ...``
+    from round 4 onward and never recovered, so the engine could not distinguish a quarterback it
+    had to have from a thirteenth tight end. This function's own docstring already says it points
+    one past remaining demand precisely to avoid "collapsing onto the best remaining candidate's
+    own μ" — the zero floor defeated that intent exactly when it mattered.
+    """
+    mu, players = _board()
+    available = list(mu)
+    settings = jaaffl_settings()
+    # Every league-wide startable QB slot is gone: demand is fully saturated.
+    baselines = dynamic_replacement_values(
+        settings,
+        mu,
+        players,
+        available,
+        drafted_at_pos={Position.QB: 99},
+        flex_split=(8, 4),
+    )
+    best_qb = max(
+        (mu[pid] for pid in available if players[pid].position is Position.QB),
+    )
+    assert baselines[Position.QB] < best_qb
+
+
+def test_the_saturated_baseline_is_the_next_man_up() -> None:
+    """Skipping the best available means you get the SECOND best — that gap is the real MLV."""
+    mu, players = _board()
+    available = list(mu)
+    ranked = sorted(
+        (mu[pid] for pid in available if players[pid].position is Position.QB), reverse=True
+    )
+    baselines = dynamic_replacement_values(
+        jaaffl_settings(),
+        mu,
+        players,
+        available,
+        drafted_at_pos={Position.QB: 99},
+        flex_split=(8, 4),
+    )
+    assert baselines[Position.QB] == pytest.approx(ranked[1])

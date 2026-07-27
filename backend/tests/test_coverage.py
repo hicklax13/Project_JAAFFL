@@ -24,6 +24,7 @@ from jaaffl.league.coverage import (
     inert_cliff_positions,
     startable_positions,
     teams_missing_bye_weeks,
+    unfillable_starting_slots,
 )
 
 # backend/tests/test_coverage.py -> repo root is parents[2].
@@ -334,3 +335,56 @@ def test_teams_missing_bye_weeks_ignores_free_agents() -> None:
     players = {"a": _byeplayer("a", "FA"), "b": _byeplayer("b", None), "c": _byeplayer("c", "SEA")}
 
     assert teams_missing_bye_weeks(players, {"c": 13}) == []
+
+
+# --- Tier 7: the fourth instance of this module's one question --------------------------------
+#
+# A roster SIZE read healthy for six tiers: 17 of 17 picks made, and three of the nine starting
+# slots unfillable. Tier 6 walked a full 12x17 draft on the real board using the engine's own
+# recommendations and got {RB:1, TE:13, WR:3} -- zero QB, zero K, zero DST -- identically under
+# both best-available and need-based opponents. Same shape as cliff_bonus's 447 entries and the
+# bye join's 1188: a count is not a diagnostic.
+
+
+def _jaaffl_slots():
+    from jaaffl.engine.optimize import expand_starting_slots
+    from tests.engine_fixtures import jaaffl_settings
+
+    return expand_starting_slots(jaaffl_settings())
+
+
+def _positions_for(roster: list[str]) -> dict[str, Position]:
+    return {pid: Position(pid.split("-")[0]) for pid in roster}
+
+
+def test_unfillable_starting_slots_names_every_empty_required_slot() -> None:
+    """The exact roster Tier 6 measured — and it is worse than Tier 6 recorded.
+
+    Tier 6 reported "three of your nine starting slots would be empty" (QB, K, DST) and
+    ``docs/owner-manual-todo.md`` §1b still said so. That counted missing POSITIONS and forgot
+    the WR/RB flex, which draws from the same pool the three dedicated WR slots and the RB slot
+    have already drained: 1 RB + 3 WR fill RB + WR×3 exactly, leaving the flex with nothing.
+    **Four** of the nine starting slots are unfillable, not three.
+    """
+    roster = [f"TE-{i}" for i in range(13)] + ["WR-0", "WR-1", "WR-2", "RB-0"]
+    assert unfillable_starting_slots(roster, _positions_for(roster), _jaaffl_slots()) == [
+        "DST",
+        "K",
+        "QB",
+        "WR/RB",
+    ]
+
+
+def test_a_legal_roster_reports_nothing() -> None:
+    """9 starters covered, including the WR/RB flex, so the list is empty."""
+    roster = ["QB-0", "RB-0", "WR-0", "WR-1", "WR-2", "RB-1", "TE-0", "K-0", "DST-0"]
+    assert unfillable_starting_slots(roster, _positions_for(roster), _jaaffl_slots()) == []
+
+
+def test_the_flex_is_honoured_rather_than_assumed() -> None:
+    """A 4th WR fills the WR/RB flex; the same roster one WR short does not."""
+    slots = _jaaffl_slots()
+    full = ["QB-0", "RB-0", "WR-0", "WR-1", "WR-2", "WR-3", "TE-0", "K-0", "DST-0"]
+    assert unfillable_starting_slots(full, _positions_for(full), slots) == []
+    short = [pid for pid in full if pid != "WR-3"]
+    assert unfillable_starting_slots(short, _positions_for(short), slots) == ["WR/RB"]
