@@ -679,8 +679,7 @@ for the tunables below; `config.py` gains only the *path* + provider/runtime env
   ],
   "lambda_slot_override": {"last_startable_slot_floor": 0.40, "surplus_stash_ceiling": -0.40},
   "replacement_blend": {"vols_weight": 0.5, "mangames_weight": 0.5},
-  "caps": {"modifier_abs_max": 5.0, "mu_refinement_pct": 0.15,
-           "modifiers": {"bye_stack": 3.0, "handcuff_synergy": 5.0, "sos": 3.0}},
+  "caps": {"mu_refinement_pct": 0.15},
   "candidate_cap": 180,
   "mc_enabled": false,
   "mc_rollouts": 2000
@@ -698,7 +697,7 @@ for the tunables below; `config.py` gains only the *path* + provider/runtime env
 | `lambda_slot_override` | `+0.40 / −0.40` | slot dominates phase | Force floor at last open startable slot; ceiling for surplus/stash |
 | `replacement_blend` | `0.5 / 0.5` | VOLS/man-games (§10.3) | Blend for replacement baselines (RB≈22–24, WR≈40–42, QB/TE/K/DST≈13) |
 | `projection_blend` | `"simple_average"` | simple average | Cross-source μ blend method |
-| `caps.modifier_abs_max` | `5.0` | ≤~3–5 pts | Absolute cap per capped modifier |
+| `caps.modifier_abs_max` | *(removed)* | ≤~3–5 pts | ⛔ Bound on the positional modifiers — **unimplemented, and removed from `config/engine.json` in Tier 6**. Nothing read it, and `run_study` was spending one of six search dimensions on it. See §6.C.7. |
 | `caps.mu_refinement_pct` | `0.15` | ±10–15% | μ-refinement cap on the projection blend |
 | `candidate_cap` | `180` | ≈180 | Top-K candidate bound on the hot path |
 | `mc_enabled` | `false` | analytic default | Toggle MC-VONA refinement |
@@ -2063,7 +2062,7 @@ league-calibrated, not asserted.
 | **κ (VONA)** | **0.5–0.8** — scarcity/opportunity-cost urgency; **no literature optimum** | practitioner (Draft Wizard / VONA) | Optuna (E2) |
 | **α (tier cliff)** | **0.3–0.5** — guard-rail weight; **no literature optimum** | Boris-Chen tiers | Optuna (E2) |
 | **Opportunity → μ** | **WOPR = 1.5·target_share + 0.7·air_yard_share**; weight shares by year-over-year **stability** (shares/WOPR high, raw counts low); non-PPR up-weights carries/air-yards/TDs | established WOPR; PFF/4for4 stability (§3.10.6) | `situation_adjust` caps (E3) |
-| **Modifiers** (bye/handcuff/SOS) | **hard-capped ≤ 3–5 pts each** — tie-breakers only | design §6.C.7 | `caps` (E2) |
+| **Modifiers** (bye/handcuff/SOS) | ⛔ **UNIMPLEMENTED** (Tier 6) — `_positional_modifiers` returns `{}`; no clamping code exists and the caps are removed from `config/engine.json`. **E2 structurally cannot price them**: its objective samples ONE season total per player, independently, so there is no week axis (bye/SOS) and no cross-player correlation (handcuff). Needs a weekly, correlated objective first. | design §6.C.7 | — |
 
 **Combining them (the "all together" answer).** Treat the full weight vector — `replacement_blend, κ,
 λ-table, α, caps, β, vona_horizon, reliability_shrinkage, situation_adjust` — as hyperparameters and

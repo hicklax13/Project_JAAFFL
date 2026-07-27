@@ -323,3 +323,25 @@ def test_the_min_slot_leg_still_rejects_a_slot_that_is_genuinely_worse() -> None
     noise = [0.007] * 12
 
     assert promotion_decision(tuned, baseline, slot_noise=noise)["promote"] is False
+
+
+def test_run_study_does_not_spend_a_search_dimension_on_the_inert_modifier_cap() -> None:
+    """`caps.modifier_abs_max` bounds the positional modifiers — and `_positional_modifiers`
+    returns `{}` unconditionally, so NOTHING reads it. Verified: the only readers of `params.caps`
+    are `projections.py` (a different key, `mu_refinement_pct`) and a docstring.
+
+    Tuning it is Tier 4's "tuned a term that cannot move a pick" again, and it is not free: TPE was
+    fitting SIX dimensions on two training seeds over thirty trials, and one of them was provably
+    inert — diluting the power on the coefficients that do matter.
+    """
+    pytest.importorskip("optuna")
+    from jaaffl.calibrate.tune import run_study
+
+    base = EngineParams(caps={"modifier_abs_max": 4.25, "mu_refinement_pct": 0.15})
+
+    tuned = run_study(
+        _small_ctx(), n_trials=2, seed=0, opponents=[VbdOnlyAgent()], seeds=[1], base=base
+    )
+
+    assert tuned.caps["modifier_abs_max"] == 4.25, "an inert knob must be carried, not searched"
+    assert tuned.caps["mu_refinement_pct"] == 0.15

@@ -116,11 +116,31 @@ def _positional_modifiers(
     context: DraftContext,
     params: EngineParams,
 ) -> dict[str, float]:
-    """Bounded tie-breakers (bye-stack −, handcuff-synergy +, SOS ±), each capped (design §6.C.7).
+    """UNIMPLEMENTED. §6.C.7's bounded tie-breakers (bye-stack −, handcuff-synergy +, SOS ±).
 
-    v1 ships the capped mechanism with no active modifier — bye/handcuff/SOS data is not on the $0
-    tier yet, so fabricating one would violate live-data honesty. Each modifier, when added, is
-    clamped to ``±caps.modifiers[name]`` and the sum re-clamped to ``±caps.modifier_abs_max``.
+    This returns ``{}`` unconditionally and always has. Two earlier claims in this docstring were
+    re-tested in Tier 6 and BOTH were wrong, so they are recorded here rather than repeated:
+
+    * *"bye/handcuff/SOS data is not on the $0 tier yet."* **False for bye and handcuff.** nflverse
+      ships schedules and depth charts free: measured 2026-07-27, ``load_schedules(2026)`` returns
+      272 regular-season games and yields a clean bye for all 32 teams (now read for real — see
+      ``league/schedule.py``); ``load_depth_charts(2026)`` returns 375k rows carrying ``gsis_id``.
+    * *"v1 ships the capped mechanism with no active modifier."* **There is no mechanism.** No
+      clamping code exists anywhere; the score assembly simply adds ``sum(mods.values())``, which is
+      0.0 because the dict is empty. Nothing reads ``caps.modifiers`` at all.
+
+    The real blocker is that **E2 cannot price any of these three**, so implementing one would ship
+    an unvalidated coefficient into the live scorer. ``sample_season_outcomes`` draws ONE season
+    total per player from ``N(mu, sigma)``, INDEPENDENTLY per player, and ``roster_season_values``
+    optimises the lineup once over those totals. So the objective has **no week axis** — bye_stack
+    and SOS have nothing to attach to — and **no cross-player correlation**, which is the entire
+    value of a handcuff (it pays out exactly when the starter does not). Tier 4 learned this shape
+    the expensive way: a term the objective cannot see gets "tuned" to noise.
+
+    Implementing any of them therefore needs a weekly, correlated objective FIRST. Until then the
+    honest state is: not implemented, not advertised (the caps are gone from
+    ``config/engine.json``), and ``modifiers`` stays on ``ScoreComponents`` as an empty, truthful
+    decomposition slot.
     """
     return {}
 
