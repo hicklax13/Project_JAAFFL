@@ -112,7 +112,12 @@ def build_draft_context(
     static_mlv = {
         pid: marginal_lineup_value(pid, [], mu, position, baselines, starting_slots) for pid in mu
     }
-    tiers = assign_tiers(ecr, position)
+    # Tiers are cut on μ, NOT on ECR (§3.6's letter) — the conflict is surfaced, with its
+    # measurements, in ``engine/tiers.py``'s module docstring. In short: the cliff is priced in
+    # MLV, a μ quantity, and since Tier 1 replaced the ``300 − ecr`` placeholder with real xEP the
+    # two orderings genuinely differ (Spearman −0.943). Tiering μ also covers every projected
+    # player, not just the ones the rankings feed reached (live 2026: 510 vs 447).
+    tiers = assign_tiers(mu, position)
     cliff = cliff_bonuses(tiers, static_mlv, position)
 
     return DraftContext(
