@@ -110,6 +110,16 @@ def dynamic_replacement_values(
     player filling your last open slot at that position (e.g. a K/DST at its stream round). As
     startable slots fill leaguewide, R shrinks, the baseline rises, and every survivor is re-priced.
     (Live positional-run *urgency* is carried by board-conditioned VONA, §3.4/R3, not here.)
+
+    **The rank is floored at 2 (Tier 7), which is what makes the paragraph above true.** ``R`` was
+    floored at 0, so a fully saturated position took ``_value_at_rank(ranked, 1)`` — *the best
+    available player himself* — and since ``lineup_value`` credits ``max(μ, baseline)`` either way,
+    his own MLV came out at exactly ``0.0000``. The stated intent was already the right one; the
+    zero floor defeated it precisely when the position mattered most. Measured on the real board,
+    QB ``μ_best − baseline`` ran ``+51.15, +9.40, +0.32, 0.0000, 0.0000 …`` from round 4 on, so the
+    engine scored a quarterback it had to have and a thirteenth tight end identically at zero.
+    Rank 2 is "if I skip him I get the next man up" — the honest one-pick horizon; the
+    survival-weighted version of the same question is κ·VONA's job, not this function's.
     """
     demand = _demand_with_flex(settings, flex_split)
     available = set(available_ids)
@@ -117,5 +127,6 @@ def dynamic_replacement_values(
     for pos, static_demand in demand.items():
         remaining = max(0, static_demand - drafted_at_pos.get(pos, 0))
         ranked = _ranked_mu(projected_points, players, pos, only=available)
-        out[pos] = _value_at_rank(ranked, remaining + 1)  # first player BEYOND remaining demand
+        # First player BEYOND remaining demand, and never the best available (see above).
+        out[pos] = _value_at_rank(ranked, max(2, remaining + 1))
     return out

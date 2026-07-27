@@ -288,8 +288,18 @@ def recommend(
     survival_vona = survival_display if horizon == 1 else _survival(horizon)
 
     # 3) Static-ish MLV for every available player (dynamic baselines); cache the base lineup once.
+    # Picks left to me, including this one. A replacement phantom is only worth counting while a
+    # pick remains to draft it — without this the engine priced an empty QB slot at its baseline
+    # forever, scored a 13th tight end and the quarterback it desperately needed identically at
+    # 0.00, and finished a 17-round draft unable to fill four of its nine starting slots (Tier 7).
+    picks_remaining = max(0, sum(slot.count for slot in settings.roster_slots) - len(my_roster))
     base_value = lineup_value(
-        my_roster, context.mu, context.position, baselines, context.starting_slots
+        my_roster,
+        context.mu,
+        context.position,
+        baselines,
+        context.starting_slots,
+        picks_remaining=picks_remaining,
     )
     mlv = {
         pid: marginal_lineup_value(
@@ -300,6 +310,7 @@ def recommend(
             baselines,
             context.starting_slots,
             base_value=base_value,
+            picks_remaining=picks_remaining,
         )
         for pid in available
     }

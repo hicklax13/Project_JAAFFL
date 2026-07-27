@@ -27,10 +27,14 @@ hours before the draft, when there is still time to fix it.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
 
 from jaaffl.data.crosswalk import team_norm
 from jaaffl.domain import LeagueSettings, Player, Position
+
+if TYPE_CHECKING:  # `engine` imports `league`, so the reverse must stay type-only
+    from jaaffl.engine.optimize import StartingSlot
 
 
 def startable_positions(settings: LeagueSettings) -> set[Position]:
@@ -128,3 +132,44 @@ def teams_missing_bye_weeks(
         if pid not in bye_week and team_norm(player.nfl_team) is not None
     }
     return sorted(team for team in missing - covered if team is not None)
+
+
+def unfillable_starting_slots(
+    roster: Sequence[str],
+    position: Mapping[str, Position],
+    slots: Sequence[StartingSlot],
+) -> list[str]:
+    """Starting slots this roster cannot fill, by slot label, sorted. Empty in the healthy case.
+
+    The fourth instance of this module's one question, and the fourth time the same shape of bug
+    reached the live board. A roster SIZE read healthy for six tiers: Tier 6 walked a full 12x17
+    draft on the real board using the engine's own recommendations and got ``{RB:1, TE:13, WR:3}``
+    — 17 of 17 picks made, and **three of the nine starting slots unfillable** — identically under
+    both best-available and need-based opponents. ``cliff_bonus``'s 447 entries and the bye join's
+    1188 read healthy the same way. A count is not a diagnostic; this asks the only question that
+    distinguishes the two states: **can nine players actually take the field?**
+
+    Feasibility, not value: it counts bodies per position rather than scoring a lineup, because a
+    slot is legal to fill regardless of how badly the player projects. Dedicated slots are matched
+    before the flex (a dedicated slot has no alternative), and the flex then draws from whichever
+    eligible position has the most bodies left — which is optimal for this league's single WR/RB
+    flex, so the flex is **honoured rather than assumed**.
+
+    Deliberately reports rather than raises, like every guard in this module. The preflight has no
+    roster to check before the draft, so this stays a post-draft / simulation assertion:
+    ``backend/tests/test_late_round_legality.py`` walks a draft and requires this to be empty.
+    """
+    remaining: dict[Position, int] = {}
+    for pid in roster:
+        pos = position.get(pid)
+        if pos is not None:
+            remaining[pos] = remaining.get(pos, 0) + 1
+
+    unfilled: list[str] = []
+    for slot in sorted(slots, key=lambda s: len(s.eligible)):
+        best = max(slot.eligible, key=lambda pos: remaining.get(pos, 0), default=None)
+        if best is not None and remaining.get(best, 0) > 0:
+            remaining[best] -= 1
+        else:
+            unfilled.append(slot.label)
+    return sorted(unfilled)
