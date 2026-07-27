@@ -146,16 +146,49 @@ in **Phase 4 (Stage 5 engine)** — two more things:
   written; the CLI is dry-run unless you pass `--write`, and `config/engine.json` stays
   owner-adopted. **No action needed from you** unless you want to revisit that gate leg.
 
-  ⚠️ **One new finding that IS worth your attention — α does nothing, on the live path.**
-  All 293 `cliff_bonus` values on the real board are exactly **0.0**, so the tier-cliff term
-  contributes `α × 0 = 0.00` to every recommendation you will see on draft night, the overlay's
-  tier-cliff bar can never be non-zero, and the "talent drops off after this tier" explanation can
-  never appear. Cause: `assign_tiers` produces only **8 tier boundaries across the whole
-  510-player board** (DST gets a single tier, so it has none), with tiers holding 25–54 players —
-  and only 102 of 510 players are above replacement, so both sides of every boundary sit in
-  sub-replacement territory where MLV is floored at 0. It is **not fixed**, because the fix is a
-  design choice about tiering (how many tiers, over the draftable subset or the whole board, on ECR
-  or on MLV) that changes live recommendations. Say the word and it gets its own pass.
+  ✅ **The old "α does nothing" warning is RESOLVED — Tier 5 fixed the tiering (2026-07-27,
+  PRs #50–#52).** The tier-cliff term now works on the board you will actually draft against:
+  **16 priced drops** where there were **0**, at all six positions. Three things were wrong at once:
+  the tiering algorithm chose the number of tiers by a criterion that answers "one tier" for a
+  smooth value curve; tiers were cut on expert rank while the cliff was priced in projected points
+  (the same ordering when μ was `300 − ecr`, no longer with real xEP); and tiering the whole board
+  put every boundary below replacement, where a drop is worth nothing. Biggest real cliffs on the
+  2026 board: **TE1 is 43.88 points clear of TE2**, **RB1 is 40.13 clear of RB2**. Kickers top out
+  at 2.97 — the honest answer for a streaming position, not a manufactured number.
+
+  ### ⚠️ A DECISION FOR YOU — the tier-cliff term now works, and it makes things WORSE
+
+  With the term finally live, the calibration harness could measure it for the first time. It says
+  **turn it off.** Setting `alpha` to 0 gains **+0.0133 championship probability per slot**
+  (`p = 0.0002`) *and* **+5.28 points per slot** (`p = 0.0002`), and is non-negative at **every one
+  of the 12 draft slots** — the first vector in this project's history to pass **both** legs of the
+  no-regression gate. The response is monotone, so this is not one lucky point estimate:
+
+  | `alpha` | championship probability |
+  |---|---|
+  | **0.0** | **0.1059** |
+  | 0.3 | 0.0940 |
+  | **0.4 (what ships today)** | **0.0926** |
+  | 0.5 | 0.0870 |
+  | 0.8 | 0.0871 |
+
+  The likely reason: `κ·VONA` already prices scarcity, and prices it *better* — it knows whether the
+  player will still be there at your next pick. The cliff bonus adds a second, blunter scarcity
+  bonus on top that ignores that. It hurts most at **draft slot 1** (0.0958 → 0.1650 with α off),
+  the seat best able to spend the first overall pick on the huge-cliff tight end.
+
+  **Nothing has been changed.** `config/engine.json` is yours; the calibration CLI is dry-run unless
+  you pass `--write`, and a simulator result is not a fact about drafting — the opponents are bots,
+  not the eleven people in your room. **If you want it, the whole change is one line** in
+  `config/engine.json`:
+
+  ```
+  "alpha": 0.0,
+  ```
+
+  Note this is outside the plan's specified `alpha` range of 0.3–0.5, i.e. the measurement says the
+  spec's own bounds exclude the best value. Leaving it at 0.4 is a defensible call too — you would
+  be trading a measured simulator edge for the tier-cliff explanation showing up in `Why?`.
 
 Steps (kept for the next capture — e.g. a settings-page capture, or re-verifying on draft night):
 1. Open a CBS mock draft with the extension loaded.
