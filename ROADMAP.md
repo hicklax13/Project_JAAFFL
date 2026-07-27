@@ -13,6 +13,186 @@ order — later stages assume the earlier contracts exist.
 
 Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` done
 
+## 📍 Status — 2026-07-27 · Tier 6 (the remaining terms, and what the harness can actually measure)
+
+> **Tier 6 of the audit is merged** (PRs #53–#56). Tier 5 asked whether any *other* term was dead.
+> Tier 6 asked the harder question — **which terms can this harness measure at all** — and found
+> that two "unresolved" terms were resolvable all along, that the promotion gate has been rejecting
+> on its own sampling noise, and that the engine cannot fill a legal roster.
+>
+> ### 1. `bye_week` was rendered by the overlay and populated by nothing (PR #53)
+>
+> `RecommendedPick.bye_week` is declared on the Pydantic contract, mirrored in Zod, and actively
+> rendered — `overlay.ts` pushes a `bye N` chip. **Zero backend writes existed**, so the chip could
+> never appear. Same shape as Tier 2's vanishing ESTIMATED badge: wired end to end except for input.
+>
+> The stub's premise ("bye data is not on the $0 tier") is **false**: `load_schedules(2026)` returns
+> **272 regular-season games, all 32 teams, one clean bye each** (weeks 5–14; no team is on bye in
+> week 12). A bye is a calendar fact — no coefficient, nothing to calibrate.
+>
+> Then the real board caught what the suite could not. Naive wiring left **152 of 510 projected
+> players (30%) with no bye**, because the two free feeds disagree: `load_ff_playerids` spells teams
+> `NOS`/`SFO`/`LAR`, `load_schedules` spells them `NO`/`SF`/`LA`. **9 of 32 teams joined to nothing**
+> while 23 resolved perfectly and the map looked populated at **1188 entries** — a COUNT read healthy
+> yet again. Team defenses were unaffected (they come from `load_teams`, already in the schedule's
+> vocabulary), so **two team vocabularies coexisted in one dict**: DST missed 1 player, RB missed 41.
+>
+> Fixed by extending the EXISTING `crosswalk.team_norm` (it lacked only `LA`→`LAR`, measured to be
+> the sole residual), not a parallel map. Live board: **152 missing → 25**, and all 25 are `FA` free
+> agents, who genuinely have no team. `league.coverage.teams_missing_bye_weeks` is the guard, and it
+> is **proven on the real board**: deleting three aliases makes preflight print `no bye resolved for
+> LAR, NOS, SFO` and coverage fall 485→440; restored, 485 of 510 and silence.
+>
+> ### 2. The promotion gate's min-slot leg was rejecting on noise (PR #54) — Tier 4's deferred question
+>
+> Every vector ever rejected on this leg failed by **0.0009–0.0016**. Measured (real board, 5 disjoint
+> blocks × 8 seeds × 800 draws), the **per-slot SD of a paired difference is 0.0013–0.0089**, to
+> 0.0148 on individual slots — five to ten times *inside* the margin the leg decides on.
+>
+> Block 0 uses the canonical seed block and **reproduces the Tier 5 control table digit-for-digit on
+> all five arms**, so the harness is faithful and the Tier 5 numbers are real.
+>
+> | α = 0 vs baseline | per block |
+> |---|---|
+> | `min_slot` | **+0.0009, −0.0295, −0.0231, −0.0094, −0.0139** → promotes **1 of 5** |
+> | `mean_diff` | +0.0133, +0.0063, +0.0033, +0.0133, +0.0086 → positive **5 of 5** |
+>
+> **The mean effect of α = 0 is robust; its "passes both legs" headline is a property of seed block
+> 1001–1008** — which happened to be the canonical one. Tier 5's claim that it was "the first vector
+> in this project's history to pass both legs" should be read as a statement about one seed block.
+>
+> The failure is **structural, not mere strictness**: `min` over 12 slots is an extreme-order
+> statistic, so requiring it to be non-negative as a *point estimate* demands the worst of twelve
+> noisy estimates land above zero — which a real, positive effect fails most of the time.
+>
+> `promotion_decision(..., slot_noise=...)` now asks whether a slot is **significantly** worse.
+> Omitted, the leg is byte-identical to before. `tune_engine_params.py --replicates N` supplies it.
+>
+> ### 3. κ and reliability_shrinkage are RESOLVED — both HELP
+>
+> Tier 5 reported them "statistically unresolved" at `p = 0.9355` / `p = 0.9199`. **Those p-values
+> are from the reverse-direction test.** `promotion_decision(tuned, baseline)` is one-sided with
+> `alternative="greater"`, so `promotion_decision(kappa_off, baseline) → p = 0.9355` tests whether
+> *turning κ off helps* — which nobody believes. The question "does κ help?" is
+> `promotion_decision(baseline, kappa_off)`. Re-run in the correct direction, pooling disjoint
+> blocks (pooling R blocks of S seeds **is** an R·S-seed evaluation, since per-slot scores are seed
+> means):
+>
+> | blocks | seeds | κ helps | reliability helps |
+> |---|---|---|---|
+> | 1 | 8 | +0.0044, p = 0.0820 — no | +0.0026, p = 0.0967 — no |
+> | 2 | 16 | +0.0062, **p = 0.0420** | +0.0038, **p = 0.0244** |
+> | 4 | 32 | +0.0064, **p = 0.0420** | +0.0032, **p = 0.0212** |
+> | 5 | 40 | +0.0064, **p = 0.0400** | +0.0027, **p = 0.0212** |
+>
+> **Both terms help, and keep their committed values.** The required N is **16 seeds for κ**;
+> reliability crosses at 16 but wobbles back at 24 (`p = 0.0527`) before settling, so treat **32
+> seeds** as its honest threshold. Neither is resolvable at the 8 seeds every prior run used — so
+> "unresolved" was half a real power problem and half a p-value read backwards. κ's measured cost is
+> the trade Tier 5 flagged: it buys win probability and is roughly points-neutral.
+>
+> ### 4. The positional modifiers: unimplemented, and unmeasurable by this harness (PR #55)
+>
+> `_positional_modifiers` returning `{}` is an honest stub, not the bug. The bug was
+> `config/engine.json` advertising `bye_stack 3.0`, `handcuff_synergy 5.0`, `sos 3.0`,
+> `modifier_abs_max 5.0`. **Both** of the stub's stated reasons were re-tested and both were wrong:
+> the $0 data exists (schedules + 375k depth-chart rows, both free), and there is **no capped
+> mechanism** — no clamping code exists anywhere; the score just adds `sum(mods.values()) = 0.0`.
+>
+> The real blocker is that **E2 structurally cannot price any of the three.**
+> `sample_season_outcomes` draws ONE season total per player from `N(μ, σ)`, **independently per
+> player**, and `roster_season_values` optimises the lineup once over those totals. So the objective
+> has **no week axis** (bye_stack, SOS have nothing to attach to) and **no cross-player correlation**
+> (which is the entire value of a handcuff — it pays out exactly when the starter does not).
+> Implementing one would ship an unvalidated coefficient into the live scorer. **These need a
+> weekly, correlated objective first.** Caps removed from the config, from `EngineParams`' defaults,
+> and from §6.C.7; `test_config` asserts they stay absent.
+>
+> Also: `run_study` was searching `modifier_cap`, which **nothing reads** — six TPE dimensions on two
+> training seeds over thirty trials, one provably inert, diluting the power available to κ, α and λ.
+> That is the same power problem Tier 5 blamed for the study disagreeing with the one-factor table.
+>
+> ### 5. ⛔ THE LATE-ROUND DEFECT — the engine cannot field a legal roster
+>
+> The most serious finding of this tier, and it is **not** the one the tier expected. Walking a full
+> 12×17 draft on the real board from seat 6, the engine's own recommendations produce:
+>
+> ```
+> R1:TE R2:WR R3:WR R4:WR R5:TE R6:TE R7:TE R8:TE R9:TE R10:RB R11:TE R12:TE R13:TE R14:TE R15:TE R16:TE R17:TE
+> roster: {RB: 1, TE: 13, WR: 3}       QB 0/1 · K 0/1 · DST 0/1  -> THREE starting slots unfillable
+> ```
+>
+> **Identical under both opponent models** (best-available *and* realistic need-based), so it is not
+> an artifact of the simulated field. And the required positions were abundantly available:
+>
+> | at my pick | available | rendered rank of the best one |
+> |---|---|---|
+> | QB, R10 | 38 | 150 |
+> | DST, R16 | 20 | 55 |
+> | K, R17 | 21 | 53 |
+>
+> The mechanism, consistent with the data: from ~R5 the top candidate's **MLV is 0.00** — every
+> remaining player at every needed position is below replacement, and `lineup_value` refuses to start
+> a sub-replacement player, so adding one contributes nothing. VONA is then `0 − 0 = 0` and the cliff
+> is 0 below replacement, so the score collapses to `−λ·σ`, which with λ negative is `+|λ|·σ`: **take
+> the noisiest projection.** And σ saturates at the clamp, so it is a per-position near-constant
+> (R12–17 picks all have σ ≈ 46.7) — the tiebreak among below-replacement players is effectively
+> arbitrary. R13 took μ = 16.1 over an available μ = 82.9.
+>
+> So the answer to "is the late tilt picking upside or noise?" is **neither**: it is picking a
+> near-constant, and the roster-need signal is invisible to it. **`max(0, ·)` in MLV means an empty
+> required slot is worth exactly as much as a 13th tight end.** The punt guard works as designed (DST
+> moves 180→55 at R16) but only past *other punted* players. Not fixed here — a fix changes live
+> recommendations and needs E2/E6 evidence and a gate. **This is Tier 7's headline.**
+>
+> ### 6. §10.3's ranges vs the measurements (surfaced, per the `agent_usage_contract`)
+>
+> **α's measured optimum (0.0) lies outside its specified `[0.3, 0.5]`**, so `run_study` is
+> structurally incapable of finding it. Tier 6 asked whether κ and the λ bands share the defect and
+> **measured it** — one-factor sweep, real board, 2 disjoint blocks × 8 seeds × 800 draws:
+>
+> | κ | 0.00 | 0.25 | 0.50 | **0.65** (shipped) | **0.80** (§10.3 max) | 1.10 | 1.50 |
+> |---|---|---|---|---|---|---|---|
+> | win prob | 0.0911 | 0.0928 | 0.0977 | **0.0973** | **0.1015** | 0.1034 | **0.1146** |
+>
+> **κ rises monotonically across the whole probed span and is still climbing at 1.50 — nearly double
+> §10.3's ceiling of 0.80.** κ = 1.50 is the argmax in *both* blocks independently (0.1102, 0.1190),
+> and the shipped 0.65 gives up **+0.0173** against it — larger than the α = 0 effect. The one
+> non-monotonicity (0.65 dipping 0.0004 below 0.50) is well inside the noise floor.
+>
+> λ, scaling the whole shipped schedule (within-run, so directly comparable):
+>
+> | λ scale | 0.5× | **1.0×** (shipped) | 1.5× |
+> |---|---|---|---|
+> | win prob | **0.1215** | 0.0973 | 0.0970 |
+>
+> **λ at half the shipped magnitude beats it by +0.0242 — the largest single effect measured in this
+> project** — and it replicates in both blocks (0.1142, 0.1287). Halving puts every band *outside*
+> its §10.3 range (band 1 → 0.15 vs a 0.20 floor; band 5 → −0.20 vs a −0.30 ceiling), so the tuner
+> cannot reach it either. That is consistent with the tuner having twice returned λ values pinned to
+> its band FLOORS: it was pushing against a wall.
+>
+> **All three canonical ranges exclude their measured optimum.** `run_study` searching §10.3 is a
+> measurement instrument that cannot report the truth about any of κ, α or λ. **Surfaced per the
+> `agent_usage_contract`, deliberately NOT silently widened** — changing the canonical ranges is a
+> spec decision, and the ranges are one of the few things a future tier can still trust to be the
+> plan's letter rather than this audit's inference.
+>
+> ⚠️ **Read these with three caveats.** (1) They measure **win probability only** — points were not
+> measured for these arms, and Tier 5 showed κ *buys win probability with points*, so a large κ very
+> plausibly costs points. (2) Two blocks, not five; the direction replicates in both and κ's
+> dose-response spans seven points, which is the same strength-of-evidence argument Tier 5 used for
+> α, but it is not the five-block treatment §2 got. (3) A better simulator is still a simulator.
+> **Nothing was adopted.**
+>
+> ### What Tier 6 did NOT do
+>
+> `config/league.json` untouched. `config/engine.json` edited **only** to delete four inert keys
+> (behaviour-neutral — nothing read them); no tuned vector adopted, and **α is still 0.4** — that
+> decision remains the owner's, now with the caveat that its min-slot leg does not replicate. The
+> late-round defect is diagnosed, not fixed. The σ-clamp saturation question is still open and is now
+> implicated in §5. And a replay is still not a live draft.
+
 ## 📍 Status — 2026-07-27 · Tier 5 (the tier-cliff term)
 
 > **Tier 5 of the audit is merged** (PRs #50–#52). Tier 4 handed it a term that moved the result by
