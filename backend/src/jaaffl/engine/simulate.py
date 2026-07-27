@@ -53,8 +53,21 @@ def optimal_lineup_value(roster: Sequence[str], ctx: SimContext) -> float:
     out on ``mu``, so lambda could be penalised and never rewarded. :func:`win_probability` over
     :func:`sample_season_outcomes` is the objective that can price risk; this stays available as the
     deterministic point-value view, and E2/E6 report both side by side.
+
+    **Scored as a FINAL roster** (``picks_remaining=0``, Tier 7): the draft is over, so a starting
+    slot this roster cannot fill yields nothing rather than its replacement baseline. Before Tier 7
+    the phantom was credited unconditionally here, which made a roster with no quarterback worth
+    exactly as much as one with a below-replacement quarterback. Measured on the real 510-player
+    board, this objective reported **+15.34** points for a swap worth **+260.77** — 5.9% of it —
+    so the engine's unfillable roster was invisible to every gate that might have fixed it.
+
+    No waiver wire is modelled: ``config/league.json`` specifies none, and inventing one would
+    breach its ``agent_usage_contract``. Zero is the honest floor for "the roster the draft
+    produced", and real streaming makes this a conservative bound rather than a neutral one.
     """
-    return lineup_value(roster, ctx.value, ctx.position, ctx.baselines, ctx.slots)
+    return lineup_value(
+        roster, ctx.value, ctx.position, ctx.baselines, ctx.slots, picks_remaining=0
+    )
 
 
 @dataclass(frozen=True)
@@ -97,18 +110,29 @@ def roster_season_values(
     The lineup is re-optimised per draw (you start whoever actually produced), so this is the
     season-long analogue of :func:`optimal_lineup_value` — and at ``sigma = 0`` it reproduces that
     function exactly, making the stochastic scorer a strict generalisation of the deterministic one.
+
+    Scored as a FINAL roster (``picks_remaining=0``) for the reason spelled out on
+    :func:`optimal_lineup_value`; both pass the same capacity, which is what keeps the σ=0
+    equivalence pin between them exact.
     """
     import numpy as np
 
     ids = [pid for pid in roster if pid in outcomes.index]
     if not ids:
-        empty = lineup_value([], ctx.value, ctx.position, ctx.baselines, ctx.slots)
+        empty = lineup_value(
+            [], ctx.value, ctx.position, ctx.baselines, ctx.slots, picks_remaining=0
+        )
         return np.full(outcomes.draws.shape[0], empty, dtype=float)
     realized = outcomes.draws[:, [outcomes.index[pid] for pid in ids]]
     return np.array(
         [
             lineup_value(
-                ids, dict(zip(ids, row, strict=True)), ctx.position, ctx.baselines, ctx.slots
+                ids,
+                dict(zip(ids, row, strict=True)),
+                ctx.position,
+                ctx.baselines,
+                ctx.slots,
+                picks_remaining=0,
             )
             for row in realized
         ],

@@ -202,3 +202,55 @@ def test_win_probability_rewards_variance_when_behind_and_punishes_it_when_ahead
     assert _p_win(_duel_ctx(our_mu=115.0, our_sigma=30.0)) < _p_win(
         _duel_ctx(our_mu=115.0, our_sigma=2.0)
     )
+
+
+# --- Tier 7: the objective could not see an unfillable roster --------------------------------
+#
+# `roster_season_values` delegates to the same `lineup_value` as the hot path, which credited
+# `baselines[pos]` for an empty starting slot unconditionally. So a roster with NO quarterback
+# scored exactly as much as one with a below-replacement quarterback. Measured on the real
+# 510-player board: swapping the 3 worst tight ends for the actual R15-R17 leftovers (Davis Mills
+# QB mu=83.60, Brandon Aubrey K mu=89.98, Buffalo DST mu=87.19) is worth +260.77 points in truth,
+# and this objective reported +15.34 -- 5.9% of it, all of it the kicker. No E2/E6 gate could ever
+# have promoted a fix, because the instrument could not measure the thing being fixed.
+
+
+def _pool_with_a_sub_replacement_qb() -> SimContext:
+    ctx = _pool_ctx()
+    return dataclasses.replace(
+        ctx,
+        value={**ctx.value, "qbX": 5.0},  # far BELOW the fixture's 20.0 replacement baseline
+        position={**ctx.position, "qbX": Position.QB},
+        sigma={**ctx.sigma, "qbX": 1.0},
+    )
+
+
+def test_the_objective_can_tell_an_unfillable_roster_from_a_legal_one() -> None:
+    """A startable-but-weak QB must beat an EMPTY QB slot. These scored identically pre-Tier-7."""
+    ctx = _pool_with_a_sub_replacement_qb()
+    assert optimal_lineup_value(["rb0", "qbX"], ctx) > optimal_lineup_value(["rb0"], ctx)
+
+
+def test_a_final_roster_is_not_credited_a_replacement_it_can_no_longer_draft() -> None:
+    """The draft is over: an unfilled starting slot yields nothing, not its baseline."""
+    ctx = _pool_ctx()
+    # QB slot and flex both empty; only the RB slot is really filled.
+    assert optimal_lineup_value(["rb0"], ctx) == pytest.approx(ctx.value["rb0"])
+
+
+def test_win_probability_punishes_the_roster_that_cannot_field_a_lineup() -> None:
+    """The E2/E6 objective must rank a legal roster above an unfillable one, not tie them.
+
+    The two rosters differ ONLY by the quarterback — deliberately the same RBs, so common random
+    numbers make them realize identically and the whole measured gap is the empty QB slot. An
+    earlier draft of this test gave the legal roster strictly worse RBs, which made it genuinely
+    worse (355 vs 358) and the assertion correctly refused it.
+    """
+    ctx = _pool_with_a_sub_replacement_qb()
+    illegal = ["rb0", "rb1"]  # no QB at all; rb1 can only take the flex
+    legal = ["rb0", "rb1", "qbX"]  # identical, plus a startable (if weak) quarterback
+    outcomes = sample_season_outcomes(ctx, n_draws=3000, seed=11)
+    field = [illegal, legal] + [["rb4", "rb5"] for _ in range(10)]
+    assert win_probability(field, outcomes, ctx, our_slot=1) > win_probability(
+        field, outcomes, ctx, our_slot=0
+    )
