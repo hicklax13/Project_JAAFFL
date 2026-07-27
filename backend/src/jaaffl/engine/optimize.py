@@ -62,12 +62,27 @@ def lineup_value(
     position: Mapping[str, Position],
     baselines: Mapping[Position, float],
     slots: Sequence[StartingSlot],
+    *,
+    picks_remaining: int | None = None,
 ) -> float:
     """L*(R): greedy optimal starting-lineup value with empty slots replacement-filled.
 
     Optimal for the "dedicated single-eligible slots + one WR/RB flex" structure of this roster:
     fill each dedicated slot with the best available player of its position (else the phantom),
     then each flex slot takes the best remaining eligible player vs the flex phantom.
+
+    ``picks_remaining`` caps how many empty slots may be credited a phantom at all — **a
+    replacement phantom you have no pick left to draft is not a player, it is a promise nobody
+    keeps.** ``None`` (the default) means "unlimited", which is bit-identical to the pre-Tier-7
+    behaviour, so every caller that has not opted in is unchanged.
+
+    Before Tier 7 the phantom was credited unconditionally, including for a FINAL roster. That
+    made an empty QB slot worth ``baselines[QB]`` forever, so (measured on the real 510-player
+    board) a roster with no quarterback scored exactly as much as one with a replacement
+    quarterback, and the engine drafted a thirteenth tight end while three of its nine starting
+    slots stayed unfillable. The surviving phantoms are the HIGHEST-valued ones: given fewer picks
+    than empty slots you would fill the slots that pay the most, so those are the ones still worth
+    counting.
     """
     pool: dict[Position, list[float]] = defaultdict(list)
     for pid in player_ids:
@@ -79,19 +94,28 @@ def lineup_value(
     dedicated = [s for s in slots if len(s.eligible) == 1]
     flex = [s for s in slots if len(s.eligible) > 1]
     total = 0.0
+    # Slots nobody on the roster can start above replacement, as (phantom, fallback): what the
+    # slot is worth if a pick is still free to draft its replacement, and what it is worth if not.
+    # The fallback is the best sub-replacement leftover at that position -- a player you would
+    # obviously start over nobody, and 0.0 when the roster has none at all.
+    open_slots: list[tuple[float, float]] = []
 
     for slot in dedicated:
         pos = next(iter(slot.eligible))
         phantom = baselines.get(pos, 0.0)
         available = pool.get(pos, ())
         i = cursor[pos]
-        # A real player starts here only if it beats replacement; a sub-replacement player
-        # never displaces the phantom (and stays a "leftover" that also loses in the flex).
+        # A real player starts here only if it beats replacement; a sub-replacement player never
+        # displaces the phantom (and stays a "leftover" that also loses in the flex) -- unless no
+        # pick remains to draft that phantom, in which case starting him beats starting nobody.
         if i < len(available) and available[i] >= phantom:
             total += available[i]
             cursor[pos] = i + 1
         else:
-            total += phantom
+            fallback = available[i] if i < len(available) else 0.0
+            if i < len(available):
+                cursor[pos] = i + 1  # provisionally consumed; he can never win a slot elsewhere
+            open_slots.append((phantom, fallback))
 
     for slot in flex:
         best_value = _flex_phantom(slot.eligible, baselines)
@@ -104,8 +128,28 @@ def lineup_value(
                 best_pos = pos
         if best_pos is not None:
             cursor[best_pos] += 1
-        total += best_value
+            total += best_value
+        else:
+            fallback = 0.0
+            fallback_pos: Position | None = None
+            for pos in slot.eligible:
+                available = pool.get(pos, ())
+                i = cursor[pos]
+                if i < len(available) and available[i] > fallback:
+                    fallback, fallback_pos = available[i], pos
+            if fallback_pos is not None:
+                cursor[fallback_pos] += 1
+            open_slots.append((best_value, fallback))
 
+    if picks_remaining is None:
+        return total + sum(phantom for phantom, _ in open_slots)
+    # Spend the remaining picks where they buy the most: a slot is worth `phantom` if a pick
+    # drafts its replacement and `fallback` otherwise, so the gain from spending one here is
+    # `phantom - fallback`. Take the largest gains first; every slot still pays its fallback.
+    open_slots.sort(key=lambda pair: pair[0] - pair[1], reverse=True)
+    total += sum(fallback for _, fallback in open_slots)
+    for phantom, fallback in open_slots[: max(0, picks_remaining)]:
+        total += phantom - fallback
     return total
 
 
@@ -121,6 +165,12 @@ def lineup_value_hungarian(
     Rows = slots; columns = players ∪ {one phantom per slot}. Cost ``C[i,j] = −μ_eff(j)`` when
     ``j`` is eligible for slot ``i`` else a large sentinel; the per-slot phantom guarantees a
     feasible perfect matching, so the optimum never selects a sentinel cell.
+
+    **Unlimited-capacity only.** This deliberately has no ``picks_remaining``: it is the
+    reference that pins the greedy's *assignment* choice, and every phantom is always available to
+    it. The capacity rule is a separate question (which phantoms you can still afford to draft)
+    layered on top of that assignment, so mixing the two here would test two things at once. The
+    agreement tests therefore compare it against ``lineup_value``'s default.
     """
     import numpy as np
     from scipy.optimize import linear_sum_assignment
@@ -153,11 +203,27 @@ def marginal_lineup_value(
     slots: Sequence[StartingSlot],
     *,
     base_value: float | None = None,
+    picks_remaining: int | None = None,
 ) -> float:
-    """MLV_p = L*(B(R ∪ {p})) − L*(B(R)). Pass ``base_value`` to reuse a cached L*(B(R))."""
+    """MLV_p = L*(B(R ∪ {p}), k−1) − L*(B(R), k). Pass ``base_value`` to reuse a cached L*(B(R)).
+
+    Taking ``p`` **spends a pick**, so the candidate roster is valued with one fewer. That
+    decrement is the entire mechanism: it is what turns "a slot I can no longer fill" from a
+    silent zero into a measured loss. A body you cannot start now costs you the best phantom you
+    can no longer afford, instead of scoring the same 0.00 as the starter you desperately need.
+
+    Inert while ``k − 1 >= u`` (``u`` = slots taking a phantom), because both terms then credit
+    every phantom. On this league's 9 starting slots that means rounds 1-14 are bit-identical, so
+    the measured early-draft behaviour is preserved exactly and only the endgame changes.
+    """
     if base_value is None:
-        base_value = lineup_value(roster, mu, position, baselines, slots)
-    with_candidate = lineup_value([*roster, candidate_id], mu, position, baselines, slots)
+        base_value = lineup_value(
+            roster, mu, position, baselines, slots, picks_remaining=picks_remaining
+        )
+    after = None if picks_remaining is None else max(0, picks_remaining - 1)
+    with_candidate = lineup_value(
+        [*roster, candidate_id], mu, position, baselines, slots, picks_remaining=after
+    )
     return with_candidate - base_value
 
 

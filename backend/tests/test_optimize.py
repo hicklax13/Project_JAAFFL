@@ -126,3 +126,78 @@ def test_marginal_value_accepts_precomputed_base() -> None:
     inline = marginal_lineup_value("rb2", ["rb1"], mu, pos, BASELINES, slots)
     cached = marginal_lineup_value("rb2", ["rb1"], mu, pos, BASELINES, slots, base_value=base)
     assert cached == pytest.approx(inline)
+
+
+# --- Tier 7: a replacement phantom needs a pick left to fill it -----------------------------
+#
+# Pre-Tier-7, `lineup_value` credited a phantom for EVERY empty starting slot unconditionally --
+# as though a replacement-level player were guaranteed, free, forever, including after the draft
+# had ended. Measured on the real 510-player board, that made a roster with no QB worth exactly as
+# much as one with a replacement QB, so the E2/E6 objective saw 5.9% of a 260.77-point gap and the
+# engine drafted 13 tight ends while three starting slots stayed unfillable.
+
+
+def test_lineup_value_default_is_unchanged_by_the_capacity_parameter() -> None:
+    """`picks_remaining=None` must be bit-identical to the pre-Tier-7 behaviour."""
+    slots = _slots()
+    mu = {"qb1": 120.0, "rb1": 150.0}
+    pos = {"qb1": Position.QB, "rb1": Position.RB}
+    assert lineup_value(["qb1", "rb1"], mu, pos, BASELINES, slots) == lineup_value(
+        ["qb1", "rb1"], mu, pos, BASELINES, slots, picks_remaining=None
+    )
+
+
+def test_an_unfilled_slot_earns_no_phantom_when_no_picks_remain() -> None:
+    """The draft is over: an empty required slot yields nothing, not replacement value."""
+    slots = _slots()
+    unlimited = lineup_value([], {}, {}, BASELINES, slots, picks_remaining=None)
+    exhausted = lineup_value([], {}, {}, BASELINES, slots, picks_remaining=0)
+    assert unlimited == pytest.approx(715.0)  # 100 + 90 + 3*80 + 90 + 70 + 60 + 65
+    assert exhausted == 0.0
+
+
+def test_capacity_credits_the_most_valuable_empty_slots_first() -> None:
+    """One pick, nine empty slots: you would fill the best one, so only that phantom survives."""
+    slots = _slots()
+    assert lineup_value([], {}, {}, BASELINES, slots, picks_remaining=1) == pytest.approx(100.0)
+    assert lineup_value([], {}, {}, BASELINES, slots, picks_remaining=2) == pytest.approx(190.0)
+
+
+def test_a_sub_replacement_starter_beats_an_empty_slot_once_picks_run_out() -> None:
+    """A below-replacement QB you can START is worth more than a phantom you cannot field."""
+    slots = _slots()
+    mu = {"qb1": 40.0}  # far below the 100.0 QB baseline
+    pos = {"qb1": Position.QB}
+    assert lineup_value(["qb1"], mu, pos, BASELINES, slots, picks_remaining=0) == pytest.approx(
+        40.0
+    )
+    assert lineup_value([], {}, {}, BASELINES, slots, picks_remaining=0) == 0.0
+
+
+def test_mlv_of_a_surplus_body_is_negative_when_a_required_slot_is_at_risk() -> None:
+    """The headline. Taking a body you cannot start SPENDS the pick that would have filled a slot.
+
+    Tier 6 walked a full 12x17 draft from seat 6 and the engine returned {RB:1, TE:13, WR:3} --
+    three unfillable starting slots -- because MLV scored a thirteenth tight end and a
+    desperately-needed quarterback identically at 0.00.
+    """
+    slots = _slots()
+    mu = {"qb1": 120.0, "qb2": 110.0}
+    pos = {"qb1": Position.QB, "qb2": Position.QB}
+    assert marginal_lineup_value(
+        "qb2", ["qb1"], mu, pos, BASELINES, slots, picks_remaining=1
+    ) == pytest.approx(-90.0)
+
+
+def test_mlv_is_unchanged_while_picks_outnumber_the_slots_they_must_fill() -> None:
+    """The safety property: capacity is INERT until it binds, so the early rounds are untouched.
+
+    With 9 starting slots this means rounds 1-14 of a 17-round draft are bit-identical.
+    """
+    slots = _slots()
+    mu = {"qb1": 120.0, "rb1": 150.0, "rb2": 140.0}
+    pos = {"qb1": Position.QB, "rb1": Position.RB, "rb2": Position.RB}
+    for k in range(10, 18):
+        assert marginal_lineup_value(
+            "rb2", ["qb1", "rb1"], mu, pos, BASELINES, slots, picks_remaining=k
+        ) == pytest.approx(marginal_lineup_value("rb2", ["qb1", "rb1"], mu, pos, BASELINES, slots))
