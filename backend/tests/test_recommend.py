@@ -227,8 +227,16 @@ def test_mc_vona_honours_the_mc_rollouts_budget_knob() -> None:
     be a real lever — it is how the owner trades estimate precision for latency."""
     ctx = make_context(_board())
     state = draft_state(3)
-    cheap = engine_params(mc_rollouts=4)
-    dear = engine_params(mc_rollouts=400)
+    cheap = engine_params(mc_rollouts=100)
+    dear = engine_params(mc_rollouts=1000)
+
+    # Warm up FIRST. `engine.simulate` (and the SciPy/NumPy it pulls) is imported lazily on the
+    # first MC call, and that one-off import dwarfs the rollout cost being compared — measured
+    # 941 ms of import landing inside `cheap_ms` against 145 ms for 100x the rollouts. This used
+    # to be paid by accident, because `assign_tiers` imported sklearn (hence NumPy/SciPy) during
+    # `make_context`; Tier 5 dropped that dependency, so the warm-up has to be explicit rather
+    # than a side effect of an unrelated module's imports.
+    recommend(state, ctx, cheap, limit=5, use_mc_vona=True)
 
     start = time.perf_counter()
     lo = recommend(state, ctx, cheap, limit=5, use_mc_vona=True)
@@ -239,8 +247,15 @@ def test_mc_vona_honours_the_mc_rollouts_budget_knob() -> None:
     dear_ms = (time.perf_counter() - start) * 1000.0
 
     assert lo.vona_method == "monte_carlo" and hi.vona_method == "monte_carlo"
-    assert cheap_ms < dear_ms, "mc_rollouts does not drive cost — the budget knob is inert"
-    assert "4 rollouts" in (lo.reasoning or "")
+    # Both arms sit well clear of fixed overhead, and the assertion demands a MARGIN. Measured
+    # warm on this board: 4 rollouts → 3.9 ms, 400 → 93 ms, 2000 → 502 ms, i.e. ~0.225 ms per
+    # rollout over ~3 ms of fixed cost. The old 4-vs-400 pair therefore spent 77% of `cheap_ms`
+    # on overhead the knob does not control, and asserted a bare `<` on two ~4 ms samples — with
+    # `dear` mutated down to `cheap`'s rollout count that survived 4 runs in 6, then 2 in 6 once
+    # a 3x margin was added. 100 vs 1000 is ~25 ms vs ~228 ms: a 9x real gap against a 3x floor,
+    # and a mutated-equal pair now has to produce a 3x swing at 228 ms to sneak through.
+    assert dear_ms > cheap_ms * 3.0, "mc_rollouts does not drive cost — the budget knob is inert"
+    assert "100 rollouts" in (lo.reasoning or "")
 
 
 def test_the_analytic_hot_path_never_imports_the_simulator() -> None:
