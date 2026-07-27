@@ -15,7 +15,7 @@ from __future__ import annotations
 import dataclasses
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from statistics import mean
+from statistics import mean, stdev
 from typing import TYPE_CHECKING, Protocol
 
 from jaaffl.config import EngineParams
@@ -213,14 +213,57 @@ def objective_value(
     )
 
 
+def pooled_per_slot(replicates: Sequence[Sequence[float]]) -> tuple[list[float], list[float]]:
+    """Per-slot ``(mean, sample sd)`` across replicate evaluations run on DISJOINT seed blocks.
+
+    Pooling R blocks of S seeds is exactly an ``R*S``-seed evaluation (``evaluate_agent`` already
+    averages over seeds), so this buys power AND the dispersion estimate in one pass. A single run
+    cannot supply the latter: the spread across the 12 slots confounds real slot heterogeneity with
+    sampling error, and only re-running the SAME slot under fresh seeds separates them.
+    """
+    if not replicates:
+        return [], []
+    columns = list(zip(*replicates, strict=True))
+    means = [mean(column) for column in columns]
+    sds = [stdev(column) if len(column) > 1 else 0.0 for column in columns]
+    return means, sds
+
+
 def promotion_decision(
-    tuned_per_slot: Sequence[float], baseline_per_slot: Sequence[float], *, tol: float = 1e-9
+    tuned_per_slot: Sequence[float],
+    baseline_per_slot: Sequence[float],
+    *,
+    tol: float = 1e-9,
+    slot_noise: Sequence[float] | None = None,
+    z: float = 1.96,
 ) -> dict:
     """The no-regression gate. Adopt tuned params only if they beat the baseline on a one-sided
-    Wilcoxon signed-rank test across the 12 slots (p < 0.05) AND are non-negative at EVERY slot."""
+    Wilcoxon signed-rank test across the 12 slots (p < 0.05) AND no slot regresses.
+
+    ``slot_noise`` is the per-slot sampling SD of the PAIRED difference, from
+    :func:`pooled_per_slot`. Supplied, the second leg asks whether a slot is **significantly**
+    worse (``diff < -z*sd``) instead of merely negative as a point estimate. Omitted, the leg keeps
+    its original strict form exactly, so no past decision changes silently.
+
+    Why the option exists (measured 2026-07-27, real board, 5 blocks x 8 seeds x 800 draws): the
+    per-slot SD of a paired difference is **0.0013-0.0089** (individual slots to 0.0148), while
+    every vector this gate has ever rejected on this leg failed by **0.0009-0.0016** — five to ten
+    times INSIDE the noise. ``alpha=0`` passed the leg in **1 of 5** seed blocks while its mean
+    effect was positive in **5 of 5**. The leg was not discriminating, it was sampling.
+
+    The failure is structural, not a matter of being slightly too strict: ``min`` over 12 slots is
+    an extreme-order statistic, so requiring it to be non-negative as a point estimate demands that
+    the worst of twelve noisy estimates land above zero — which a real, positive effect fails most
+    of the time. ``min_slot_diff`` is still reported either way; only its authority changes.
+    """
     diffs = [t - b for t, b in zip(tuned_per_slot, baseline_per_slot, strict=True)]
     min_diff = min(diffs)
-    non_negative = min_diff >= -tol
+    if slot_noise is None:
+        non_negative = min_diff >= -tol
+    else:
+        non_negative = all(
+            diff >= -(z * sd) - tol for diff, sd in zip(diffs, slot_noise, strict=True)
+        )
     if all(abs(d) <= tol for d in diffs):
         p_value = 1.0  # no difference at all → Wilcoxon is undefined; never promote
     else:
