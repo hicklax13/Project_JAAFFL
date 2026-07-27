@@ -190,6 +190,78 @@ in **Phase 4 (Stage 5 engine)** — two more things:
   spec's own bounds exclude the best value. Leaving it at 0.4 is a defensible call too — you would
   be trading a measured simulator edge for the tier-cliff explanation showing up in `Why?`.
 
+  ⚠️ **Tier 6 update — one leg of that claim does not replicate.** Re-running the same comparison
+  over **five independent seed blocks** instead of one:
+
+  | α = 0 vs the shipped α = 0.4 | across the 5 blocks |
+  |---|---|
+  | average gain | **positive in 5 of 5** (+0.0133, +0.0063, +0.0033, +0.0133, +0.0086) |
+  | "non-negative at every draft slot" | **held in only 1 of 5** |
+
+  So **the headline still stands — α = 0 is better on average, every time we measured it** — but the
+  "first vector to pass both legs" part was a property of the one seed block Tier 5 happened to use.
+  The gate's second leg turned out to be measuring its own noise (it decides at ~0.001 while the
+  noise is 0.001–0.009), which is now fixed. **This does not change the recommendation, only how
+  strongly it was stated.** Still your call, still one line, still nothing changed for you.
+
+  ℹ️ **Tier 6 also found a signal on two OTHER knobs — but it is NOT yet a recommendation.** A
+  one-factor sweep says the scarcity weight `kappa` wants to be roughly **double** what the plan
+  allows (still improving at 1.50 vs the 0.80 ceiling), and the risk schedule `lambda` wants to be
+  about **half** its current magnitude. Both replicate across two independent seed blocks.
+
+  **Do not change either yet.** Those numbers measure championship probability only; nobody has
+  measured what they do to expected POINTS, and the one time we checked such a trade (Tier 5, for
+  `kappa`) it turned out to buy championship odds *by giving up points*. Asking you to adopt a knob
+  on half the evidence is exactly the mistake this audit keeps finding. Details in `ROADMAP.md` §6;
+  the missing measurement is the next tier's job. **Nothing has been changed.**
+
+## 1b. ⛔ READ BEFORE DRAFT NIGHT — the engine goes blind in the late rounds  `[NEW — Tier 6]`
+
+**You must fill QB, K and DST yourself. The engine will not tell you to.**
+
+Tier 6 walked a full 12×17 draft on the real board using the engine's own recommendations. It
+produced this roster:
+
+```
+R1:TE R2:WR R3:WR R4:WR R5:TE R6:TE R7:TE R8:TE R9:TE R10:RB R11:TE R12:TE R13:TE R14:TE R15:TE R16:TE R17:TE
+-> 13 tight ends, 3 WR, 1 RB.  ZERO QB, ZERO K, ZERO DST.
+```
+
+That roster **cannot field a legal starting lineup** — three of your nine starting slots would be
+empty. It happens identically whether the other eleven teams draft greedily or realistically, so it
+is not an artifact of the simulation. And the players were there for the taking: at your round-17
+pick there were **21 kickers available** and the best one was ranked **53rd**; at round 16, **20
+defenses** available, best ranked **55th**; **38 quarterbacks** available at round 10, best ranked
+**150th**.
+
+**Why.** From about round 5, every remaining player at every position you still need is projected
+below "replacement level", and the engine measures a player by how much he adds to your *starting*
+lineup. A below-replacement player adds nothing — so the engine scores a quarterback you desperately
+need exactly the same as a thirteenth tight end you cannot start: **zero**. With every value signal
+at zero, the only thing left moving the ranking is the uncertainty term, which late in the draft is
+tuned to prefer *high-variance* players — and that number is nearly identical for everyone at a
+position. The result is close to arbitrary. In round 13 it recommended a player projected for **16
+points** over one projected for **83**.
+
+**What to do on the night — a 30-second rule:**
+
+1. Trust the engine for **rounds 1–9**. Its value signal is real and live there.
+2. From **round 10**, before you look at the list: *do I still need a QB, K or DST?*
+3. If yes, take the best one **yourself** — do not wait for the engine to surface it.
+4. Use the engine's late-round list only to choose **among players at a position you actually want**.
+
+The overlay is honest about this if you look: those picks show `MLV 0.00` and the rationale reads
+`risk tilt` rather than `value`. That is the engine telling you it has no value opinion.
+
+**This is not fixed.** Fixing it changes live recommendations and needs the calibration harness plus
+the no-regression gate to sign off, which is the next tier's headline job. It is written down here
+because the draft may come first.
+
+✅ **Also new in Tier 6 (no action needed):** the overlay's **bye-week chip now actually works**. It
+was declared, styled and rendered all along, but nothing ever filled it in, so it could never
+appear. It now reads the free NFL schedule: **485 of the 510 draftable players carry a real bye
+week** (the other 25 are free agents, who have no team and so no bye).
+
 Steps (kept for the next capture — e.g. a settings-page capture, or re-verifying on draft night):
 1. Open a CBS mock draft with the extension loaded.
 2. Click the extension action button to toggle **record mode**.
