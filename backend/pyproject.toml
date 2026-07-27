@@ -31,14 +31,15 @@ data = [
   "nflreadpy>=0.1",
   "rapidfuzz>=3.0",  # Stage-3 crosswalk fuzzy fallback (name+team+pos, token_sort_ratio/WRatio).
 ]
-# Stage 5 v1 hot path: flex-aware MLV (SciPy linear_sum_assignment), closed-form Gaussian
-# survival (SciPy stats / NumPy), and Boris-Chen GMM tiers (scikit-learn). Kept lean so CI and
-# the per-pick engine install stay fast — the heavier CP-SAT / XGBoost / Optuna stack is
-# stretch-only (plan §3.9) and lives in `engine-stretch`.
+# Stage 5 v1 hot path: flex-aware MLV (SciPy linear_sum_assignment) and closed-form Gaussian
+# survival (SciPy stats / NumPy). Kept lean so CI and the per-pick engine install stay fast — the
+# heavier CP-SAT / XGBoost / Optuna stack is stretch-only (plan §3.9) and lives in
+# `engine-stretch`. `scikit-learn` was here for §3.6's GMM tiers; Tier 5 measured that BIC cannot
+# find tiers in a smooth 1-D value curve (argmin k=1 at every draftable skill position) and
+# replaced it with exact gap segmentation, so nothing imports sklearn any more.
 engine = [
   "numpy>=1.26",
   "scipy>=1.12",
-  "scikit-learn>=1.4",
 ]
 # Stage 5 stretch (plan §3.9): OR-Tools CP-SAT season simulator, Monte-Carlo rollouts, XGBoost
 # residual projections, and Optuna offline calibration (E2). NEVER on the per-pick hot path;
