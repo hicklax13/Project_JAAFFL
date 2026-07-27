@@ -48,6 +48,7 @@ from jaaffl.league.coverage import (
     board_coverage_gaps,
     inert_cliff_positions,
     startable_positions,
+    teams_missing_bye_weeks,
 )
 
 
@@ -140,6 +141,21 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     for position in inert:
         print(f"[preflight]   note: {position} prices no tier cliff (stream position — expected).")
+
+    # Third guard: did the bye-week join actually cover the board? REPORT-ONLY on purpose — a
+    # missing bye never stops you drafting, it only costs the overlay's `bye N` chip, so failing
+    # here would block a draft over a cosmetic gap. It is surfaced because the failure is silent
+    # and wholesale: one unmapped team code takes that team's entire roster with it.
+    on_board = {pid: context.players[pid] for pid in context.mu if pid in context.players}
+    covered = sum(1 for pid in on_board if pid in context.bye_week)
+    print(f"[preflight] bye weeks: {covered} of {len(on_board)} board players carry one")
+    if stale := teams_missing_bye_weeks(on_board, context.bye_week):
+        print(
+            # ASCII only: this prints to the owner's cp1252 console, where a dash renders as a
+            # replacement char (observed while proving this guard fires).
+            f"[preflight]   note: no bye resolved for {', '.join(stale)}"
+            " - the schedule and player feeds may have diverged (see league/schedule.py).",
+        )
 
     print(f"[preflight] OK: every startable position ({', '.join(sorted(required))}) is fillable.")
     return 0

@@ -18,11 +18,12 @@ from types import SimpleNamespace
 import pytest
 
 from jaaffl.config import EngineParams
-from jaaffl.domain import LeagueSettings, Position, RosterSlot
+from jaaffl.domain import LeagueSettings, Player, Position, RosterSlot
 from jaaffl.league.coverage import (
     board_coverage_gaps,
     inert_cliff_positions,
     startable_positions,
+    teams_missing_bye_weeks,
 )
 
 # backend/tests/test_coverage.py -> repo root is parents[2].
@@ -202,7 +203,11 @@ def _load_preflight():
 
 
 def _fake_context(board: dict[str, Position], *, cliffs: dict | None = None):
-    """Enough of a DraftContext for preflight: settings + mu + position + the tier-cliff map."""
+    """Enough of a DraftContext for preflight: settings + mu + position + tier-cliff + byes.
+
+    ``players``/``bye_week`` are populated (rather than omitted) because the real ``DraftContext``
+    always carries them, and a fixture thinner than the object under test only proves the fixture.
+    """
     tiers, cliff_bonus, cliff_position = _tiered(**(cliffs if cliffs is not None else _LIVE_BOARD))
     return SimpleNamespace(
         settings=_settings(),
@@ -211,6 +216,11 @@ def _fake_context(board: dict[str, Position], *, cliffs: dict | None = None):
         position={**cliff_position, **board},
         tiers=tiers,
         cliff_bonus=cliff_bonus,
+        players={
+            pid: Player(player_id=pid, name=pid, position=pos, nfl_team="SEA")
+            for pid, pos in board.items()
+        },
+        bye_week=dict.fromkeys(board, 5),
     )
 
 
@@ -290,3 +300,37 @@ def test_preflight_exits_nonzero_when_no_context_can_be_built(preflight) -> None
     module, holder, tmp_path = preflight
     holder["context"] = None
     assert module.main(["--data-dir", str(tmp_path)]) == 1
+
+
+# --- Bye-week coverage (the guard that would have caught the two-vocabulary join) --------------
+
+
+def _byeplayer(pid: str, team: str | None) -> Player:
+    return Player(player_id=pid, name=pid, position=Position.RB, nfl_team=team)
+
+
+def test_teams_missing_bye_weeks_is_empty_when_every_team_resolves() -> None:
+    players = {"a": _byeplayer("a", "SEA"), "b": _byeplayer("b", "NOS")}
+    assert teams_missing_bye_weeks(players, {"a": 5, "b": 11}) == []
+
+
+def test_teams_missing_bye_weeks_names_the_unjoined_teams_once_each() -> None:
+    """The live failure: `load_ff_playerids` says NOS/SFO, `load_schedules` says NO/SF, so 9 of
+    32 teams joined to nothing — 152 of 510 board players — while 23 teams looked perfectly fine.
+    Reported per TEAM, because that is the unit the bug actually has."""
+    players = {
+        "a": _byeplayer("a", "NOS"),
+        "b": _byeplayer("b", "NOS"),  # same team, reported once
+        "c": _byeplayer("c", "SFO"),
+        "d": _byeplayer("d", "SEA"),  # this one resolved
+    }
+
+    assert teams_missing_bye_weeks(players, {"d": 13}) == ["NO", "SF"]
+
+
+def test_teams_missing_bye_weeks_ignores_free_agents() -> None:
+    """A free agent has no team, so he cannot have a bye. That is a fact, not a coverage gap —
+    reporting it would make the guard fire forever and be trained away as noise."""
+    players = {"a": _byeplayer("a", "FA"), "b": _byeplayer("b", None), "c": _byeplayer("c", "SEA")}
+
+    assert teams_missing_bye_weeks(players, {"c": 13}) == []

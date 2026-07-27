@@ -86,6 +86,10 @@ _TEAM_ALIASES = {
     "SDC": "LAC",
     "STL": "LAR",
     "RAM": "LAR",
+    # nflverse's SCHEDULE feed spells the Rams "LA" while ff_playerids spells them "LAR"; both are
+    # current, they are just different vocabularies. Folding them is what lets the bye-week join
+    # cover all 32 teams instead of 31 (measured 2026-07-27: this was the only residual).
+    "LA": "LAR",
 }
 _FREE_AGENT_CODES = {"FA", "FA*", "NA", "NONE"}
 

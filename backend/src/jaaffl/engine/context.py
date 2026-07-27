@@ -10,7 +10,9 @@ replacement baselines + flex allocation, and the 9 starting slots. The per-pick 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+import structlog
 
 from jaaffl.config import EngineParams
 from jaaffl.domain import LeagueSettings, Player, Position
@@ -18,11 +20,14 @@ from jaaffl.engine.optimize import StartingSlot, expand_starting_slots, marginal
 from jaaffl.engine.projections import PlayerProjection, SituationSignal, build_projections
 from jaaffl.engine.tiers import assign_tiers, cliff_bonuses
 from jaaffl.league.replacement import replacement_values
+from jaaffl.league.schedule import bye_weeks, player_bye_weeks
 from jaaffl.providers.base import Capability, FantasyDataProvider
 
 # When FFC gives no stdev (or a player only has ECR), fall back to a wide spread so survival stays
 # uncertain rather than a false step function (design §3.4 FFC caveat).
 _DEFAULT_ADP_SD = 12.0
+
+log = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +50,9 @@ class DraftContext:
     ecr: dict[str, float]
     starting_slots: list[StartingSlot]
     players: dict[str, Player]
+    # Calendar fact, not a projection: player_id -> the week his NFL team does not play. Absent
+    # for a player whose team (or bye) is unknown, so the overlay's chip degrades to "no chip".
+    bye_week: dict[str, int] = field(default_factory=dict)
 
 
 def build_draft_context(
@@ -120,6 +128,21 @@ def build_draft_context(
     tiers = assign_tiers(mu, position)
     cliff = cliff_bonuses(tiers, static_mlv, position)
 
+    # --- Bye weeks (a calendar fact, not a projection). Absent source -> empty, never guessed.
+    # NON-FATAL by design: the bye is display metadata on a chip, while this context IS the board.
+    # Letting a free feed's hiccup abort precompute would trade every recommendation for a nicety,
+    # and a context may have to be rebuilt mid-draft after a restart. `league.coverage` reports the
+    # resulting gap and `scripts/preflight.py` decides how loudly, exactly as for tier cliffs.
+    schedule_provider = next((p for p in providers if p.supports(Capability.SCHEDULE)), None)
+    bye_week: dict[str, int] = {}
+    if schedule_provider is not None:
+        try:
+            bye_week = player_bye_weeks(players, bye_weeks(schedule_provider.schedule(season)))
+        except Exception as exc:  # noqa: BLE001 - any feed failure degrades to "no chip"
+            log.warning(
+                "precompute_schedule_unavailable", provider=schedule_provider.name, error=str(exc)
+            )
+
     return DraftContext(
         settings=settings,
         params=params,
@@ -135,4 +158,5 @@ def build_draft_context(
         ecr=ecr,
         starting_slots=starting_slots,
         players=players,
+        bye_week=bye_week,
     )

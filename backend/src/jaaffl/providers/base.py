@@ -28,6 +28,7 @@ class Capability(StrEnum):
     EXPECTED_POINTS = "expected_points"  # xEP (nflreadpy load_ff_opportunity)
     INJURIES = "injuries"
     NEWS = "news"
+    SCHEDULE = "schedule"  # regular-season fixtures (nflreadpy load_schedules) -> bye weeks
 
 
 class AdpRecord(BaseModel):
@@ -113,4 +114,14 @@ class FantasyDataProvider(abc.ABC):
     def injuries(self, season: int, week: int | None = None) -> dict[str, str]:
         """canonical player_id -> injury status."""
         self._require(Capability.INJURIES)
+        raise NotImplementedError
+
+    def schedule(self, season: int) -> list[tuple[int, str, str]]:
+        """REGULAR-SEASON fixtures as ``(week, home_team, away_team)``.
+
+        Regular season only: ``league.schedule.bye_weeks`` derives a bye from the week a team is
+        ABSENT, and playoff rows would extend the span so that most teams look like they have
+        several byes (which that function then reports as none at all).
+        """
+        self._require(Capability.SCHEDULE)
         raise NotImplementedError
