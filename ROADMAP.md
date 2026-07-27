@@ -149,25 +149,25 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 >
 > **α's measured optimum (0.0) lies outside its specified `[0.3, 0.5]`**, so `run_study` is
 > structurally incapable of finding it. Tier 6 asked whether κ and the λ bands share the defect and
-> **measured it** — one-factor sweep, real board, 2 disjoint blocks × 8 seeds × 800 draws:
+> **measured it** — one-factor sweep, real board, 3 disjoint blocks × 8 seeds × 800 draws:
 >
 > | κ | 0.00 | 0.25 | 0.50 | **0.65** (shipped) | **0.80** (§10.3 max) | 1.10 | 1.50 |
 > |---|---|---|---|---|---|---|---|
-> | win prob | 0.0911 | 0.0928 | 0.0977 | **0.0973** | **0.1015** | 0.1034 | **0.1146** |
+> | win prob | 0.0932 | 0.0947 | 0.0993 | **0.0987** | **0.1032** | 0.1053 | **0.1165** |
 >
 > **κ rises monotonically across the whole probed span and is still climbing at 1.50 — nearly double
-> §10.3's ceiling of 0.80.** κ = 1.50 is the argmax in *both* blocks independently (0.1102, 0.1190),
-> and the shipped 0.65 gives up **+0.0173** against it — larger than the α = 0 effect. The one
-> non-monotonicity (0.65 dipping 0.0004 below 0.50) is well inside the noise floor.
+> §10.3's ceiling of 0.80.** κ = 1.50 is the argmax in *all three* blocks independently (0.1102,
+> 0.1190, 0.1202), and the shipped 0.65 gives up **+0.0178** against it — larger than the α = 0
+> effect. The one non-monotonicity (0.65 dipping 0.0006 below 0.50) is well inside the noise floor.
 >
 > λ, scaling the whole shipped schedule (within-run, so directly comparable):
 >
 > | λ scale | 0.5× | **1.0×** (shipped) | 1.5× |
 > |---|---|---|---|
-> | win prob | **0.1215** | 0.0973 | 0.0970 |
+> | win prob | **0.1233** | 0.0987 | 0.0981 |
 >
-> **λ at half the shipped magnitude beats it by +0.0242 — the largest single effect measured in this
-> project** — and it replicates in both blocks (0.1142, 0.1287). Halving puts every band *outside*
+> **λ at half the shipped magnitude beats it by +0.0246 — the largest single effect measured in this
+> project** — and it replicates in all three blocks (0.1142, 0.1287, 0.1270). Halving puts every band *outside*
 > its §10.3 range (band 1 → 0.15 vs a 0.20 floor; band 5 → −0.20 vs a −0.30 ceiling), so the tuner
 > cannot reach it either. That is consistent with the tuner having twice returned λ values pinned to
 > its band FLOORS: it was pushing against a wall.
@@ -180,7 +180,7 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 >
 > ⚠️ **Read these with three caveats.** (1) They measure **win probability only** — points were not
 > measured for these arms, and Tier 5 showed κ *buys win probability with points*, so a large κ very
-> plausibly costs points. (2) Two blocks, not five; the direction replicates in both and κ's
+> plausibly costs points. (2) Three blocks, not five; the direction replicates in all three and κ's
 > dose-response spans seven points, which is the same strength-of-evidence argument Tier 5 used for
 > α, but it is not the five-block treatment §2 got. (3) A better simulator is still a simulator.
 > **Nothing was adopted.**
