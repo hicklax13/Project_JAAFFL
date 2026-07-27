@@ -27,6 +27,7 @@ from jaaffl.calibrate.tune import (
     WinProbabilityObjective,
     cap_sim_pool,
     evaluate_params,
+    pooled_per_slot,
     promotion_decision,
     run_study,
     sim_context_from_draft_context,
@@ -110,6 +111,16 @@ def main(argv: list[str] | None = None) -> int:
         default=2,
         help="Held-out seeds — gate power (one-shot, cheap).",
     )
+    parser.add_argument(
+        "--replicates",
+        type=int,
+        default=1,
+        help=(
+            "Repeat the held-out evaluation over N DISJOINT seed blocks. >1 measures the gate's"
+            " own per-slot sampling noise, so the min-slot leg can reject only a SIGNIFICANT"
+            " regression. At 1 the leg keeps its original strict form."
+        ),
+    )
     parser.add_argument("--pool-cap", type=int, default=300, help="Top-N players (--real).")
     parser.add_argument(
         "--draws",
@@ -158,17 +169,43 @@ def main(argv: list[str] | None = None) -> int:
         objective=objective,
     )
 
-    def _slots(params: EngineParams, obj: object | None) -> list[float]:
-        return evaluate_params(
-            params, ctx, opponents=heldout_opponents, seeds=heldout_seeds, objective=obj
-        )
+    # Disjoint held-out blocks. Pooling R blocks of S seeds IS an R*S-seed evaluation (per-slot
+    # scores are seed means), and the spread ACROSS blocks is the only way to see the gate's own
+    # sampling error — within one block, slot heterogeneity and noise are confounded.
+    blocks = [
+        list(range(1001 + i * 1000, 1001 + i * 1000 + args.eval_seeds))
+        for i in range(max(1, args.replicates))
+    ]
+
+    def _slots(params: EngineParams, obj: object | None) -> list[list[float]]:
+        return [
+            evaluate_params(params, ctx, opponents=heldout_opponents, seeds=block, objective=obj)
+            for block in blocks
+        ]
+
+    def _gate(tuned_reps: list[list[float]], base_reps: list[list[float]]) -> tuple[dict, list]:
+        tuned_mean, _ = pooled_per_slot(tuned_reps)
+        base_mean, _ = pooled_per_slot(base_reps)
+        # The noise of the paired DIFFERENCE, not of either arm: common random numbers cancel most
+        # of each arm's variance, so using an arm's own spread would wildly overstate it.
+        diffs = [
+            [t - b for t, b in zip(tr, br, strict=True)]
+            for tr, br in zip(tuned_reps, base_reps, strict=True)
+        ]
+        _, noise = pooled_per_slot(diffs)
+        use = noise if len(blocks) > 1 else None
+        return promotion_decision(tuned_mean, base_mean, slot_noise=use), (use or [])
 
     # The gate runs on win probability; mean lineup value is reported alongside because it is the
     # interpretable points-scale view AND the number every pre-Tier-4 run published.
-    tuned_slots, base_slots = _slots(tuned, objective), _slots(baseline, objective)
-    tuned_pts, base_pts = _slots(tuned, None), _slots(baseline, None)
-    decision = promotion_decision(tuned_slots, base_slots)
-    points = promotion_decision(tuned_pts, base_pts)
+    tuned_reps, base_reps = _slots(tuned, objective), _slots(baseline, objective)
+    tuned_pt_reps, base_pt_reps = _slots(tuned, None), _slots(baseline, None)
+    tuned_slots, _ = pooled_per_slot(tuned_reps)
+    base_slots, _ = pooled_per_slot(base_reps)
+    tuned_pts, _ = pooled_per_slot(tuned_pt_reps)
+    base_pts, _ = pooled_per_slot(base_pt_reps)
+    decision, slot_noise = _gate(tuned_reps, base_reps)
+    points, _ = _gate(tuned_pt_reps, base_pt_reps)
 
     lam = [round(entry["lambda"], 3) for entry in tuned.lambda_schedule]
     rel = {k: round(v, 3) for k, v in tuned.reliability_shrinkage.items()}
@@ -188,6 +225,22 @@ def main(argv: list[str] | None = None) -> int:
         f"mean_diff={points['mean_diff']:+.2f} pts/slot  "
         f"min_slot_diff={points['min_slot_diff']:+.2f}  p={points['p_value']:.4f}"
     )
+    if slot_noise:
+        worst = max(
+            (-(t - b) / sd if sd > 0 else 0.0)
+            for t, b, sd in zip(tuned_slots, base_slots, slot_noise, strict=True)
+        )
+        print(
+            f"[E2] per-slot noise (sd of the paired diff over {len(blocks)} blocks): "
+            f"median {sorted(slot_noise)[len(slot_noise) // 2]:.4f}  max {max(slot_noise):.4f}  "
+            f"-> worst slot is {worst:.2f} sd below baseline"
+        )
+    else:
+        print(
+            "[E2] min-slot leg is STRICT (single block). Measured 2026-07-27, the per-slot noise"
+            " floor is 0.0013-0.0089 while this leg has rejected at 0.0009-0.0016 — pass"
+            " --replicates 5 to gate on a SIGNIFICANT regression instead of a noisy point estimate."
+        )
     print(
         f"[E2] promotion gate (win prob) -> {'PROMOTE' if decision['promote'] else 'KEEP baseline'}"
     )

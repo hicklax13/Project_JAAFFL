@@ -17,6 +17,7 @@ from jaaffl.calibrate.tune import (
     WinProbabilityObjective,
     evaluate_params,
     objective_value,
+    pooled_per_slot,
     promotion_decision,
 )
 from jaaffl.config import EngineParams
@@ -280,3 +281,45 @@ def test_smoke_study_returns_a_valid_in_range_param_vector() -> None:
     assert isinstance(best, EngineParams)
     assert 0.5 <= best.kappa <= 0.8
     assert 0.3 <= best.alpha <= 0.5
+
+
+# --- The min-slot leg vs the measured Monte-Carlo noise floor (Tier 6) -------------------------
+
+
+def test_pooled_per_slot_reports_the_mean_and_spread_across_replicate_blocks() -> None:
+    """Replicating the whole paired comparison over disjoint seed blocks is what makes the gate's
+    own sampling error visible; one run cannot separate slot heterogeneity from noise."""
+    means, sds = pooled_per_slot([[1.0, 10.0], [3.0, 10.0], [2.0, 10.0]])
+
+    assert means == pytest.approx([2.0, 10.0])
+    assert sds[0] == pytest.approx(1.0)  # sample sd of 1,3,2
+    assert sds[1] == pytest.approx(0.0)  # identical across blocks -> no noise
+
+
+def test_the_min_slot_leg_tolerates_a_regression_inside_the_measured_noise() -> None:
+    """MEASURED on the real board: the per-slot SD of a paired difference is 0.0013-0.0089, while
+    the gate has been rejecting at margins of 0.0009-0.0016 — 5-10x BELOW its own noise floor.
+    `alpha=0` promoted in only 1 of 5 seed blocks despite a positive mean in all 5.
+
+    With the noise supplied, a slot counts as a regression only if it is SIGNIFICANTLY negative.
+    """
+    baseline = [0.10] * 12
+    tuned = [0.11] * 11 + [0.0991]  # one slot 0.0009 low - the alpha=0.3 margin
+    noise = [0.007] * 12  # the measured per-slot SD
+
+    strict = promotion_decision(tuned, baseline)
+    aware = promotion_decision(tuned, baseline, slot_noise=noise)
+
+    assert strict["promote"] is False, "today's leg rejects on a margin far inside the noise"
+    assert aware["promote"] is True
+    assert aware["min_slot_diff"] == pytest.approx(-0.0009)  # still REPORTED, just not fatal
+
+
+def test_the_min_slot_leg_still_rejects_a_slot_that_is_genuinely_worse() -> None:
+    """The tolerance must not swallow a real regression: a slot far outside the noise still fails,
+    otherwise the leg would stop protecting anything at all."""
+    baseline = [0.10] * 12
+    tuned = [0.11] * 11 + [0.05]  # one slot 0.05 low, ~7 SD out
+    noise = [0.007] * 12
+
+    assert promotion_decision(tuned, baseline, slot_noise=noise)["promote"] is False
