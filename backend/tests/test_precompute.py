@@ -171,6 +171,69 @@ def test_context_build_is_quiet_when_every_startable_position_is_on_the_board(tm
     assert not [e for e in logs if e["event"] == "precompute_position_coverage_gap"]
 
 
+def _cliffy_providers():
+    """Three players per startable position with a real drop after the first — the shape a board
+    needs before a tier cliff can be priced at all.
+
+    Every rank stays under 300: the default ``ecr_to_points`` is ``max(0, 300 − ecr)``, so ranks
+    past that floor a whole position to μ = 0, which is a flat board and correctly inert.
+    """
+    universe, rankings = [], {}
+    positions = (
+        ("qb", Position.QB),
+        ("rb", Position.RB),
+        ("wr", Position.WR),
+        ("te", Position.TE),
+        ("k", Position.K),
+        ("dst", Position.DST),
+    )
+    for block, (tag, position) in enumerate(positions):
+        base = 1.0 + block * 30.0
+        for i, offset in enumerate((0.0, 15.0, 16.0)):  # a 15-rank drop after the first
+            pid = f"{tag}{i}"
+            universe.append(Player(player_id=pid, name=pid, position=position))
+            rankings[pid] = base + offset
+    return [
+        _CountingFake(
+            "nflverse",
+            {Capability.HISTORICAL_STATS, Capability.RANKINGS},
+            rankings=rankings,
+            players=universe,
+        ),
+    ]
+
+
+def test_context_build_warns_when_the_tier_cliff_term_cannot_price_a_drop(tmp_path) -> None:
+    """`cliff_bonus` shipped POPULATED and useless — 447 entries on the live 2026 board, every one
+    exactly 0.0, so `alpha * CliffBonus` was 0.00 on every pick for four tiers of work. One player
+    per position leaves no boundary to price, which is DST's live shape exactly.
+
+    Non-fatal for the same reason the coverage gap is: this closure re-runs mid-draft.
+    """
+    from structlog.testing import capture_logs
+
+    with capture_logs() as logs:
+        ctx = _source(_complete_providers(), tmp_path)("cbs-local")
+
+    assert ctx is not None, "an inert cliff term must degrade, never block the board"
+    warning = next((e for e in logs if e["event"] == "precompute_inert_tier_cliff"), None)
+    assert warning is not None, "a term that cannot move a pick must be surfaced"
+    assert warning["log_level"] == "warning"
+    assert warning["inert"] == ["DST", "K", "QB", "RB", "TE", "WR"]
+
+
+def test_context_build_is_quiet_when_every_position_prices_a_tier_cliff(tmp_path) -> None:
+    """START GREEN: on a board with real drops the alarm stays silent."""
+    from structlog.testing import capture_logs
+
+    with capture_logs() as logs:
+        ctx = _source(_cliffy_providers(), tmp_path)("cbs-local")
+
+    assert ctx is not None
+    assert any(bonus > 0.0 for bonus in ctx.cliff_bonus.values()), "fixture sanity: real cliffs"
+    assert not [e for e in logs if e["event"] == "precompute_inert_tier_cliff"]
+
+
 def test_factory_returns_none_when_universe_is_empty(tmp_path) -> None:
     """No player universe → None so /recommendation still 503s gracefully (never a 500)."""
     providers = [_CountingFake("nflverse", {Capability.HISTORICAL_STATS}, players=[])]

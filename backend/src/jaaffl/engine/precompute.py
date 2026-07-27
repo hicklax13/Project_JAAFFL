@@ -26,7 +26,7 @@ from jaaffl.config import EngineParams, Settings
 from jaaffl.domain import Player, Position
 from jaaffl.engine.context import DraftContext, build_draft_context
 from jaaffl.league.constitution import resolve_league_settings
-from jaaffl.league.coverage import board_coverage_gaps
+from jaaffl.league.coverage import board_coverage_gaps, inert_cliff_positions
 from jaaffl.providers.base import Capability, FantasyDataProvider, ProviderError
 from jaaffl.providers.registry import build_registry
 
@@ -243,6 +243,21 @@ def build_registry_context_source(
                 league_id=league_id,
                 missing=[str(position) for position in gaps],
                 board=len(context.mu),
+            )
+
+        # Second drift alarm (league.coverage): can the tier-cliff term move a pick at all?
+        # `cliff_bonus` shipped POPULATED and useless — 447 entries on the live 2026 board and
+        # every one 0.0 — so a map size proves nothing. Non-fatal for the same reason as above;
+        # scripts/preflight.py hard-fails on the non-puntable half of this signal.
+        inert = inert_cliff_positions(
+            league_settings, context.tiers, context.cliff_bonus, context.position
+        )
+        if inert:
+            log.warning(
+                "precompute_inert_tier_cliff",
+                league_id=league_id,
+                inert=[str(position) for position in inert],
+                priced=sum(1 for bonus in context.cliff_bonus.values() if bonus > 0.0),
             )
         log.info("precompute_context_built", league_id=league_id, players=len(context.mu))
         return context

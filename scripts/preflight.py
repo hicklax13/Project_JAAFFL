@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-"""Pre-draft preflight: can the board actually fill every STARTING slot?
+"""Pre-draft preflight: can the board fill every STARTING slot, and is the engine's scoring live?
 
 Run this the morning of the draft. It builds the REAL DraftContext through the same
-``build_registry_context_source`` wiring the live service uses, then reports how many draftable
-players (players carrying a projection) exist at each position and FAILS (exit 1) if any startable
-position is missing.
+``build_registry_context_source`` wiring the live service uses, then FAILS (exit 1) if either
+guard trips: a startable position with no draftable players, or a startable position where the
+tier-cliff term can never price a drop.
 
 Why this exists: two positions were silently missing from the live board and were found only by
 accident. nflverse's ff_playerids spells kicker ``PK`` while the domain spells it ``K``, so all
@@ -12,6 +12,13 @@ accident. nflverse's ff_playerids spells kicker ``PK`` while the domain spells i
 team-defense rows at all, so there were zero DSTs. In both cases the loader logged a large but
 normal-looking skip count (~8,000 IDP rows), which is exactly why neither was noticed. The board
 looked healthy and was not.
+
+The tier-cliff check is the same failure one layer up, and it ran undetected for longer: on the
+live 2026 board ``cliff_bonus`` held 447 entries and every single one was 0.0, so ``α·CliffBonus``
+contributed 0.00 to every recommendation while the map SIZE looked entirely healthy. A count is
+not a diagnostic. K and DST are exempt from failing — they are stream positions whose boards
+really are flat — so only a dead cliff at a position you must actually draft for value stops the
+check.
 
 A hard failure is SAFE here and nowhere else: hours before the draft there is still time to fix
 it. The equivalent check inside ``engine.precompute`` only logs a warning, because that code can
@@ -35,8 +42,13 @@ from pathlib import Path
 
 from jaaffl.config import Settings, get_settings
 from jaaffl.data import Crosswalk, Warehouse
+from jaaffl.domain import Position
 from jaaffl.engine.precompute import build_registry_context_source
-from jaaffl.league.coverage import board_coverage_gaps, startable_positions
+from jaaffl.league.coverage import (
+    board_coverage_gaps,
+    inert_cliff_positions,
+    startable_positions,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -103,6 +115,31 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+
+    # Second guard: is the tier-cliff term alive? `cliff_bonus` shipped POPULATED and useless —
+    # 447 entries on the live 2026 board, every one 0.0, so `alpha * CliffBonus` was 0.00 on every
+    # pick. K and DST are exempt from FAILING: they are stream positions (`punt_guard` holds them
+    # until R16/R17) whose boards really are flat, so demanding a cliff there would manufacture
+    # urgency the data does not support. The puntable set is read from the engine params rather
+    # than hard-coded, the same single source `recommend.py` reads.
+    live = sum(1 for bonus in context.cliff_bonus.values() if bonus > 0.0)
+    print(f"[preflight] tier-cliff term: {live} priced drops over {len(context.tiers)} tiered")
+    puntable = {Position(key) for key in context.params.punt_guard.get("stream_round", {})}
+    inert = inert_cliff_positions(
+        context.settings, context.tiers, context.cliff_bonus, context.position
+    )
+    if flat := [position for position in inert if position not in puntable]:
+        names = ", ".join(str(position) for position in flat)
+        print(f"[preflight] FAIL: no tier cliff can ever be priced at {names}", file=sys.stderr)
+        print(
+            "[preflight] alpha multiplies CliffBonus, so it is inert there and the overlay's"
+            " tier-cliff bar cannot move — check that projections carry real spread at those"
+            " positions before drafting.",
+            file=sys.stderr,
+        )
+        return 1
+    for position in inert:
+        print(f"[preflight]   note: {position} prices no tier cliff (stream position — expected).")
 
     print(f"[preflight] OK: every startable position ({', '.join(sorted(required))}) is fillable.")
     return 0

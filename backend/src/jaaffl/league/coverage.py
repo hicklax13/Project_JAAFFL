@@ -1,4 +1,4 @@
-"""Board position-coverage guard: can every STARTABLE slot actually be filled?
+"""Board guards: can every STARTABLE slot be filled, and can the tier-cliff term move a pick?
 
 Two live gaps reached the default $0 board silently and were found only by accident:
 
@@ -58,3 +58,44 @@ def board_coverage_gaps(settings: LeagueSettings, board: Mapping[str, Position])
     """
     present = set(board.values())
     return sorted(startable_positions(settings) - present)
+
+
+def inert_cliff_positions(
+    settings: LeagueSettings,
+    tiers: Mapping[str, int],
+    cliff_bonus: Mapping[str, float],
+    position: Mapping[str, Position],
+) -> list[Position]:
+    """Startable positions where the tier-cliff term can never move a pick, sorted.
+
+    The same inversion as :func:`board_coverage_gaps`, one layer up. ``cliff_bonus`` was POPULATED
+    and useless for four tiers of work: 447 entries on the live 2026 board and every one exactly
+    0.0, so ``recommend``'s ``α·CliffBonus_p`` contributed 0.00 to every pick, the overlay's
+    tier-cliff bar could never be non-zero, ``explain``'s "the talent drops off after this tier"
+    sentence could never render, and E2 kept reporting a tuned α over a term that could not change
+    a single choice. A map SIZE looked healthy the entire time — so this asks the only question
+    that distinguishes the two states: **is any drop at this position priced above zero?**
+
+    That single condition covers both live shapes of death. All 31 defenses landed in ONE tier, so
+    DST had no boundary to price at all; the other five positions had boundaries that every one
+    priced to ``max(0.0, 0.00 − 0.00)`` because both sides sat below replacement. Different causes,
+    identical consequence, one report.
+
+    Per position rather than board-wide on purpose: a board-wide "some cliff exists somewhere"
+    check passes while the term is dead at two of the six positions, which is most of the way back
+    to the bug.
+
+    Deliberately reports rather than raises, and deliberately does NOT decide which positions are
+    allowed to be flat — that is the caller's call, because it depends on WHEN the check runs and
+    on engine config the league module has no business reading. ``engine.precompute`` logs a
+    warning (a context can be rebuilt mid-draft, where a degraded board beats no board), while
+    ``scripts/preflight.py`` hard-fails for non-puntable positions and merely reports K/DST: those
+    are stream positions whose boards really are flat (the live 2026 kicker cliff tops out at 2.97
+    points), so demanding a cliff there would manufacture urgency the data does not support.
+    """
+    live: set[Position] = {
+        position[pid]
+        for pid, bonus in cliff_bonus.items()
+        if bonus > 0.0 and pid in position and pid in tiers
+    }
+    return sorted(startable_positions(settings) - live)
