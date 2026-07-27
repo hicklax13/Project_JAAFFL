@@ -91,6 +91,14 @@ def test_demo_pool_carries_per_player_sigma_not_a_per_position_constant() -> Non
 
 
 def test_demo_pool_carries_real_cliff_bonuses() -> None:
+    """Scope note (Tier 5). This guards the FIXTURE, and the fixture was never the problem.
+
+    `demo_sim_context` computes its cliffs inline from `_PLAN`, so it never calls `assign_tiers`
+    and cannot see a tiering regression. It passed the entire time the LIVE board's cliff map was
+    447 entries of exactly 0.0. That blind spot is covered at the other end of the pipeline by
+    `league.coverage.inert_cliff_positions`, which reads the real precomputed context — a fixture
+    can only prove the harness can measure a term, never that the board actually carries one.
+    """
     ctx = demo_sim_context()
     positive = [pid for pid, bonus in ctx.cliff_bonus.items() if bonus > 0.0]
     assert positive, "alpha multiplies cliff_bonus; an empty map makes alpha exactly inert"
