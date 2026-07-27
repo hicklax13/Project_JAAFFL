@@ -384,7 +384,13 @@ def run_study(
             trial.suggest_float(f"lam{i}", lo, hi) if lo != hi else lo
             for i, (_rounds, (lo, hi)) in enumerate(LAMBDA_BANDS)
         ]
-        cap = trial.suggest_float("modifier_cap", 3.0, 5.0)
+        # NOT searched: `caps.modifier_abs_max` bounds the positional modifiers, and
+        # `recommend._positional_modifiers` returns {} unconditionally, so no pick can ever move
+        # with it. Searching it spent one of six dimensions on a provably inert knob — Tier 4's
+        # "tuned a term that cannot change a pick", and it diluted the power available to kappa,
+        # alpha and the lambda bands. Carried from `base` so a future implementation re-enables it
+        # by restoring one line.
+        cap = float((base.caps or {}).get("modifier_abs_max", 5.0))
         reliability = {
             "K": trial.suggest_float("reliability_k", 0.1, 1.0),
             "DST": trial.suggest_float("reliability_dst", 0.1, 1.0),
@@ -400,5 +406,10 @@ def run_study(
     lam = [best.get(f"lam{i}", lo) for i, (_r, (lo, _hi)) in enumerate(LAMBDA_BANDS)]
     reliability = {"K": best["reliability_k"], "DST": best["reliability_dst"]}
     return params_from_trial(
-        best["kappa"], best["alpha"], lam, best["modifier_cap"], base=base, reliability=reliability
+        best["kappa"],
+        best["alpha"],
+        lam,
+        float((base.caps or {}).get("modifier_abs_max", 5.0)),
+        base=base,
+        reliability=reliability,
     )

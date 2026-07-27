@@ -42,13 +42,12 @@ class EngineParams(BaseModel):
     replacement_blend: dict[str, float] = Field(
         default_factory=lambda: {"vols_weight": 0.5, "mangames_weight": 0.5}
     )
-    caps: dict = Field(
-        default_factory=lambda: {
-            "modifier_abs_max": 5.0,
-            "mu_refinement_pct": 0.15,
-            "modifiers": {"bye_stack": 3.0, "handcuff_synergy": 5.0, "sos": 3.0},
-        }
-    )
+    # Only `mu_refinement_pct` is real (read by engine/projections.py). The positional-modifier
+    # caps that used to sit here promised bye-stack / handcuff / SOS handling the engine has never
+    # had: `recommend._positional_modifiers` returns {} and no clamping code exists. Removed in
+    # Tier 6 rather than left as a default that would silently restore the advertisement whenever
+    # `config/engine.json` omits the key. See recommend._positional_modifiers for the measurements.
+    caps: dict = Field(default_factory=lambda: {"mu_refinement_pct": 0.15})
     candidate_cap: int = 180
     mc_enabled: bool = False
     mc_rollouts: int = 2000

@@ -56,9 +56,14 @@ def test_committed_engine_json_has_every_required_key() -> None:
         "last_startable_slot_floor": 0.40,
         "surplus_stash_ceiling": -0.40,
     }
-    assert params.caps["modifier_abs_max"] == 5.0
-    assert params.caps["mu_refinement_pct"] == 0.15
-    assert set(params.caps["modifiers"]) == {"bye_stack", "handcuff_synergy", "sos"}
+    assert params.caps["mu_refinement_pct"] == 0.15  # read for real by engine/projections.py
+    # The positional-modifier caps are DELIBERATELY absent, and this asserts they stay absent.
+    # `recommend._positional_modifiers` returns {} unconditionally, no clamping code exists, and
+    # nothing anywhere read these keys — so the committed config was promising bye-stack, handcuff
+    # and SOS handling the engine has never had. Re-adding a cap here would re-advertise it; add
+    # the cap in the same change that makes the modifier real, not before. See §6.C.7.
+    assert "modifiers" not in params.caps
+    assert "modifier_abs_max" not in params.caps
     # §3.10 v1.1 keys are versioned in the committed file, not just model defaults.
     assert params.reliability_shrinkage == {"K": 0.4, "DST": 0.4}
     assert params.punt_guard["stream_round"] == {"K": 17, "DST": 16}
