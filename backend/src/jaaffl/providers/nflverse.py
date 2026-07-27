@@ -97,7 +97,12 @@ class NflreadpyProvider(FantasyDataProvider):
     @property
     def capabilities(self) -> frozenset[Capability]:
         return frozenset(
-            {Capability.HISTORICAL_STATS, Capability.RANKINGS, Capability.EXPECTED_POINTS}
+            {
+                Capability.HISTORICAL_STATS,
+                Capability.RANKINGS,
+                Capability.EXPECTED_POINTS,
+                Capability.SCHEDULE,
+            }
         )
 
     def historical_stats(self, season: int) -> pl.DataFrame:
@@ -107,6 +112,23 @@ class NflreadpyProvider(FantasyDataProvider):
     def expected_points(self, season: int, week: int | None = None) -> pl.DataFrame:
         """Expected fantasy points (xEP) from nflverse ffopportunity."""
         return _import_nflreadpy().load_ff_opportunity(seasons=[season])
+
+    def schedule(self, season: int) -> list[tuple[int, str, str]]:
+        """REGULAR-SEASON fixtures as ``(week, home_team, away_team)`` — the input for bye weeks.
+
+        Unlike xEP (which nflreadpy *raises* for the current season, forcing ``season − 1``), the
+        schedule is published months ahead, so this reads the DRAFT season directly: measured
+        2026-07-27, ``load_schedules(2026)`` returns 272 regular-season games covering all 32
+        teams, and every team has exactly one derivable bye.
+        """
+        import polars as pl
+
+        frame = _import_nflreadpy().load_schedules(seasons=[season])
+        regular = frame.filter(pl.col("game_type") == "REG")
+        return [
+            (int(row["week"]), str(row["home_team"]), str(row["away_team"]))
+            for row in regular.select(["week", "home_team", "away_team"]).iter_rows(named=True)
+        ]
 
     def rankings(self, season: int, week: int | None = None) -> dict[str, float]:
         """Expert consensus rank (ECR) keyed by canonical ``player_id``.

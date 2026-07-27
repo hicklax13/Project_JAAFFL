@@ -15,9 +15,10 @@ from tests.engine_fixtures import engine_params, jaaffl_settings, teams
 
 
 class _Fake(FantasyDataProvider):
-    def __init__(self, name, caps, *, adp=None, rankings=None, projections=None):
+    def __init__(self, name, caps, *, adp=None, rankings=None, projections=None, schedule=None):
         self._name, self._caps = name, frozenset(caps)
         self._adp, self._rankings, self._projections = adp or {}, rankings or {}, projections or {}
+        self._schedule = schedule or []
 
     @property
     def name(self):
@@ -35,6 +36,9 @@ class _Fake(FantasyDataProvider):
 
     def projections(self, season, week=None):
         return self._projections
+
+    def schedule(self, season):
+        return self._schedule
 
 
 def _settings():
@@ -183,3 +187,64 @@ def test_context_tiers_players_that_carry_no_expert_rank() -> None:
 
     assert "rb1" not in ctx.ecr, "fixture sanity: rb1 carries no expert rank"
     assert set(ctx.tiers) == {"rb0", "rb1"}, "a projected player must be tierable without an ECR"
+
+
+def test_context_carries_bye_weeks_from_the_schedule_provider() -> None:
+    """`RecommendedPick.bye_week` is rendered by the overlay but nothing ever populated it.
+
+    The schedule is FREE nflverse data and a bye is a calendar fact, so the honest fix is to read
+    it. A player whose team has no derivable bye stays absent rather than carrying a wrong week.
+    """
+    providers = [
+        *_providers(),
+        _Fake(
+            "nflverse_schedule",
+            {Capability.SCHEDULE},
+            # Weeks 1-2. Week 2 has a single game, so SEA and SF are both absent -> both on bye;
+            # BUF and KC play in each week, so neither has one.
+            schedule=[(1, "SEA", "BUF"), (1, "KC", "SF"), (2, "BUF", "KC")],
+        ),
+    ]
+    players = {
+        "rb0": Player(player_id="rb0", name="rb0", position=Position.RB, nfl_team="SEA"),
+        "wr0": Player(player_id="wr0", name="wr0", position=Position.WR, nfl_team="BUF"),
+        "te0": Player(player_id="te0", name="te0", position=Position.TE, nfl_team=None),
+    }
+    ctx = build_draft_context(
+        _settings(),
+        providers,
+        engine_params(),
+        2026,
+        players=players,
+        sigma_floor={p: 20.0 for p in Position},
+        ecr_to_points=lambda pos, e: 300.0 - e,
+    )
+
+    assert ctx.bye_week == {"rb0": 2}  # SEA's bye; BUF has none, te0 has no team
+
+
+def test_context_without_a_schedule_provider_has_no_byes_rather_than_wrong_ones() -> None:
+    """The $0 tier degrades, never fabricates: no schedule source -> the chip simply never shows."""
+    assert _build().bye_week == {}
+
+
+def test_a_broken_schedule_feed_degrades_the_bye_chip_not_the_whole_board() -> None:
+    """The board is essential; the bye chip is a nicety. A failing free feed must never cost the
+    former to protect the latter — precompute serves a degraded context, as it does elsewhere."""
+
+    class _Exploding(_Fake):
+        def schedule(self, season):
+            raise RuntimeError("nflverse schedule feed unavailable")
+
+    ctx = build_draft_context(
+        _settings(),
+        [*_providers(), _Exploding("boom", {Capability.SCHEDULE})],
+        engine_params(),
+        2026,
+        players=_players(),
+        sigma_floor={p: 20.0 for p in Position},
+        ecr_to_points=lambda pos, e: 300.0 - e,
+    )
+
+    assert ctx.bye_week == {}  # degraded, not fabricated
+    assert len(ctx.mu) == 3  # ...and the board itself is intact

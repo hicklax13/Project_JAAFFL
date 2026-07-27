@@ -101,6 +101,7 @@ def make_context(
     *,
     params: EngineParams | None = None,
     settings: LeagueSettings | None = None,
+    bye_week: dict[str, int] | None = None,
 ) -> DraftContext:
     """Build a DraftContext directly from ``{pid, pos, mu, sigma?, adp?, sd?, ecr?, sources?}``
     specs — no providers/network — so the orchestrator can be exercised in isolation (uses the real
@@ -158,4 +159,5 @@ def make_context(
         ecr=ecr,
         starting_slots=slots,
         players=players,
+        bye_week=dict(bye_week or {}),
     )

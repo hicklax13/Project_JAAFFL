@@ -29,7 +29,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from jaaffl.domain import LeagueSettings, Position
+from jaaffl.data.crosswalk import team_norm
+from jaaffl.domain import LeagueSettings, Player, Position
 
 
 def startable_positions(settings: LeagueSettings) -> set[Position]:
@@ -99,3 +100,31 @@ def inert_cliff_positions(
         if bonus > 0.0 and pid in position and pid in tiers
     }
     return sorted(startable_positions(settings) - live)
+
+
+def teams_missing_bye_weeks(
+    players: Mapping[str, Player], bye_week: Mapping[str, int]
+) -> list[str]:
+    """NFL teams with a player on the board but NO bye week, canonicalized and sorted.
+
+    The third instance of this module's one question, and the third time the same shape of bug
+    reached the live board: two free nflverse feeds spell teams differently — ``load_ff_playerids``
+    says ``NOS``/``SFO``/``LAR``, ``load_schedules`` says ``NO``/``SF``/``LA`` — so joining them raw
+    silently dropped **9 of 32 teams, 152 of the 510 projected players**, while the other 23 teams
+    resolved perfectly and the map looked populated. A COUNT of bye entries would have read healthy
+    the whole time (it was 1188), exactly as ``cliff_bonus``'s 447 entries did.
+
+    Reported per TEAM rather than per player because the team is the unit the failure has: one
+    unmapped code takes a whole roster with it, so a per-team list is short and names the cause.
+
+    Free agents are NOT a gap: ``team_norm`` folds ``FA``/blank to ``None`` and they are skipped,
+    because a player with no team cannot have a bye and reporting it forever would train the
+    alarm away — the same reasoning that keeps K/DST out of the tier-cliff hard failure.
+    """
+    covered = {team_norm(players[pid].nfl_team) for pid in bye_week if pid in players}
+    missing = {
+        team_norm(player.nfl_team)
+        for pid, player in players.items()
+        if pid not in bye_week and team_norm(player.nfl_team) is not None
+    }
+    return sorted(team for team in missing - covered if team is not None)

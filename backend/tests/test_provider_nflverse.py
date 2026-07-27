@@ -18,7 +18,7 @@ import pytest
 
 from jaaffl.data import Crosswalk, Warehouse
 from jaaffl.domain import Player, Position
-from jaaffl.providers.base import ProviderError
+from jaaffl.providers.base import Capability, ProviderError
 from jaaffl.providers.nflverse import NflreadpyProvider
 from tests.test_providers import fake_nflreadpy
 
@@ -301,3 +301,25 @@ def test_players_real_nflverse_pull_returns_universe() -> None:
     }.issubset(positions)
     # Exactly the 32 current franchises — no legacy OAK/SD/STL/LA duplicate defenses.
     assert len([p for p in universe if p.position == Position.DST]) == 32
+
+
+def test_schedule_returns_regular_season_rows_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Playoff rows would extend the week span and make almost every team look multi-bye, which
+    `league.schedule.bye_weeks` then reports as NO bye at all — a silently empty chip."""
+    import polars as pl
+
+    df = pl.DataFrame(
+        {
+            "season": [2026, 2026, 2026],
+            "game_type": ["REG", "REG", "WC"],
+            "week": [1, 2, 19],
+            "home_team": ["SEA", "BUF", "SEA"],
+            "away_team": ["BUF", "KC", "KC"],
+        }
+    )
+    fake_nflreadpy(monkeypatch, load_schedules=lambda seasons: df)
+
+    games = NflreadpyProvider().schedule(2026)
+
+    assert games == [(1, "SEA", "BUF"), (2, "BUF", "KC")]  # the WC row is dropped
+    assert Capability.SCHEDULE in NflreadpyProvider().capabilities

@@ -366,9 +366,11 @@ def recommend(
                     player_id=pid,
                     score=score,
                     # Display identity from the precomputed player universe (§6.2) — makes the
-                    # pick self-describing for the overlay/dashboard; bye is not retained in the
-                    # context (v1), so the UI degrades gracefully when bye_week is None.
+                    # pick self-describing for the overlay/dashboard. ``bye_week`` stays None when
+                    # the schedule feed did not resolve this player's team, so the overlay's
+                    # `bye N` chip is absent rather than wrong.
                     name=player.name if player else None,
+                    bye_week=context.bye_week.get(pid),
                     position=pos,
                     nfl_team=player.nfl_team if player else None,
                     projected_points=proj.mu,
