@@ -53,7 +53,18 @@ test("extracts every board pick AND the draft order from the saved room", async 
 
   const order = events.find((e) => e.event_type === "league_settings");
   expect(order?.data["draft_order"]).toEqual([
-    "T7", "T3", "T12", "T5", "T9", "T1", "T11", "T4", "T8", "T2", "T10", "T6",
+    "T7",
+    "T3",
+    "T12",
+    "T5",
+    "T9",
+    "T1",
+    "T11",
+    "T4",
+    "T8",
+    "T2",
+    "T10",
+    "T6",
   ]);
 });
 

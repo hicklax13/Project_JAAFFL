@@ -84,11 +84,7 @@ function pickEnvelope(
   };
 }
 
-function orderEvent(
-  leagueId: string,
-  source: DraftEvent["source"],
-  order: string[],
-): DraftEvent {
+function orderEvent(leagueId: string, source: DraftEvent["source"], order: string[]): DraftEvent {
   // team_count is READ (counting actual teams on the board) — the order itself is the
   // in-person order entered into CBS; a snake pattern is never synthesized from it.
   return {
@@ -405,14 +401,12 @@ function mapSyntheticSettings(frame: Record<string, unknown>): LeagueSettings | 
         ? [{ stat: "dst_yards_allowed", applies_to: ["DST"], brackets: dstYards }]
         : []),
     ],
-    scoring_bonuses: ((scoring["bonuses"] ?? []) as Array<Record<string, unknown>>).map(
-      (b) => ({
-        stat: String(b["stat"]),
-        threshold: Number(b["threshold"]),
-        points: Number(b["points"]),
-        applies_to: ["K"], // TODO(capture): CBS bonus->position mapping from the real page
-      }),
-    ),
+    scoring_bonuses: ((scoring["bonuses"] ?? []) as Array<Record<string, unknown>>).map((b) => ({
+      stat: String(b["stat"]),
+      threshold: Number(b["threshold"]),
+      points: Number(b["points"]),
+      applies_to: ["K"], // TODO(capture): CBS bonus->position mapping from the real page
+    })),
     draft_type: String(frame["draftType"] ?? "snake"),
     // READ from the payload/board; null when unreadable — NEVER a synthesized snake.
     draft_order: Array.isArray(frame["draftOrder"])

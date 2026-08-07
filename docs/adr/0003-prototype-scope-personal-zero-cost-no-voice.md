@@ -21,9 +21,9 @@ For the current prototype phase:
    - **nflverse / nflfastR** for historical NFL stats (free, no key), and
    - **CBS's own on-page** projections / rankings / ADP, read from the authenticated session
      via the extension.
-   All paid providers (**FantasyPros Premium**, **SportsDataIO**, **Sportradar**) are
-   **opt-in and off by default**. The only allowed recurring cost is AI credits for the
-   assistant.
+     All paid providers (**FantasyPros Premium**, **SportsDataIO**, **Sportradar**) are
+     **opt-in and off by default**. The only allowed recurring cost is AI credits for the
+     assistant.
 3. **No voice.** The AI assistant is **text-only**. The OpenAI Realtime / voice capability
    is out of scope for the prototype.
 

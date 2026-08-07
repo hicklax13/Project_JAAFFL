@@ -9,7 +9,8 @@ import type { RecommendedPick } from "@jaaffl/shared";
 
 import { WhyPanel } from "./why-panel";
 
-const REASONING = "R1P5 · floor-tilt λ=+0.3 · κ=0.6 · α=0.4 · flex_split=8RB/4WR (EngineParams v1.0.0)";
+const REASONING =
+  "R1P5 · floor-tilt λ=+0.3 · κ=0.6 · α=0.4 · flex_split=8RB/4WR (EngineParams v1.0.0)";
 
 const PICK1: RecommendedPick = {
   player_id: "jaaffl:00-0036223",

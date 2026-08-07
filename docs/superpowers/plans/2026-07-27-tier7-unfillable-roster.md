@@ -5,14 +5,14 @@
 > checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stop the engine recommending a thirteenth tight end while a REQUIRED starting slot is
-empty — and, first, make the E2/E6 objective able to *see* that it is empty.
+empty — and, first, make the E2/E6 objective able to _see_ that it is empty.
 
 **Architecture:** One parameter-free change to `engine/optimize.py::lineup_value`: a replacement
-phantom may be credited only for a starting slot that a *remaining pick can still fill*. Capacity
+phantom may be credited only for a starting slot that a _remaining pick can still fill_. Capacity
 is passed as `picks_remaining`; `None` (the default) preserves today's behaviour exactly, so every
 existing caller is bit-identical until it opts in. `marginal_lineup_value` decrements capacity for
 the pick the candidate consumes (`L*(R ∪ p, k−1) − L*(R, k)`), which is what makes an unfillable
-slot show up as a *loss*. The objective (`roster_season_values`, `optimal_lineup_value`) passes
+slot show up as a _loss_. The objective (`roster_season_values`, `optimal_lineup_value`) passes
 `k = 0` — the draft is over, there are no more picks, an unfilled slot yields nothing.
 
 **Tech Stack:** Python 3.12, pytest, numpy. Backend only; no contract/schema change, no new
@@ -29,7 +29,7 @@ Two distinct defects, both confirmed by instrumented reproduction. The Tier 6 on
 `league/replacement.py:118` computes `remaining = max(0, static_demand − drafted_at_pos)` and takes
 `_value_at_rank(ranked, remaining + 1)`. When a position's league-wide startable demand saturates,
 `remaining = 0`, so `remaining + 1 = 1` — **rank 1 is the best available player**, and his MLV is
-therefore *exactly* `0.0000` by construction. Measured QB `μ_best − baseline` by round:
+therefore _exactly_ `0.0000` by construction. Measured QB `μ_best − baseline` by round:
 `R1 +51.15 · R2 +9.40 · R3 +0.32 · R4 0.0000 · R5 0.0000 …`. DST collapses the same way at R16.
 The function's own docstring states it points one past remaining demand precisely to avoid
 "collapsing onto the best remaining candidate's own μ" — the `max(0, …)` floor defeats that intent.
@@ -37,22 +37,22 @@ The function's own docstring states it points one past remaining demand precisel
 **Defect 2 — the risk term outranks value.** `lambda_slot_override` gives a SURPLUS-position
 candidate `λ = −0.4` and the LAST_OPEN_STARTABLE candidate `λ = +0.4`. At σ = 46.72 (the
 `VOL_RATIO_MAX` clamp saturating) a surplus tight end collects a **+18.69** risk bonus with no
-value backing. At R17 the kicker's MLV had *not* collapsed — it was **+13.16** — and he still lost,
+value backing. At R17 the kicker's MLV had _not_ collapsed — it was **+13.16** — and he still lost,
 because `13.16 < 18.69`. **Fixing the baseline alone would not have produced a legal roster.**
 
 **Defect 3 — and the reason this survived six tiers: the objective cannot see either.**
 `simulate.py::roster_season_values` delegates to the same `lineup_value`, which credits
 `baselines[QB] = 230.64` for an empty QB slot. Measured on the real board, swapping the 3 worst
-tight ends for the *actual* R15–R17 leftovers (Davis Mills QB μ=83.60, Brandon Aubrey K μ=89.98,
+tight ends for the _actual_ R15–R17 leftovers (Davis Mills QB μ=83.60, Brandon Aubrey K μ=89.98,
 Buffalo DST μ=87.19):
 
-| | points |
-|---|---|
-| objective's verdict (`optimal_lineup_value`) | **+15.34** |
-| truth (unfilled required slot scores 0) | **+260.77** |
-| visible fraction | **5.9%** |
+|                                              | points      |
+| -------------------------------------------- | ----------- |
+| objective's verdict (`optimal_lineup_value`) | **+15.34**  |
+| truth (unfilled required slot scores 0)      | **+260.77** |
+| visible fraction                             | **5.9%**    |
 
-The visible +15.34 is *entirely* the kicker (89.98 − 74.64). The QB and the DST contribute
+The visible +15.34 is _entirely_ the kicker (89.98 − 74.64). The QB and the DST contribute
 **exactly zero** — a roster holding them is worth precisely as much as a roster with neither.
 **No E2/E6 gate could ever have promoted a fix**, because the instrument could not measure the
 thing being fixed. That is why the objective is fixed first, in the same change.
@@ -82,29 +82,30 @@ No coefficient was invented to achieve that.
   unfilled slot at 0 is the faithful reading of "this is the roster the draft produced", and the
   caveat is stated rather than papered over.
 - **This guarantees legality, not optimal timing.** Filling QB at R15 is legal but late. Whether
-  the engine should take a QB at R10 instead is a *measurable* question for the first time — it is
+  the engine should take a QB at R10 instead is a _measurable_ question for the first time — it is
   Task 7, not an assumption baked into Task 2.
 
 ---
 
 ## File structure
 
-| File | Responsibility | Change |
-|---|---|---|
-| `backend/src/jaaffl/engine/optimize.py` | the capacity rule itself | modify `lineup_value`, `lineup_value_hungarian`, `marginal_lineup_value` |
-| `backend/src/jaaffl/engine/simulate.py` | objective passes `k=0`; `ScoreAgent` passes real `k` | modify `optimal_lineup_value`, `roster_season_values`, `ScoreAgent.pick` |
-| `backend/src/jaaffl/engine/recommend.py` | hot path passes real `k` | modify the MLV call sites |
-| `backend/src/jaaffl/league/coverage.py` | new guard: does a walked draft end LEGAL? | add `unfillable_starting_slots` |
-| `backend/tests/test_optimize.py` | capacity unit tests | add |
-| `backend/tests/test_simulate_outcomes.py` | objective can now see an empty slot | add |
-| `backend/tests/test_late_round_legality.py` | regression: walk a draft, assert a LEGAL roster | create |
-| `backend/tests/test_coverage_guards.py` | the new guard fires | add |
+| File                                        | Responsibility                                       | Change                                                                   |
+| ------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
+| `backend/src/jaaffl/engine/optimize.py`     | the capacity rule itself                             | modify `lineup_value`, `lineup_value_hungarian`, `marginal_lineup_value` |
+| `backend/src/jaaffl/engine/simulate.py`     | objective passes `k=0`; `ScoreAgent` passes real `k` | modify `optimal_lineup_value`, `roster_season_values`, `ScoreAgent.pick` |
+| `backend/src/jaaffl/engine/recommend.py`    | hot path passes real `k`                             | modify the MLV call sites                                                |
+| `backend/src/jaaffl/league/coverage.py`     | new guard: does a walked draft end LEGAL?            | add `unfillable_starting_slots`                                          |
+| `backend/tests/test_optimize.py`            | capacity unit tests                                  | add                                                                      |
+| `backend/tests/test_simulate_outcomes.py`   | objective can now see an empty slot                  | add                                                                      |
+| `backend/tests/test_late_round_legality.py` | regression: walk a draft, assert a LEGAL roster      | create                                                                   |
+| `backend/tests/test_coverage_guards.py`     | the new guard fires                                  | add                                                                      |
 
 ---
 
 ### Task 1: `lineup_value` learns capacity
 
 **Files:**
+
 - Modify: `backend/src/jaaffl/engine/optimize.py:59-109`
 - Test: `backend/tests/test_optimize.py`
 
@@ -189,6 +190,7 @@ git commit -m "feat(engine): a replacement phantom needs a pick left to fill it 
 ### Task 2: `marginal_lineup_value` spends a pick
 
 **Files:**
+
 - Modify: `backend/src/jaaffl/engine/optimize.py:147-161`
 - Test: `backend/tests/test_optimize.py`
 
@@ -252,6 +254,7 @@ git commit -m "feat(engine): MLV spends the pick it costs (#tier7.2)"
 ### Task 3: the objective stops crediting phantoms it cannot fill
 
 **Files:**
+
 - Modify: `backend/src/jaaffl/engine/simulate.py:47-57` (`optimal_lineup_value`), `:92-116`
   (`roster_season_values`)
 - Test: `backend/tests/test_simulate_outcomes.py`
@@ -323,6 +326,7 @@ git commit -m "fix(engine): the objective could not see an unfillable roster (#t
 ### Task 4: the live hot path and `ScoreAgent` pass real capacity
 
 **Files:**
+
 - Modify: `backend/src/jaaffl/engine/recommend.py` (the `marginal_lineup_value` call sites)
 - Modify: `backend/src/jaaffl/engine/simulate.py::ScoreAgent.pick:293-322`
 - Test: `backend/tests/test_engine_latency.py` (must still pass, unchanged)
@@ -382,6 +386,7 @@ git commit -m "fix(engine): the engine drafts a roster it can actually start (#t
 ### Task 5: the guard, and proof that it fires
 
 **Files:**
+
 - Modify: `backend/src/jaaffl/league/coverage.py` (append `unfillable_starting_slots`)
 - Modify: `backend/tests/test_coverage_guards.py`
 - Modify: `scripts/preflight.py` (report, do not fail — it has no roster to check pre-draft)
@@ -449,17 +454,17 @@ buffers stderr and shows nothing until exit. Expect ~150 s per block unloaded, u
 HEATER's 40-60 python processes are running. That is not a hang.
 
 - [ ] **Step 2: Record, do not adopt.** `config/engine.json` is owner-adopted and the CLI is
-dry-run by default. Never pass `--write`.
+      dry-run by default. Never pass `--write`.
 
 - [ ] **Step 3: State plainly in `ROADMAP.md` that findings B, C and D were measured under the
-blind objective and are superseded**, with the new numbers beside them where re-measured and an
-explicit "not re-measured" where not.
+      blind objective and are superseded**, with the new numbers beside them where re-measured and an
+      explicit "not re-measured" where not.
 
 ---
 
 ### Task 7 (deferred to Tier 8 unless time allows): is R15 the right round?
 
-Task 4 guarantees a **legal** roster; it does not claim the *timing* is optimal. With the objective
+Task 4 guarantees a **legal** roster; it does not claim the _timing_ is optimal. With the objective
 fixed, "should the engine take a QB at R10 instead of R15?" is measurable for the first time. Do
 not fold an answer into Task 4 — measure it separately, with `--replicates >= 3`, and check the
 direction of the one-sided test before quoting any p-value.

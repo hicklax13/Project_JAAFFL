@@ -25,7 +25,11 @@ export function SettingsBadges({ league }: { league: LeagueSettings | null }): R
       <span className="chip" role="listitem">
         {rounds} rounds
       </span>
-      <span className="chip" role="listitem" title="Read live from the CBS room — never inferred from team count">
+      <span
+        className="chip"
+        role="listitem"
+        title="Read live from the CBS room — never inferred from team count"
+      >
         Order: in-person → CBS
       </span>
     </div>
@@ -87,7 +91,10 @@ export function ReasoningLine({ reasoning }: { reasoning?: string | null }): Rea
         {p.paramsVersion && `· v${p.paramsVersion}`}
       </span>
       <span className="reasoning-full">{reasoning}</span>
-      <span className="chip est-note" title="No proven optimal live-snake-draft solver exists; efficacy is offline-validated">
+      <span
+        className="chip est-note"
+        title="No proven optimal live-snake-draft solver exists; efficacy is offline-validated"
+      >
         Forward-year figures are ESTIMATED
       </span>
     </div>

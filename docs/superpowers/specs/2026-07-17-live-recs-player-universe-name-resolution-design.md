@@ -56,12 +56,13 @@ holds every possible candidate: candidacy requires an ECR, and ECR resolves thro
 table's seeded crosswalk — so a player absent here could never be a candidate anyway.
 
 **Per-row mapping (mirrors `rankings()` resolve+skip and `seed_from_playerids`):**
+
 - Require a clean `gsis_id` and a league-valid `position` (the domain `Position` set). Otherwise
   **skip-and-log**. (Team DSTs have no gsis → skipped; an honest, documented gap. K/DST are
   streamed late by the punt guard, so this does not hurt live early-round recs. DST-universe
   coverage is a separate future enhancement noted in `docs/owner-manual-todo.md`.)
 - Survivor → `Player(player_id=f"gsis:{gsis}", name=<name or canonical>, position=Position(pos),
-  nfl_team=<clean team>)`. **No `external_ids`** (YAGNI — the engine never reads them; the seed
+nfl_team=<clean team>)`. **No `external_ids`** (YAGNI — the engine never reads them; the seed
   links cross-source ids into SQLite separately).
 - A per-row construction failure (e.g. `ValidationError`) skips that row, never aborts the batch.
 - Emit an aggregate `kept`/`skipped` log line (like `rankings()`).
@@ -98,6 +99,7 @@ def resolve_pick_ids(
 ```
 
 Behavior:
+
 - Build `overall -> (player_name, position, player_team)` from `pick_made` events' `data`
   (manual-paste keys, per `apps/extension/src/lib/parse.ts`: `player_name`, `position`,
   `player_team`).
@@ -114,6 +116,7 @@ Behavior:
 in `create_app`, and a small `_resolve_state(state, league_id)` helper that fetches the league's
 events and calls `resolve_pick_ids(state, events, app.state.crosswalk.resolve_name)`. Call it at
 the two sites that feed the engine, immediately before `rec_engine.recommend(...)`:
+
 - `GET /recommendation` (events already fetched at the top of the handler — reuse them; applies
   after the audit/`team_id` state overrides).
 - `publish_recommendation` (the `/recs/ws` push path; fetch events only in the branch that recomputes).
@@ -135,13 +138,13 @@ An unseeded/empty players table (base install) legitimately means "no match" →
 
 ## Files touched
 
-| File | Change |
-|---|---|
-| `backend/src/jaaffl/data/crosswalk.py` | add `player_from_playerid_row` helper; `seed_from_playerids` uses it; reorder `_best_fuzzy_match` to defer the rapidfuzz import |
-| `backend/src/jaaffl/providers/nflverse.py` | implement `players(season)` via the helper + `load_ff_playerids()` |
-| `backend/src/jaaffl/ingest/resolve.py` | NEW — `resolve_pick_ids` + source-position normalization |
-| `backend/src/jaaffl/ingest/__init__.py` | export `resolve_pick_ids` |
-| `backend/src/jaaffl/api/app.py` | construct `app.state.crosswalk`; wire `_resolve_state` into the two engine-feeding sites |
+| File                                       | Change                                                                                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `backend/src/jaaffl/data/crosswalk.py`     | add `player_from_playerid_row` helper; `seed_from_playerids` uses it; reorder `_best_fuzzy_match` to defer the rapidfuzz import |
+| `backend/src/jaaffl/providers/nflverse.py` | implement `players(season)` via the helper + `load_ff_playerids()`                                                              |
+| `backend/src/jaaffl/ingest/resolve.py`     | NEW — `resolve_pick_ids` + source-position normalization                                                                        |
+| `backend/src/jaaffl/ingest/__init__.py`    | export `resolve_pick_ids`                                                                                                       |
+| `backend/src/jaaffl/api/app.py`            | construct `app.state.crosswalk`; wire `_resolve_state` into the two engine-feeding sites                                        |
 
 **Not touched:** `engine/recommend.py`, `ingest/log.fold_state`, domain models, the E5 contract
 (Zod/schemas/fixtures), `config/league.json`, `config/engine.json`, the provider registry.
@@ -149,6 +152,7 @@ An unseeded/empty players table (base install) legitimately means "no match" →
 ## Testing plan (TDD, network-free by default)
 
 **`test_provider_nflverse.py` (extend):**
+
 - `players()` maps `load_ff_playerids` rows → `Player(gsis:…, name, position, nfl_team)`.
 - skips rows without gsis; skips non-league positions (e.g. IDP `DE`); skips a malformed row
   without aborting the batch.
@@ -160,6 +164,7 @@ through `_registry_player_loader` returns a non-empty universe — the 503→uni
 loader seam (no more `NotImplementedError → {}`).
 
 **new `test_resolve.py`:**
+
 - name-only pick + matching event → `player_id` filled by a fake resolver.
 - already-resolved pick → untouched (resolver not consulted for it).
 - unresolved name → stays `None` (and is logged; no crash).

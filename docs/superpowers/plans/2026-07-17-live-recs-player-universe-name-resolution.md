@@ -12,7 +12,7 @@
 
 ## Environment — how to run tests in this worktree
 
-The root `.venv` has an editable install pointing at *main's* `backend/src`. To test **worktree** code, prepend the worktree's `backend/src` to `PYTHONPATH` (this shadows the editable `.pth`). Every test command in this plan is:
+The root `.venv` has an editable install pointing at _main's_ `backend/src`. To test **worktree** code, prepend the worktree's `backend/src` to `PYTHONPATH` (this shadows the editable `.pth`). Every test command in this plan is:
 
 ```bash
 WT=/c/Users/conno/Project_JAAFFL/Project_JAAFFL/.claude/worktrees/live-recs-player-universe
@@ -23,6 +23,7 @@ cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest <args>
 Baseline before starting: **288 backend tests pass**. Do not regress it.
 
 Every commit message ends with:
+
 ```
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 ```
@@ -34,6 +35,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 Single source of truth for `load_ff_playerids()` row → canonical `Player`, used by both the crosswalk seed and (Task 2) the universe loader — so the seeded ids and the loaded universe can never diverge.
 
 **Files:**
+
 - Modify: `backend/src/jaaffl/data/crosswalk.py` (add helper; refactor `seed_from_playerids`)
 - Test: `backend/tests/test_crosswalk.py`
 
@@ -72,6 +74,7 @@ def test_player_from_playerid_row_falls_back_to_canonical_name() -> None:
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_crosswalk.py -k player_from_playerid_row -v
 ```
+
 Expected: FAIL — `ImportError: cannot import name 'player_from_playerid_row'`.
 
 - [ ] **Step 3: Add the helper and refactor the seed**
@@ -133,6 +136,7 @@ Replace the body of `seed_from_playerids` (keep the docstring) with the helper-b
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_crosswalk.py -v
 ```
+
 Expected: PASS — the 4 new tests plus every existing crosswalk test (the seed refactor is behavior-preserving).
 
 - [ ] **Step 5: Commit**
@@ -148,6 +152,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ## Task 2: `NflreadpyProvider.players(season)`
 
 **Files:**
+
 - Modify: `backend/src/jaaffl/providers/nflverse.py` (implement `players`)
 - Test: `backend/tests/test_provider_nflverse.py`
 
@@ -210,6 +215,7 @@ def test_players_raises_provider_error_without_data_extra(
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_provider_nflverse.py -k players -v
 ```
+
 Expected: FAIL — `players()` raises `NotImplementedError` (base class stub).
 
 - [ ] **Step 3: Implement `players`**
@@ -248,6 +254,7 @@ In `backend/src/jaaffl/providers/nflverse.py`, add this method to `NflreadpyProv
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_provider_nflverse.py -v
 ```
+
 Expected: PASS — all players tests plus the existing rankings/seed tests.
 
 - [ ] **Step 5: Commit**
@@ -265,6 +272,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 Proves the keystone: with `players()` implemented, `_registry_player_loader` returns a real universe instead of `{}` (no more `NotImplementedError → {}` swallow). Test-only.
 
 **Files:**
+
 - Test: `backend/tests/test_precompute.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -300,6 +308,7 @@ def test_registry_player_loader_uses_real_players_method(monkeypatch, tmp_path) 
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_precompute.py::test_registry_player_loader_uses_real_players_method -v
 ```
+
 Expected: PASS. (This is a regression guard on the keystone flip — it would have FAILED before Task 2, when `players()` raised `NotImplementedError` and the loader swallowed it to `{}`.)
 
 - [ ] **Step 3: Run the full precompute suite (no regressions)**
@@ -307,6 +316,7 @@ Expected: PASS. (This is a regression guard on the keystone flip — it would ha
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_precompute.py -v
 ```
+
 Expected: PASS.
 
 - [ ] **Step 4: Commit**
@@ -324,6 +334,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 The Task-6 resolution runs on every `GET /recommendation`. In a base ($0, no-`data`-extra) install a name-only pick would reach `_best_fuzzy_match`, which imports `rapidfuzz` before checking candidates → `ImportError` → 500. Defer the import so an empty players table returns `None` first.
 
 **Files:**
+
 - Modify: `backend/src/jaaffl/data/crosswalk.py` (`_best_fuzzy_match`)
 - Test: `backend/tests/test_crosswalk.py`
 
@@ -348,6 +359,7 @@ def test_resolve_name_on_empty_table_returns_none_without_rapidfuzz(
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_crosswalk.py::test_resolve_name_on_empty_table_returns_none_without_rapidfuzz -v
 ```
+
 Expected: FAIL — `ImportError` (rapidfuzz imported before the empty-candidates check).
 
 - [ ] **Step 3: Reorder `_best_fuzzy_match` to defer the import**
@@ -402,6 +414,7 @@ In `backend/src/jaaffl/data/crosswalk.py`, replace the top of `_best_fuzzy_match
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_crosswalk.py -v
 ```
+
 Expected: PASS — the new test plus every existing fuzzy-match test (behavior identical for non-empty candidates).
 
 - [ ] **Step 5: Commit**
@@ -419,6 +432,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 The pure resolution seam: folded state + league events + an injected resolver → state with name-only picks' `player_id` filled.
 
 **Files:**
+
 - Create: `backend/src/jaaffl/ingest/resolve.py`
 - Modify: `backend/src/jaaffl/ingest/__init__.py` (export)
 - Test: `backend/tests/test_resolve.py`
@@ -521,6 +535,7 @@ def test_name_only_pick_without_name_in_events_is_skipped() -> None:
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_resolve.py -v
 ```
+
 Expected: FAIL — `ModuleNotFoundError: No module named 'jaaffl.ingest.resolve'`.
 
 - [ ] **Step 3: Create the module**
@@ -619,6 +634,7 @@ Then export it in `backend/src/jaaffl/ingest/__init__.py`: add `from jaaffl.inge
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_resolve.py -v
 ```
+
 Expected: PASS — all 5 tests.
 
 - [ ] **Step 5: Commit**
@@ -634,6 +650,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ## Task 6: Wire resolution into the API + end-to-end masking test
 
 **Files:**
+
 - Modify: `backend/src/jaaffl/api/app.py`
 - Test: `backend/tests/test_api.py`
 
@@ -681,25 +698,31 @@ def test_recommendation_masks_name_only_paste_pick(tmp_path: Path) -> None:
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_api.py::test_recommendation_masks_name_only_paste_pick -v
 ```
+
 Expected: FAIL — `app.state` has no `crosswalk` (AttributeError), and/or `gsis:cmc` still appears in `ranked_ids` (no resolution wired).
 
 - [ ] **Step 3: Wire resolution into `api/app.py`**
 
 Add imports near the top of `backend/src/jaaffl/api/app.py`:
+
 ```python
 from jaaffl.data import Crosswalk
 ```
+
 Extend the ingest import line to include the new symbol:
+
 ```python
 from jaaffl.ingest import DraftLog, IngestResult, handle_event, resolve_pick_ids
 ```
 
 In `create_app`, right after `app.state.warehouse = Warehouse(settings.jaaffl_data_dir)`, add:
+
 ```python
     app.state.crosswalk = Crosswalk(app.state.warehouse.app_sqlite)
 ```
 
 Add the resolution helper (place it just before `def publish_recommendation`):
+
 ```python
     def _resolve_state(state, league_id):
         """Fill canonical player_ids for name-only (manual-paste) picks — resolving the raw event
@@ -710,6 +733,7 @@ Add the resolution helper (place it just before `def publish_recommendation`):
 ```
 
 In `publish_recommendation`, resolve before recommending:
+
 ```python
         recommendation = app.state.rec_engine.recommend(
             _resolve_state(result.state, event.league_id)
@@ -717,6 +741,7 @@ In `publish_recommendation`, resolve before recommending:
 ```
 
 In the `recommendation` route, insert the resolve call immediately before `rec = app.state.rec_engine.recommend(...)` (after the `as_of_overall_pick` / `team_id` overrides):
+
 ```python
         state = _resolve_state(state, league_id)
         rec = app.state.rec_engine.recommend(state, limit=limit, use_mc=mc)
@@ -727,6 +752,7 @@ In the `recommendation` route, insert the resolve call immediately before `rec =
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_api.py -v
 ```
+
 Expected: PASS — the new masking test plus every existing API test (existing picks carry no `player_name`, so resolution is a no-op for them).
 
 - [ ] **Step 5: Commit**
@@ -744,6 +770,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 Proves `players()` against the real FREE nflverse feed. Opt-in (skipped by default) so the suite stays network-free.
 
 **Files:**
+
 - Test: `backend/tests/test_provider_nflverse.py`
 
 - [ ] **Step 1: Add the gated test**
@@ -769,6 +796,7 @@ def test_players_real_nflverse_pull_returns_universe() -> None:
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_provider_nflverse.py::test_players_real_nflverse_pull_returns_universe -v
 ```
+
 Expected: `1 skipped` (no `JAAFFL_RUN_NETWORK_TESTS` set).
 
 - [ ] **Step 3: (Optional, manual) Run it once against the live feed**
@@ -776,6 +804,7 @@ Expected: `1 skipped` (no `JAAFFL_RUN_NETWORK_TESTS` set).
 ```bash
 cd "$WT/backend" && JAAFFL_RUN_NETWORK_TESTS=1 PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_provider_nflverse.py::test_players_real_nflverse_pull_returns_universe -v
 ```
+
 Expected: PASS (pulls the free DynastyProcess CSV; needs network). Record the observed universe size in the PR description.
 
 - [ ] **Step 4: Commit**
@@ -795,6 +824,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest -q
 ```
+
 Expected: PASS, `>= 288` passing + `1 skipped` (the opt-in integration test), 0 failures.
 
 - [ ] **Run the project `verify` recipe (ruff + pytest + tsc)** via the verify skill — all green; JS baseline (109) unchanged (no JS touched, E5 contract untouched).
@@ -803,14 +833,14 @@ Expected: PASS, `>= 288` passing + `1 skipped` (the opt-in integration test), 0 
 
 ## Self-review — spec coverage
 
-| Spec requirement | Task |
-|---|---|
-| `players()` from `load_ff_playerids()`, skip-and-log, `gsis:` ids, `ProviderError` | Task 2 |
-| Alignment: universe ids == seed/rankings canonical ids | Task 1 (shared helper) + Task 2 assertion |
-| 503→universe flip through `_registry_player_loader` | Task 3 |
-| `resolve_pick_ids` seam, position mapping, only-fill-`None`, log unresolved | Task 5 |
-| Wire into `GET /recommendation` + `publish_recommendation` | Task 6 |
-| rapidfuzz micro-fix (base-install 500 guard) | Task 4 |
-| End-to-end paste → resolved → masked | Task 6 test |
-| Opt-in slow real-nflverse integration test | Task 7 |
-| Frozen: `recommend.py`, `fold_state`, domain models, E5 contract | not touched (verified in Final: JS/parity untouched) |
+| Spec requirement                                                                   | Task                                                 |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `players()` from `load_ff_playerids()`, skip-and-log, `gsis:` ids, `ProviderError` | Task 2                                               |
+| Alignment: universe ids == seed/rankings canonical ids                             | Task 1 (shared helper) + Task 2 assertion            |
+| 503→universe flip through `_registry_player_loader`                                | Task 3                                               |
+| `resolve_pick_ids` seam, position mapping, only-fill-`None`, log unresolved        | Task 5                                               |
+| Wire into `GET /recommendation` + `publish_recommendation`                         | Task 6                                               |
+| rapidfuzz micro-fix (base-install 500 guard)                                       | Task 4                                               |
+| End-to-end paste → resolved → masked                                               | Task 6 test                                          |
+| Opt-in slow real-nflverse integration test                                         | Task 7                                               |
+| Frozen: `recommend.py`, `fold_state`, domain models, E5 contract                   | not touched (verified in Final: JS/parity untouched) |

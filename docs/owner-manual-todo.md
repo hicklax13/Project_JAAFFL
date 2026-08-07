@@ -4,7 +4,7 @@ Tasks only the owner can do (record-mode capture, keys, auth, decisions). Deferr
 of each build phase on purpose — nothing here blocks the automated build unless flagged. Do the
 `[BLOCKER]` items when you want the feature they gate; the `[WHEN YOU WANT IT]` items are opt-in.
 
-## 1. CBS record-mode capture session  `[✅ DONE — 2026-07-24]`
+## 1. CBS record-mode capture session `[✅ DONE — 2026-07-24]`
 
 > **The owner ran this.** One 12-team snake mock (14 rounds, bots) produced **8.4 MB** of real
 > frames. The decoded result is [`docs/research/cbs-draft-protocol.md`](research/cbs-draft-protocol.md)
@@ -33,7 +33,7 @@ of each build phase on purpose — nothing here blocks the automated build unles
 > ### ⚠️ TWO THINGS TO DO BEFORE DRAFT NIGHT
 >
 > **1. Set `JAAFFL_MY_TEAM_ID`.** Put your CBS team slot (`"1"`–`"12"`, as CBS numbers the teams in
-> the room) in `.env`. No CBS frame names *your own* team, so the app cannot work it out from the
+> the room) in `.env`. No CBS frame names _your own_ team, so the app cannot work it out from the
 > live feed. Without it the engine cannot tell when your next pick is, survival degrades to
 > "everyone is still available", and every recommendation reads `vona 0.00` — the scarcity half of
 > the model is off. It still ranks on Marginal Lineup Value and it now says so (the overlay foot
@@ -82,7 +82,7 @@ of each build phase on purpose — nothing here blocks the automated build unles
 > **Still open:** a **replay is not a live draft.** The pipeline has run end to end on real captured
 > frames; it has still never run against a LIVE CBS room that is actually ticking. Also still
 > `TODO(capture)`: the **settings-page** parse and `CbsPageSnapshot` projections/injuries/rankings
-> (§4 below), which need a *settings/board* page capture rather than draft-room frames.
+> (§4 below), which need a _settings/board_ page capture rather than draft-room frames.
 >
 > ✅ **`scripts/seed_cbs_crosswalk.py` is no longer a prerequisite (PR #31).** The crosswalk now
 > seeds itself on the first `/recommendation` (~4,400 players / ~4,360 CBS links from the free
@@ -104,13 +104,13 @@ in **Phase 4 (Stage 5 engine)** — two more things:
   bonuses +1 at 50 / +1 more at 60, DST single points-allowed bracket 0-9 = 6 with no yards-allowed
   tier), now encoded in `backend/src/jaaffl/league/defaults.py::jaaffl_scoring()`. A captured CBS
   scoring page still overrides it via `CbsOnPageProvider.league_settings()` if the room ever differs
-  (config/league.json roster stays immutable). Only CBS *frame parsing* (live draft-room shapes)
+  (config/league.json roster stays immutable). Only CBS _frame parsing_ (live draft-room shapes)
   remains capture-blocked.
 - **Calibration against real drafts (E1/E2/E3).** The tunables in `config/engine.json` (flex split
   8RB/4WR, κ, λ-table, α, reliability shrinkage, situation caps) are literature/first-principles
   priors. E1 measures the flex split from live FFC ADP (top-60); E2/E3 tune the weight vector and
   validate μ/σ against real boards. All optional — the engine ships and runs on the priors.
-  **E2 was re-run on 2026-07-25** against the new *real* xEP-backed μ/σ (the earlier run had tuned
+  **E2 was re-run on 2026-07-25** against the new _real_ xEP-backed μ/σ (the earlier run had tuned
   against the `300 − ecr` placeholder, so its "optimum" was fitted to synthetic value). It again
   **kept the baseline**: the tuned vector was directionally better but not significantly so
   (`mean_diff +3.18 pts/slot`, `min_slot_diff −0.41`, `p = 0.41`), failing the no-regression gate.
@@ -131,16 +131,16 @@ in **Phase 4 (Stage 5 engine)** — two more things:
   5. `--eval-seeds` was inert (every held-out opponent deterministic).
 
   Drafts are now scored by **win probability** — `P(your roster posts the highest realized season
-  total of the 12)` over seasons sampled from `N(μ, σ)` — against a disjoint stochastic held-out
+total of the 12)` over seasons sampled from `N(μ, σ)` — against a disjoint stochastic held-out
   field, with the committed config as the baseline.
 
   **The pure-MLV finding reverses.** On the real 2026 board (8 seeds, 800 sampled seasons/draft),
   pure-MLV still gains `+21.65 pts/slot` (p=0.0002) — but it sheds **42% of its championship
   probability** (0.1077 → 0.0624, p=0.9998). The old harness could only see the points half of that
-  trade. **λ is the load-bearing term**: switching it off costs *both* win probability and points,
+  trade. **λ is the load-bearing term**: switching it off costs _both_ win probability and points,
   and doubling it also hurts, so the shipped schedule sits near a local optimum.
 
-  **The re-run still says KEEP baseline**, but informatively: the tuned vector is *significantly*
+  **The re-run still says KEEP baseline**, but informatively: the tuned vector is _significantly_
   better on win probability (`+0.0130/slot, p = 0.0029`) and fails only the
   non-negative-at-every-slot leg by `−0.0014` — a margin inside Monte-Carlo noise. Nothing was
   written; the CLI is dry-run unless you pass `--write`, and `config/engine.json` stays
@@ -160,19 +160,19 @@ in **Phase 4 (Stage 5 engine)** — two more things:
 
   With the term finally live, the calibration harness could measure it for the first time. It says
   **turn it off.** Setting `alpha` to 0 gains **+0.0133 championship probability per slot**
-  (`p = 0.0002`) *and* **+5.28 points per slot** (`p = 0.0002`), and is non-negative at **every one
+  (`p = 0.0002`) _and_ **+5.28 points per slot** (`p = 0.0002`), and is non-negative at **every one
   of the 12 draft slots** — the first vector in this project's history to pass **both** legs of the
   no-regression gate. The response is monotone, so this is not one lucky point estimate:
 
-  | `alpha` | championship probability |
-  |---|---|
-  | **0.0** | **0.1059** |
-  | 0.3 | 0.0940 |
-  | **0.4 (what ships today)** | **0.0926** |
-  | 0.5 | 0.0870 |
-  | 0.8 | 0.0871 |
+  | `alpha`                    | championship probability |
+  | -------------------------- | ------------------------ |
+  | **0.0**                    | **0.1059**               |
+  | 0.3                        | 0.0940                   |
+  | **0.4 (what ships today)** | **0.0926**               |
+  | 0.5                        | 0.0870                   |
+  | 0.8                        | 0.0871                   |
 
-  The likely reason: `κ·VONA` already prices scarcity, and prices it *better* — it knows whether the
+  The likely reason: `κ·VONA` already prices scarcity, and prices it _better_ — it knows whether the
   player will still be there at your next pick. The cliff bonus adds a second, blunter scarcity
   bonus on top that ignores that. It hurts most at **draft slot 1** (0.0958 → 0.1650 with α off),
   the seat best able to spend the first overall pick on the huge-cliff tight end.
@@ -193,10 +193,10 @@ in **Phase 4 (Stage 5 engine)** — two more things:
   ⚠️ **Tier 6 update — one leg of that claim does not replicate.** Re-running the same comparison
   over **five independent seed blocks** instead of one:
 
-  | α = 0 vs the shipped α = 0.4 | across the 5 blocks |
-  |---|---|
-  | average gain | **positive in 5 of 5** (+0.0133, +0.0063, +0.0033, +0.0133, +0.0086) |
-  | "non-negative at every draft slot" | **held in only 1 of 5** |
+  | α = 0 vs the shipped α = 0.4       | across the 5 blocks                                                  |
+  | ---------------------------------- | -------------------------------------------------------------------- |
+  | average gain                       | **positive in 5 of 5** (+0.0133, +0.0063, +0.0033, +0.0133, +0.0086) |
+  | "non-negative at every draft slot" | **held in only 1 of 5**                                              |
 
   So **the headline still stands — α = 0 is better on average, every time we measured it** — but the
   "first vector to pass both legs" part was a property of the one seed block Tier 5 happened to use.
@@ -211,13 +211,13 @@ in **Phase 4 (Stage 5 engine)** — two more things:
 
   **Do not change either yet.** Those numbers measure championship probability only; nobody has
   measured what they do to expected POINTS, and the one time we checked such a trade (Tier 5, for
-  `kappa`) it turned out to buy championship odds *by giving up points*. Asking you to adopt a knob
+  `kappa`) it turned out to buy championship odds _by giving up points_. Asking you to adopt a knob
   on half the evidence is exactly the mistake this audit keeps finding. Details in `ROADMAP.md` §6;
   the missing measurement is the next tier's job. **Nothing has been changed.**
 
   ⛔ **Tier 7 update — those numbers are now OUT OF DATE, including the `alpha = 0` recommendation
   above.** Tier 7 fixed the measuring stick itself (see §1b): a roster that cannot field a legal
-  lineup used to score almost as well as one that can, and *every* calibration number in this
+  lineup used to score almost as well as one that can, and _every_ calibration number in this
   section was produced with that broken stick. They are not wrong so much as **no longer
   comparable** — the whole scale moved. Re-measuring is the next tier's first job.
 
@@ -225,7 +225,7 @@ in **Phase 4 (Stage 5 engine)** — two more things:
   `alpha = 0` suggestion above is suspended until it is re-measured, not withdrawn. Leaving
   `config/engine.json` exactly as it is remains the right call, and is what the code ships with.
 
-## 1b. ⛔ READ BEFORE DRAFT NIGHT — the engine goes blind in the late rounds  `[NEW — Tier 6]`
+## 1b. ⛔ READ BEFORE DRAFT NIGHT — the engine goes blind in the late rounds `[NEW — Tier 6]`
 
 **You must fill QB, K and DST yourself. The engine will not tell you to.**
 
@@ -238,7 +238,7 @@ R1:TE R2:WR R3:WR R4:WR R5:TE R6:TE R7:TE R8:TE R9:TE R10:RB R11:TE R12:TE R13:T
 ```
 
 That roster **cannot field a legal starting lineup** — **four** of your nine starting slots would be
-empty. (Tier 6 said three. It counted the missing *positions* — QB, K, DST — and forgot the
+empty. (Tier 6 said three. It counted the missing _positions_ — QB, K, DST — and forgot the
 **WR/RB flex**: your 1 RB and 3 WR fill the RB slot and the three WR slots exactly, leaving the
 flex with nobody. Corrected in Tier 7.) It happens identically whether the other eleven teams draft
 greedily or realistically, so it is not an artifact of the simulation. And the players were there
@@ -247,18 +247,18 @@ ranked **53rd**; at round 16, **20 defenses** available, best ranked **55th**; *
 available at round 10, best ranked **150th**.
 
 **Why.** From about round 5, every remaining player at every position you still need is projected
-below "replacement level", and the engine measures a player by how much he adds to your *starting*
+below "replacement level", and the engine measures a player by how much he adds to your _starting_
 lineup. A below-replacement player adds nothing — so the engine scores a quarterback you desperately
 need exactly the same as a thirteenth tight end you cannot start: **zero**. With every value signal
 at zero, the only thing left moving the ranking is the uncertainty term, which late in the draft is
-tuned to prefer *high-variance* players — and that number is nearly identical for everyone at a
+tuned to prefer _high-variance_ players — and that number is nearly identical for everyone at a
 position. The result is close to arbitrary. In round 13 it recommended a player projected for **16
 points** over one projected for **83**.
 
 **What to do on the night — a 30-second rule:**
 
 1. Trust the engine for **rounds 1–9**. Its value signal is real and live there.
-2. From **round 10**, before you look at the list: *do I still need a QB, K or DST?*
+2. From **round 10**, before you look at the list: _do I still need a QB, K or DST?_
 3. If yes, take the best one **yourself** — do not wait for the engine to surface it.
 4. Use the engine's late-round list only to choose **among players at a position you actually want**.
 
@@ -279,14 +279,14 @@ have a pick left to draft him**. Two things were wrong, and neither was what Tie
 
 Walking the same draft again on your real board, from the same seat:
 
-| | roster | legal? |
-|---|---|---|
-| before | `{RB:1, TE:13, WR:3}` | ✗ four empty starting slots |
-| after | `{DST:1, K:1, QB:1, RB:2, TE:8, WR:4}` | ✅ **all nine** |
-| after, vs. realistic opponents | `{DST:1, QB:2, RB:1, TE:9, WR:4}` | ✗ **no kicker** |
+|                                | roster                                 | legal?                      |
+| ------------------------------ | -------------------------------------- | --------------------------- |
+| before                         | `{RB:1, TE:13, WR:3}`                  | ✗ four empty starting slots |
+| after                          | `{DST:1, K:1, QB:1, RB:2, TE:8, WR:4}` | ✅ **all nine**             |
+| after, vs. realistic opponents | `{DST:1, QB:2, RB:1, TE:9, WR:4}`      | ✗ **no kicker**             |
 
 ⚠️ **The one case still broken: it can take a second QB instead of a kicker.** In the last rounds
-the engine gets a bonus for drafting *high-uncertainty* players (sensible for a bench flier). That
+the engine gets a bonus for drafting _high-uncertainty_ players (sensible for a bench flier). That
 bonus is currently paid even for a player you could never start — a **second** quarterback, when
 you can only ever play one. At round 16 that bonus was worth **+68** points to a backup QB, against
 a kicker worth **+2.6**, so the kicker lost. Fixing it means changing a dial in
@@ -303,6 +303,7 @@ appear. It now reads the free NFL schedule: **485 of the 510 draftable players c
 week** (the other 25 are free agents, who have no team and so no bye).
 
 Steps (kept for the next capture — e.g. a settings-page capture, or re-verifying on draft night):
+
 1. Open a CBS mock draft with the extension loaded.
 2. Click the extension action button to toggle **record mode**.
 3. Run the mock draft to completion (frames land git-ignored under
@@ -320,17 +321,18 @@ Two things learned the hard way, worth knowing before the next one:
 Not a build blocker: the engine, nflverse + FFC providers, and the `/recommendation` + `/recs/ws`
 surfaces are fully built and tested. Manual-paste stays the guaranteed draft-day fallback regardless.
 
-## 2. Paid data providers  `[WHEN YOU WANT IT — off by default]`
+## 2. Paid data providers `[WHEN YOU WANT IT — off by default]`
 
 The $0 tier (nflverse + FFC + CBS on-page) needs **no keys**. Only if you want fresher injuries
 or an extra ADP/projection source:
+
 1. Get an API key (FantasyPros is the cheap, recommended upgrade for live injuries).
 2. Set the key + its enable flag in `.env` (e.g. `FANTASYPROS_API_KEY=...` and
    `JAAFFL_ENABLE_FANTASYPROS=true`).
 3. The provider then appends after the free tier automatically. (Its adapter is a disabled stub
    today — tell Claude if you enable one so the real API calls get implemented.)
 
-## 3. FFC resolution coverage (informational — no action required)  `[WHEN YOU WANT IT]`
+## 3. FFC resolution coverage (informational — no action required) `[WHEN YOU WANT IT]`
 
 Preseason real-flow check (2026): FFC ADP resolved **144 / 166** players to canonical ids; the
 ~22 unresolved are team defenses named "<City> Defense" and a few kickers/rookies not yet in the
@@ -338,7 +340,7 @@ free DynastyProcess crosswalk. Unresolved rows are logged and skipped (the engin
 and all skill-position starters resolve. If you later want K/DST ADP fully covered, ask Claude to
 add a DST city→team alias map; otherwise it's a safe, low-impact gap (K/DST go in the last rounds).
 
-## 3b. Two Tier-2 decisions left for you  `[WHEN YOU WANT IT]`
+## 3b. Two Tier-2 decisions left for you `[WHEN YOU WANT IT]`
 
 Neither blocks anything; both are judgement calls rather than bugs.
 
@@ -354,7 +356,7 @@ Neither blocks anything; both are judgement calls rather than bugs.
   the badge is driven by the trigger we can actually detect: a manually-pasted or non-live board.
   Same badge, same treatment — say the word if you want a forward-year flag plumbed through too.
   **Tier 3 re-checked this and left it deliberately:** projections are built with
-  `xep_season = season − 1` (nflreadpy *raises* for the current season — xEP is retrospective), so
+  `xep_season = season − 1` (nflreadpy _raises_ for the current season — xEP is retrospective), so
   there is **no forward-year figure anywhere in the system** for the trigger to fire on. Plumbing
   the flag now would add a contract field that is always false. It becomes real work the day a
   forward-year vendor feed is licensed.
@@ -386,21 +388,21 @@ live. Three items are opt-in / follow-up, none block the UI:
   **defaults to true** (PR #30) — it used to default to false and was absent from `.env`, so a
   fresh clone followed the documented setup and still got a permanent 503.
   `ingest/resolve.resolve_pick_ids` masks name-only manual-paste picks upstream of the frozen
-  `recommend()`; recorded fixtures keep CI offline. *(This was the former `[BLOCKER]`; it is done.)*
-- **Draft board + pick-log panels**  `[DONE — branch feat/post-v1-unblocked]`. Shipped: `GET /state`
+  `recommend()`; recorded fixtures keep CI offline. _(This was the former `[BLOCKER]`; it is done.)_
+- **Draft board + pick-log panels** `[DONE — branch feat/post-v1-unblocked]`. Shipped: `GET /state`
   (folded `DraftState` + drafted-player name resolution) and the dashboard **board (round × team
   grid, self-ordering to draft slots) + pick-log ticker** (`apps/web` `BoardPanel`), rendered as the
   mockups' table + ticker (semantic table; AG Grid stays removed as overkill). Value-curve / survival
   / manager-tendency panels remain the follow-up analytics.
-- **Vercel deploy auth**  `[WHEN YOU WANT IT — otherwise it's localhost]`. The dashboard runs
+- **Vercel deploy auth** `[WHEN YOU WANT IT — otherwise it's localhost]`. The dashboard runs
   local-first at `127.0.0.1`. Hosting it on Vercel is opt-in and needs your Vercel auth; not done.
-- **Status-pill text contrast (WCAG AA) — design-palette decision**  `[WHEN YOU WANT IT]`. The
+- **Status-pill text contrast (WCAG AA) — design-palette decision** `[WHEN YOU WANT IT]`. The
   small status pills (`.is-good/.is-warning/.is-critical` in `design/tokens/draft-room.css`) render
   the accent hue as text on a 15–17% tint of the same hue. In the **light** theme the ~11px pill
   text falls below the 4.5:1 AA contrast minimum (measured roughly: good ≈2.6:1, warning ≈1.5:1,
   critical ≈3.6:1; critical is also ≈3.3:1 in dark). This is **not** a functional a11y blocker —
   identity is never colour-alone (every pill carries a glyph + word, satisfying WCAG 1.4.1), and
-  the surrounding body text/ink/focus are AA — but the pill *text legibility* itself is sub-AA.
+  the surrounding body text/ink/focus are AA — but the pill _text legibility_ itself is sub-AA.
   It was left for you because a correct fix darkens the pill text in light mode (and would brighten
   it in dark), which touches the Appendix-B brand palette. Concrete proposed fix (no chart/bar
   impact): add theme-aware `--pill-ink-{good,warning,critical}` tokens (dark shades in light theme,

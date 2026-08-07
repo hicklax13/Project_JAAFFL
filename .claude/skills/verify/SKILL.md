@@ -14,6 +14,7 @@ JAAFFL_API_PORT=8789 .venv/Scripts/python.exe -m jaaffl.api   # if 8788 is also 
 ```
 
 Gotchas:
+
 - The default port is now **8788** (the extension + web default here too). 8787 is often held by an
   unrelated local process (seen: bun.exe) — don't kill it; the 8788 default sidesteps it. If 8788 is
   also busy, override with `JAAFFL_API_PORT`. Check with `netstat -ano | grep :8788`.

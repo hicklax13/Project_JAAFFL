@@ -157,7 +157,7 @@ describe("parseDraftEvents — real CBS network protocol (docs/research/cbs-draf
       expect(events.some((e) => e.event_type === "pick_made")).toBe(false);
     });
 
-    it("nulls on_the_clock/on_deck team ids at CBS's numeric 0 sentinel (not the string \"0\")", () => {
+    it('nulls on_the_clock/on_deck team ids at CBS\'s numeric 0 sentinel (not the string "0")', () => {
       const events = parseDraftEvents({ via: "ws", body: cbsFrame("picks-completed.final.json") });
       const state = events.find((e) => e.event_type === "draft_state");
       expect(state?.data["on_the_clock_team_id"]).toBeNull();
@@ -190,7 +190,18 @@ describe("parseDraftEvents — real CBS network protocol (docs/research/cbs-draf
       });
       const order = events.find((e) => e.event_type === "league_settings");
       expect(order?.data["draft_order"]).toEqual([
-        "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
       ]);
       expect(order?.data["team_count"]).toBe(12);
       DraftEventSchema.parse(order);
@@ -200,7 +211,18 @@ describe("parseDraftEvents — real CBS network protocol (docs/research/cbs-draf
       const events = parseDraftEvents({ via: "ws", body: cbsFrame("picks-completed.final.json") });
       const order = events.find((e) => e.event_type === "league_settings");
       expect(order?.data["draft_order"]).toEqual([
-        "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
       ]);
     });
 

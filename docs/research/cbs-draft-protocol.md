@@ -10,12 +10,12 @@ entirely synthetic until now. Nothing here is inferred; every field below was ob
 
 ## 1. Transport
 
-| | |
-|---|---|
-| Draft socket | `wss://k8s-draft.prod.fantasy.cbssports.cloud:443/` |
-| Chat socket (ignore) | `wss://chat.prod.fantasy.cbssports.cloud:443` |
-| Draft room URL | `https://mockdraft-N.football.cbssports.com/mockdraft/<format>` |
-| Real league URL | `https://<league>.football.cbssports.com/` |
+|                      |                                                                 |
+| -------------------- | --------------------------------------------------------------- |
+| Draft socket         | `wss://k8s-draft.prod.fantasy.cbssports.cloud:443/`             |
+| Chat socket (ignore) | `wss://chat.prod.fantasy.cbssports.cloud:443`                   |
+| Draft room URL       | `https://mockdraft-N.football.cbssports.com/mockdraft/<format>` |
+| Real league URL      | `https://<league>.football.cbssports.com/`                      |
 
 ### ⚠️ Frames are NUL-terminated
 
@@ -42,18 +42,18 @@ Some frames use `"event"` instead of `"subtype"` (notably `auth`). Read either.
 
 Observed `type/subtype` pairs, with counts from one mock draft:
 
-| Count | type/subtype | Meaning |
-|---:|---|---|
-| 40 | `picks/completed` | **A pick was made** — the primary ingest event |
-| 12 | `pick/request` | Outbound: this client asks to draft `playerid` |
-| 12 | `pick/response` | Server ack |
-| 11 | `queue/add` · `queue/updated` · `queue/response` | Player queue |
-| 11 | `autopilot/on` · `autopilot/off` · `autopilot/response` | Bot toggles |
-| 4 | `attendance/entered` | Owner joined |
-| 3 | `roster/add` · `roster/remove` | Roster deltas |
-| 2 | `auth/request` · `auth/reply` | Handshake (`status: 100` = success) |
-| 2 | `subscribe/request` · `subscribe/response` | Initial full state (up to 61 KB) |
-| 2 | `keepalive` | Heartbeat |
+| Count | type/subtype                                            | Meaning                                        |
+| ----: | ------------------------------------------------------- | ---------------------------------------------- |
+|    40 | `picks/completed`                                       | **A pick was made** — the primary ingest event |
+|    12 | `pick/request`                                          | Outbound: this client asks to draft `playerid` |
+|    12 | `pick/response`                                         | Server ack                                     |
+|    11 | `queue/add` · `queue/updated` · `queue/response`        | Player queue                                   |
+|    11 | `autopilot/on` · `autopilot/off` · `autopilot/response` | Bot toggles                                    |
+|     4 | `attendance/entered`                                    | Owner joined                                   |
+|     3 | `roster/add` · `roster/remove`                          | Roster deltas                                  |
+|     2 | `auth/request` · `auth/reply`                           | Handshake (`status: 100` = success)            |
+|     2 | `subscribe/request` · `subscribe/response`              | Initial full state (up to 61 KB)               |
+|     2 | `keepalive`                                             | Heartbeat                                      |
 
 ## 3. `picks/completed` — the pick event
 
@@ -88,7 +88,7 @@ literally mis-numbers every pick by +1 and, at the terminal frame, drops the rea
 nine completed picks at once, e.g. after a run of autopicks). So walk backward from `opick`:
 
 ```ts
-overall = newstate.opick - picks.length + index   // index within payload.picks[]
+overall = newstate.opick - picks.length + index; // index within payload.picks[]
 ```
 
 **Verified exhaustively:** this matches CBS's own record
@@ -102,21 +102,21 @@ the clock" is exactly the right meaning.
 
 ## 4. `newstate` — the draft state, attached to most frames
 
-| Field | Example | Maps to |
-|---|---|---|
-| `opick` | `"24"` | `current_overall_pick` |
-| `round` | `2` | round |
-| `rounds` | `14` | total rounds |
-| `onclockteamid` | `"1"` | `on_the_clock_team_id` |
-| `ondeckteamid` | `"2"` | on deck |
-| `order_type` | `"snake"` | draft type |
-| `upcomingorder` | `"1,1,2,3,…,12,12,11,…,4"` | **the real entered order** |
-| `upcomingorder_withroundbreaks` | `"1,…,12,-9,12,…,4"` | same, `-9` marks a round break |
-| `onautopilot` | `"10:moderate,11:moderate,…"` | which teams are bots |
-| `state` | `"completed"` | terminal marker |
-| `teamspresent` | `"1,10,8"` | attendance — team SLOT numbers |
-| `ownerspresent` | `"d5k…,pwc…"` | attendance — alphanumeric owner-id tokens (**PII**) |
-| `deadline`, `currenttime`, `currenthirestime` | epoch | clock |
+| Field                                         | Example                       | Maps to                                             |
+| --------------------------------------------- | ----------------------------- | --------------------------------------------------- |
+| `opick`                                       | `"24"`                        | `current_overall_pick`                              |
+| `round`                                       | `2`                           | round                                               |
+| `rounds`                                      | `14`                          | total rounds                                        |
+| `onclockteamid`                               | `"1"`                         | `on_the_clock_team_id`                              |
+| `ondeckteamid`                                | `"2"`                         | on deck                                             |
+| `order_type`                                  | `"snake"`                     | draft type                                          |
+| `upcomingorder`                               | `"1,1,2,3,…,12,12,11,…,4"`    | **the real entered order**                          |
+| `upcomingorder_withroundbreaks`               | `"1,…,12,-9,12,…,4"`          | same, `-9` marks a round break                      |
+| `onautopilot`                                 | `"10:moderate,11:moderate,…"` | which teams are bots                                |
+| `state`                                       | `"completed"`                 | terminal marker                                     |
+| `teamspresent`                                | `"1,10,8"`                    | attendance — team SLOT numbers                      |
+| `ownerspresent`                               | `"d5k…,pwc…"`                 | attendance — alphanumeric owner-id tokens (**PII**) |
+| `deadline`, `currenttime`, `currenthirestime` | epoch                         | clock                                               |
 
 ### ⚠️ `opick` overruns the draft by one at completion
 
@@ -125,7 +125,7 @@ Observed: `rounds: 14`, 12 teams → 168 real picks, but the terminal frame carr
 "draft complete", exactly as `opponents.next_overall_pick` does with its own sentinel.
 
 Since Tier 3, `parse.ts` reads completion from **two independent signals**: CBS's own
-`state: "completed"` word *and* the structural overrun (`isDraftOver`). Either is sufficient, so a
+`state: "completed"` word _and_ the structural overrun (`isDraftOver`). Either is sufficient, so a
 frame that overruns without the state word is not read as a live draft parked on a pick that
 cannot exist.
 
@@ -136,16 +136,16 @@ the clock after it was made.
 
 ### ⚠️ `upcomingorder` is a ROLLING WINDOW — do NOT use it as `draft_order`
 
-`upcomingorder` is the upcoming pick sequence from *right now*, spanning a partial round into the
+`upcomingorder` is the upcoming pick sequence from _right now_, spanning a partial round into the
 next — **not** one entry per team. Observed entry counts across one draft:
 
-| Frames | Entries |
-|---:|---:|
-| 55 | 22 |
-| 1 | 17 |
-| 2 | 8 |
-| 2 | 1 |
-| 4 | 0 (once `state == "completed"`) |
+| Frames |                         Entries |
+| -----: | ------------------------------: |
+|     55 |                              22 |
+|      1 |                              17 |
+|      2 |                               8 |
+|      2 |                               1 |
+|      4 | 0 (once `state == "completed"`) |
 
 This matters because `engine/opponents.py::_my_overall_picks` does `n = len(settings.draft_order)`
 and uses `n` as the **team count** for snake math. Feeding it a 22-entry window would set
@@ -159,7 +159,7 @@ carry it, i.e. 12 entries for a 12-team league.
 degrade honestly when it is absent — never synthesize a snake from team count. Manual paste
 (`ORDER:` line) remains the draft-day fallback.
 
-`upcomingorder_withroundbreaks` (the `-9`-delimited variant) is still useful for *reading* the snake
+`upcomingorder_withroundbreaks` (the `-9`-delimited variant) is still useful for _reading_ the snake
 shape, but it is the same rolling window and is likewise not a `draft_order`.
 
 ### Full roster state

@@ -69,9 +69,7 @@ describe("SurvivalCurvePanel", () => {
     render(<SurvivalCurvePanel analytics={{ ...ANALYTICS, my_next_picks: [] }} />);
     // The percentages fall back to the last charted point (not "at your next pick") once there is
     // no next pick to anchor them — the accessible name must say so, not just the panel note.
-    expect(
-      screen.getByRole("img", { name: /draft order not yet known/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /draft order not yet known/i })).toBeInTheDocument();
     expect(screen.getByText(/draft order unknown/i)).toBeInTheDocument();
   });
 });

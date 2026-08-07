@@ -86,7 +86,14 @@ function firstNumber(text: string, ...patterns: RegExp[]): number | null {
 export function parseEngineParams(reasoning: string | null | undefined): EngineParamsView {
   const raw = reasoning ?? "";
   if (!raw) {
-    return { kappa: null, alpha: null, lambda: null, flexSplit: null, paramsVersion: null, raw: "" };
+    return {
+      kappa: null,
+      alpha: null,
+      lambda: null,
+      flexSplit: null,
+      paramsVersion: null,
+      raw: "",
+    };
   }
   const flex = raw.match(/flex_split\s*=\s*(\d+)\s*RB\s*\/\s*(\d+)\s*WR/i);
   const version = raw.match(/EngineParams\s+v([\d.]+)/i);

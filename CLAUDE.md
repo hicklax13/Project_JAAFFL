@@ -6,7 +6,7 @@
 ## ⛳ Persistent league memory (read first — do not paraphrase or change)
 
 The league configuration is fixed and memorialized in **[`config/league.json`](config/league.json)**.
-Load it before any draft-system work and compute all baselines against *this* roster.
+Load it before any draft-system work and compute all baselines against _this_ roster.
 
 **League settings (verbatim, authoritative):**
 

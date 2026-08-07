@@ -3,7 +3,10 @@
 ## Prerequisites
 
 - Python ≥ 3.11 (3.12 recommended). [`uv`](https://docs.astral.sh/uv/) recommended.
-- Node ≥ 22, pnpm ≥ 10.
+- Node ≥ 22, pnpm ≥ 10. `.nvmrc` pins **24**; CI runs the JS suite on **both 22 and 24**, so
+  either works — 22 is the supported floor, 24 is what the owner's machine runs.
+- The Python venv lives at the **repo root** (`.venv/`), and the backend is installed editable
+  into it. Run the server from the repo root: `.env` and `config/engine.json` resolve against cwd.
 
 ## Setup
 
@@ -14,14 +17,27 @@ make setup      # backend (editable install, dev extras) + pnpm workspace instal
 
 ## Everyday tasks
 
-| Command            | What it does                                             |
-| ------------------ | -------------------------------------------------------- |
-| `make backend-dev` | Run the FastAPI companion service (127.0.0.1:8788)       |
-| `make web-dev`     | Run the Next.js dashboard                                |
-| `make ext-dev`     | Build the extension in watch mode                        |
-| `make lint`        | Ruff (Python) + ESLint/Prettier (JS)                     |
-| `make fmt`         | Auto-format Python and JS                                |
-| `make test`        | Pytest (Python) + workspace tests                        |
+| Command            | What it does                                       |
+| ------------------ | -------------------------------------------------- |
+| `make backend-dev` | Run the FastAPI companion service (127.0.0.1:8788) |
+| `make web-dev`     | Run the Next.js dashboard                          |
+| `make ext-dev`     | Build the extension in watch mode                  |
+| `make lint`        | Ruff (Python) + ESLint & `prettier --check` (JS)   |
+| `make fmt`         | Auto-format Python and JS                          |
+| `make test`        | Pytest (Python) + workspace tests                  |
+
+### No `make`? (Windows)
+
+`make` is not installed on the owner's Windows setup. The direct equivalents:
+
+```bash
+.venv/Scripts/python.exe -m jaaffl.api        # make backend-dev  (run from the repo root)
+pnpm --filter @jaaffl/web dev                 # make web-dev
+pnpm --filter @jaaffl/extension dev           # make ext-dev
+pnpm lint                                     # the JS half of make lint
+pnpm format                                   # the JS half of make fmt
+.venv/Scripts/python.exe -m pytest backend    # the Python half of make test
+```
 
 ## Conventions
 

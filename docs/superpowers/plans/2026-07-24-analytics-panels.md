@@ -25,14 +25,14 @@
 
 **Commands (run from the repo root unless noted):**
 
-| Purpose | Command |
-|---|---|
-| Backend tests | `cd backend && ../.venv/Scripts/python.exe -m pytest` |
+| Purpose          | Command                                                                          |
+| ---------------- | -------------------------------------------------------------------------------- |
+| Backend tests    | `cd backend && ../.venv/Scripts/python.exe -m pytest`                            |
 | One backend test | `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_analytics.py -v` |
-| Backend lint | `cd backend && ../.venv/Scripts/python.exe -m ruff check . ../scripts` |
-| Backend format | `cd backend && ../.venv/Scripts/python.exe -m ruff format . ../scripts` |
-| JS typecheck | `pnpm -r typecheck` |
-| JS tests | `pnpm -r test` |
+| Backend lint     | `cd backend && ../.venv/Scripts/python.exe -m ruff check . ../scripts`           |
+| Backend format   | `cd backend && ../.venv/Scripts/python.exe -m ruff format . ../scripts`          |
+| JS typecheck     | `pnpm -r typecheck`                                                              |
+| JS tests         | `pnpm -r test`                                                                   |
 
 **Key existing APIs you will call (already implemented — do not rewrite):**
 
@@ -55,31 +55,32 @@ class RecommendationEngine:
 
 ## File structure
 
-| File | Responsibility |
-|---|---|
-| **Create** `backend/src/jaaffl/engine/analytics.py` | View models + pure series builders (value curves, survival curves, assembler) |
-| **Create** `backend/tests/test_analytics.py` | Unit tests for the series math |
-| **Modify** `backend/src/jaaffl/api/app.py` | Add `GET /analytics` |
-| **Modify** `backend/tests/test_api.py` | Endpoint tests (200/404/409/503/Origin) |
-| **Create** `packages/shared/src/analytics.ts` | Zod mirror (outside the parity gate) |
-| **Modify** `packages/shared/src/index.ts` | Re-export the new schemas |
-| **Create** `apps/web/lib/curve.ts` | Pure SVG scaling math (no React) |
-| **Create** `apps/web/lib/curve.test.ts` | Tests for the scaling math |
-| **Modify** `apps/web/lib/api.ts` | `fetchAnalytics` with the honesty contract |
-| **Modify** `apps/web/components/use-recs.ts` | Hold analytics in state; `refreshAnalytics()` |
-| **Create** `apps/web/components/value-curve-panel.tsx` | Value-curve chart + position toggle |
-| **Create** `apps/web/components/value-curve-panel.test.tsx` | Panel tests |
-| **Create** `apps/web/components/survival-curve-panel.tsx` | Multi-line survival chart |
-| **Create** `apps/web/components/survival-curve-panel.test.tsx` | Panel tests |
-| **Modify** `apps/web/components/dashboard.tsx` | Place both panels |
-| **Modify** `apps/web/app/globals.css` | Chart styles (NOT the drift-guarded token file) |
-| **Modify** `ROADMAP.md` | Mark the panels done |
+| File                                                           | Responsibility                                                                |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Create** `backend/src/jaaffl/engine/analytics.py`            | View models + pure series builders (value curves, survival curves, assembler) |
+| **Create** `backend/tests/test_analytics.py`                   | Unit tests for the series math                                                |
+| **Modify** `backend/src/jaaffl/api/app.py`                     | Add `GET /analytics`                                                          |
+| **Modify** `backend/tests/test_api.py`                         | Endpoint tests (200/404/409/503/Origin)                                       |
+| **Create** `packages/shared/src/analytics.ts`                  | Zod mirror (outside the parity gate)                                          |
+| **Modify** `packages/shared/src/index.ts`                      | Re-export the new schemas                                                     |
+| **Create** `apps/web/lib/curve.ts`                             | Pure SVG scaling math (no React)                                              |
+| **Create** `apps/web/lib/curve.test.ts`                        | Tests for the scaling math                                                    |
+| **Modify** `apps/web/lib/api.ts`                               | `fetchAnalytics` with the honesty contract                                    |
+| **Modify** `apps/web/components/use-recs.ts`                   | Hold analytics in state; `refreshAnalytics()`                                 |
+| **Create** `apps/web/components/value-curve-panel.tsx`         | Value-curve chart + position toggle                                           |
+| **Create** `apps/web/components/value-curve-panel.test.tsx`    | Panel tests                                                                   |
+| **Create** `apps/web/components/survival-curve-panel.tsx`      | Multi-line survival chart                                                     |
+| **Create** `apps/web/components/survival-curve-panel.test.tsx` | Panel tests                                                                   |
+| **Modify** `apps/web/components/dashboard.tsx`                 | Place both panels                                                             |
+| **Modify** `apps/web/app/globals.css`                          | Chart styles (NOT the drift-guarded token file)                               |
+| **Modify** `ROADMAP.md`                                        | Mark the panels done                                                          |
 
 ---
 
 ## Task 1: Backend value curves
 
 **Files:**
+
 - Create: `backend/src/jaaffl/engine/analytics.py`
 - Test: `backend/tests/test_analytics.py`
 
@@ -297,6 +298,7 @@ git commit -m "feat(analytics): positional value curves (full + remaining) over 
 ## Task 2: Backend survival curves
 
 **Files:**
+
 - Modify: `backend/src/jaaffl/engine/analytics.py`
 - Test: `backend/tests/test_analytics.py`
 
@@ -575,6 +577,7 @@ git commit -m "feat(analytics): board-conditioned survival curves with real-orde
 ## Task 3: Backend assembler
 
 **Files:**
+
 - Modify: `backend/src/jaaffl/engine/analytics.py`
 - Test: `backend/tests/test_analytics.py`
 
@@ -657,6 +660,7 @@ git commit -m "feat(analytics): build_analytics assembler for the dashboard feed
 ## Task 4: `GET /analytics` endpoint
 
 **Files:**
+
 - Modify: `backend/src/jaaffl/api/app.py` (add after the `/state` route, before `return app`)
 - Test: `backend/tests/test_api.py`
 
@@ -795,6 +799,7 @@ git commit -m "feat(api): GET /analytics with its own engine-context 503 gate"
 ## Task 5: Shared Zod schema
 
 **Files:**
+
 - Create: `packages/shared/src/analytics.ts`
 - Modify: `packages/shared/src/index.ts`
 
@@ -943,6 +948,7 @@ git commit -m "feat(shared): Zod mirror for the analytics feed (outside the E5 p
 ## Task 6: Pure SVG scaling math
 
 **Files:**
+
 - Create: `apps/web/lib/curve.ts`
 - Test: `apps/web/lib/curve.test.ts`
 
@@ -1101,6 +1107,7 @@ git commit -m "feat(web): pure SVG scaling helpers for the analytics charts"
 ## Task 7: Client fetch + state wiring
 
 **Files:**
+
 - Modify: `apps/web/lib/api.ts`
 - Modify: `apps/web/components/use-recs.ts`
 - Test: `apps/web/lib/api.test.ts`
@@ -1246,14 +1253,14 @@ new action + reducer case:
 4. Inside the effect, add a refresher beside `refreshBoard` and call it in both places:
 
 ```ts
-    const refreshAnalytics = (candidates?: readonly string[]) =>
-      void api.fetchAnalytics(leagueId, candidates).then((result) => {
-        if (active) dispatch({ type: "analytics", analytics: result.analytics });
-      });
+const refreshAnalytics = (candidates?: readonly string[]) =>
+  void api.fetchAnalytics(leagueId, candidates).then((result) => {
+    if (active) dispatch({ type: "analytics", analytics: result.analytics });
+  });
 ```
 
 5. Call `refreshAnalytics();` right after the existing `refreshBoard();` hydrate call, and inside
-`onRecommendation` pass the ids already on screen:
+   `onRecommendation` pass the ids already on screen:
 
 ```ts
       onRecommendation: (recommendation) => {
@@ -1290,6 +1297,7 @@ git commit -m "feat(web): fetchAnalytics + refresh-on-push wiring for the analyt
 ## Task 8: Value-curve panel
 
 **Files:**
+
 - Create: `apps/web/components/value-curve-panel.tsx`
 - Test: `apps/web/components/value-curve-panel.test.tsx`
 
@@ -1453,7 +1461,9 @@ export function ValueCurvePanel({ analytics }: { analytics: DraftAnalytics | nul
             className="vc-chip"
             aria-pressed={c.position === curve.position}
             onClick={() => setSelected(c.position)}
-            style={{ "--chip-hue": `var(--pos-${c.position.toLowerCase()})` } as React.CSSProperties}
+            style={
+              { "--chip-hue": `var(--pos-${c.position.toLowerCase()})` } as React.CSSProperties
+            }
           >
             {c.position}
           </button>
@@ -1508,6 +1518,7 @@ git commit -m "feat(web): value-curve panel with position toggle and remaining-v
 ## Task 9: Survival-curve panel
 
 **Files:**
+
 - Create: `apps/web/components/survival-curve-panel.tsx`
 - Test: `apps/web/components/survival-curve-panel.test.tsx`
 
@@ -1734,6 +1745,7 @@ git commit -m "feat(web): multi-line survival-curve panel with real-order pick m
 ## Task 10: Layout, styles, docs, and final verification
 
 **Files:**
+
 - Modify: `apps/web/components/dashboard.tsx`
 - Modify: `apps/web/app/globals.css`
 - Modify: `ROADMAP.md`
@@ -1752,13 +1764,13 @@ import { ValueCurvePanel } from "./value-curve-panel";
 Add the value curve to the analytics rail, after `<TierLadder .../>`:
 
 ```tsx
-          <ValueCurvePanel analytics={state.analytics} />
+<ValueCurvePanel analytics={state.analytics} />
 ```
 
 Add the survival chart as a full-width row, immediately after `<BoardPanel state={state.boardState} />`:
 
 ```tsx
-      <SurvivalCurvePanel analytics={state.analytics} />
+<SurvivalCurvePanel analytics={state.analytics} />
 ```
 
 - [ ] **Step 2: Add the chart styles**
@@ -1865,11 +1877,13 @@ Append to `apps/web/app/globals.css`:
 ```bash
 cd backend && ../.venv/Scripts/python.exe -m ruff format . ../scripts && ../.venv/Scripts/python.exe -m ruff check . ../scripts && ../.venv/Scripts/python.exe -m pytest
 ```
+
 Expected: ruff clean; pytest all PASS
 
 ```bash
 pnpm -r typecheck && pnpm -r test
 ```
+
 Expected: typecheck clean; all suites PASS (including the untouched `overlay-tokens` drift guard and the E5 `parity` gate)
 
 - [ ] **Step 4: Update the roadmap**
@@ -1877,10 +1891,10 @@ Expected: typecheck clean; all suites PASS (including the untouched `overlay-tok
 In `ROADMAP.md`, replace the Stage 6 dashboard line:
 
 ```markdown
-- [x] Next.js dashboard: board analytics, manager tendencies, scenarios (`apps/web`) *(live
+- [x] Next.js dashboard: board analytics, manager tendencies, scenarios (`apps/web`) _(live
       recommendation feed, **draft board & pick-log** via `GET /state`, and the **value-curve +
       survival-curve** analytics panels via `GET /analytics` — all done; manager-tendency panel
-      deferred until ≥1 recorded draft accrues `manager_tendencies` rows)*
+      deferred until ≥1 recorded draft accrues `manager_tendencies` rows)_
 ```
 
 And the AG Grid line:
@@ -1922,6 +1936,7 @@ EOF
 ```bash
 gh pr checks --watch
 ```
+
 Expected: all checks pass. Do not call the work done until CI is green.
 
 ---

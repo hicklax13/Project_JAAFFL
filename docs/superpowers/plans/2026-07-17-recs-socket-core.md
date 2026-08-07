@@ -4,7 +4,7 @@
 
 **Goal:** Collapse the two ~90-line `/recs/ws` client state machines (`apps/web/lib/api.ts`, `apps/extension/src/lib/recs.ts`) into one `createRecsSocket` core in `packages/shared/src/socket.ts`, leaving each surface a ~15-line adapter, with zero behavior change.
 
-**Architecture:** The core owns a canonical 5-phase machine (`connecting`/`live`/`stale`/`reconnecting`/`closed`) plus connect, backoff-with-cap reconnect, ping→pong, and frame→rec dispatch. Each surface translates phases to its own labels through a **total** `Record<RecsSocketPhase, TLabel | null>` map (`null` = deliberate suppression) and passes surface-specific hooks: web sends a `subscribe` frame via `onOpen`; overlay enables stale tracking via `staleAfterMs`. Stale tracking gates both the stale timer *and* the `live`-on-rec re-emit, which is what keeps the web byte-identical.
+**Architecture:** The core owns a canonical 5-phase machine (`connecting`/`live`/`stale`/`reconnecting`/`closed`) plus connect, backoff-with-cap reconnect, ping→pong, and frame→rec dispatch. Each surface translates phases to its own labels through a **total** `Record<RecsSocketPhase, TLabel | null>` map (`null` = deliberate suppression) and passes surface-specific hooks: web sends a `subscribe` frame via `onOpen`; overlay enables stale tracking via `staleAfterMs`. Stale tracking gates both the stale timer _and_ the `live`-on-rec re-emit, which is what keeps the web byte-identical.
 
 **Tech Stack:** TypeScript (strict, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`), pnpm workspaces, Vitest, Playwright (E4), Zod (via existing `RecommendationSchema`).
 
@@ -20,12 +20,12 @@ If a change seems to require editing one of those files, **stop** — the adapte
 
 ## File Structure
 
-| File | Change | Responsibility |
-| --- | --- | --- |
-| `packages/shared/src/socket.ts` | Modify (append) | Add `RecsSocketPhase`, `WebSocketLike`, `RecsSocketOptions`, `createRecsSocket`. Keeps existing `parseRecsFrame` + `RECS_PROTOCOL_VERSION` untouched. |
-| `packages/shared/tests/socket.test.ts` | Modify (append) | Add a `describe("createRecsSocket")` block. Keeps the existing `parseRecsFrame` block untouched. |
-| `apps/web/lib/api.ts` | Modify `:65-153` | Web adapter. `fetchRecommendation`/`getRecommendation`/`fetchLeague` (`:1-63`) untouched. |
-| `apps/extension/src/lib/recs.ts` | Modify (rewrite body) | Overlay adapter. |
+| File                                   | Change                | Responsibility                                                                                                                                        |
+| -------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/shared/src/socket.ts`        | Modify (append)       | Add `RecsSocketPhase`, `WebSocketLike`, `RecsSocketOptions`, `createRecsSocket`. Keeps existing `parseRecsFrame` + `RECS_PROTOCOL_VERSION` untouched. |
+| `packages/shared/tests/socket.test.ts` | Modify (append)       | Add a `describe("createRecsSocket")` block. Keeps the existing `parseRecsFrame` block untouched.                                                      |
+| `apps/web/lib/api.ts`                  | Modify `:65-153`      | Web adapter. `fetchRecommendation`/`getRecommendation`/`fetchLeague` (`:1-63`) untouched.                                                             |
+| `apps/extension/src/lib/recs.ts`       | Modify (rewrite body) | Overlay adapter.                                                                                                                                      |
 
 `packages/shared/src/index.ts` already does `export * from "./socket"` — no change needed, but note it means **every** export from `socket.ts` becomes public API. Keep the backoff constant unexported.
 
@@ -49,6 +49,7 @@ If anything is already red, **stop and report** — do not start a refactor on a
 ### Task 2: The shared core (TDD)
 
 **Files:**
+
 - Modify: `packages/shared/src/socket.ts`
 - Test: `packages/shared/tests/socket.test.ts`
 
@@ -428,8 +429,7 @@ export function createRecsSocket(url: string, opts: RecsSocketOptions): () => vo
         ws?.send(JSON.stringify({ type: "pong", v: RECS_PROTOCOL_VERSION }));
         return;
       }
-      const rec =
-        frame.type === "rec" || frame.type === "snapshot" ? frame.recommendation : null;
+      const rec = frame.type === "rec" || frame.type === "snapshot" ? frame.recommendation : null;
       if (!rec) return; // hello, and a snapshot with nothing published yet
       markActive();
       opts.onRecommendation(rec);
@@ -480,6 +480,7 @@ git commit -m "Add shared createRecsSocket core with a canonical phase machine"
 ### Task 3: Web adapter
 
 **Files:**
+
 - Modify: `apps/web/lib/api.ts:65-153` (replace from `export type RecsSocketState` to end of file)
 - Test: `apps/web/lib/api.test.ts` — **DO NOT EDIT.** It must pass unmodified.
 
@@ -558,7 +559,7 @@ Stop and hand off. The map is the crux of the divergence, and the user asked to 
 Expected shape (~6 lines), replacing the TODO:
 
 ```ts
-const PHASE_LABELS: Record<RecsSocketPhase, RecsSocketState | null> = { /* user */ };
+const PHASE_LABELS: Record<RecsSocketPhase, RecsSocketState | null> = {/* user */};
 ```
 
 - [ ] **Step 4: Run the web suite unmodified**
@@ -582,6 +583,7 @@ git commit -m "Make the dashboard /recs/ws client a thin createRecsSocket adapte
 ### Task 4: Overlay adapter
 
 **Files:**
+
 - Modify: `apps/extension/src/lib/recs.ts` (rewrite below the header comment)
 - Test: `apps/extension/tests/recs.test.ts` — **DO NOT EDIT.** It must pass unmodified.
 
@@ -645,7 +647,7 @@ export function subscribeRecs(
 Stop and hand off. Expected shape (~6 lines), replacing the TODO:
 
 ```ts
-const PHASE_LABELS: Record<RecsSocketPhase, RecsSyncState | null> = { /* user */ };
+const PHASE_LABELS: Record<RecsSocketPhase, RecsSyncState | null> = {/* user */};
 ```
 
 - [ ] **Step 3: Run the extension suite unmodified**

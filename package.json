@@ -12,14 +12,19 @@
     "build": "pnpm -r build",
     "dev:web": "pnpm --filter @jaaffl/web dev",
     "dev:ext": "pnpm --filter @jaaffl/extension dev",
-    "lint": "pnpm -r lint",
+    "lint": "pnpm lint:eslint && pnpm lint:format",
+    "lint:eslint": "eslint .",
+    "lint:format": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md,yaml,yml}\"",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "gen:tokens": "node scripts/gen-overlay-tokens.mjs",
-    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yaml,yml}\""
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,yaml,yml}\""
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
     "prettier": "^3.4.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.66.0"
   }
 }

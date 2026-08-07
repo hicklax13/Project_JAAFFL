@@ -5,7 +5,13 @@ import { useEffect, useReducer, type ReactElement } from "react";
 import { DEFAULT_LEAGUE_ID } from "../lib/api";
 import { BoardPanel } from "./board-panel";
 import { SurvivalPanel, TierLadder } from "./charts";
-import { ReasoningLine, RosterRail, ScoringPanel, SettingsBadges, StatusBanner } from "./league-panels";
+import {
+  ReasoningLine,
+  RosterRail,
+  ScoringPanel,
+  SettingsBadges,
+  StatusBanner,
+} from "./league-panels";
 import { playerName, RecommendationBanner, TopFive } from "./recommendation-banner";
 import { SurvivalCurvePanel } from "./survival-curve-panel";
 import { ThemeToggle } from "./theme-toggle";

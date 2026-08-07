@@ -39,7 +39,14 @@ const REC = {
         modifiers: {},
       },
     },
-    { player_id: "p2", name: "Drake London", position: "WR", nfl_team: "ATL", score: 37.8, next_turn_availability: 0.41 },
+    {
+      player_id: "p2",
+      name: "Drake London",
+      position: "WR",
+      nfl_team: "ATL",
+      score: 37.8,
+      next_turn_availability: 0.41,
+    },
   ],
 };
 
@@ -141,7 +148,14 @@ test("Why? opens the decomposition and Pin fires its own advisory handler", asyn
     shadow.querySelector<HTMLButtonElement>(".ov-pin")!.click();
     shadow.querySelector<HTMLButtonElement>(".btn-primary")!.click();
 
-    return { before, opened, afterClose, pinned, copied, expanded: why.getAttribute("aria-expanded") };
+    return {
+      before,
+      opened,
+      afterClose,
+      pinned,
+      copied,
+      expanded: why.getAttribute("aria-expanded"),
+    };
   }, REC);
 
   expect(result.before).toBe(false); // collapsed by default

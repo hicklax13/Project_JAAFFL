@@ -42,7 +42,8 @@ function subline(pick: RecommendedPick): string {
   const parts: string[] = [];
   if (pick.nfl_team) parts.push(pick.nfl_team);
   if (pick.bye_week != null) parts.push(`bye ${pick.bye_week}`);
-  if (pick.components) parts.push(`replacement baseline ${pick.components.replacement_baseline.toFixed(0)}`);
+  if (pick.components)
+    parts.push(`replacement baseline ${pick.components.replacement_baseline.toFixed(0)}`);
   return parts.join(" · ");
 }
 

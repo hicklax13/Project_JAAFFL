@@ -13,23 +13,23 @@ curves**; **manager-tendency is out of scope** (see §7).
 The war room renders the decomposed recommendation, the board, and the pick log. Two analytical
 views are missing, and one of them is already flagged in code —
 [`apps/web/components/charts.tsx`](../../../apps/web/components/charts.tsx) says the shipped
-survival panel shows only the scalar `next_turn_availability`, and that *"the full S_j(N)-over-pick
-curve needs the ADP mean+SD series, a precompute enrichment."*
+survival panel shows only the scalar `next_turn_availability`, and that _"the full S_j(N)-over-pick
+curve needs the ADP mean+SD series, a precompute enrichment."_
 
 Both panels answer live draft questions the current UI cannot:
 
-- **Value curve** — *"how steep is the drop at this position, and how much of it is already gone?"*
-- **Survival curve** — *"can I wait a round on him, or is he gone?"*
+- **Value curve** — _"how steep is the drop at this position, and how much of it is already gone?"_
+- **Survival curve** — _"can I wait a round on him, or is he gone?"_
 
 ## 2. Decisions (owner-approved)
 
-| Decision | Choice | Rationale |
-|---|---|---|
-| Charting | **Bespoke accessible SVG/CSS** | Zero new deps; matches shipped panels; theme + a11y already solved. ECharts (ROADMAP) and AG Grid stay out. |
-| Value-curve composition | **Single chart + position toggle** | Larger and more readable than small-multiples; fits the analytics rail. |
-| Value-curve data | **Remaining (solid) + full preseason board (ghost)** | The gap between the two lines *is* the positional run. |
-| Survival composition | **Multi-line decay curves** | Only the curve *shape* answers "can I wait?"; gets a full-width row. |
-| Feed | **New `GET /analytics`** | Independent 503 gate — see §3.1. |
+| Decision                | Choice                                               | Rationale                                                                                                   |
+| ----------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Charting                | **Bespoke accessible SVG/CSS**                       | Zero new deps; matches shipped panels; theme + a11y already solved. ECharts (ROADMAP) and AG Grid stay out. |
+| Value-curve composition | **Single chart + position toggle**                   | Larger and more readable than small-multiples; fits the analytics rail.                                     |
+| Value-curve data        | **Remaining (solid) + full preseason board (ghost)** | The gap between the two lines _is_ the positional run.                                                      |
+| Survival composition    | **Multi-line decay curves**                          | Only the curve _shape_ answers "can I wait?"; gets a full-width row.                                        |
+| Feed                    | **New `GET /analytics`**                             | Independent 503 gate — see §3.1.                                                                            |
 
 ## 3. Architecture
 
@@ -48,8 +48,8 @@ accessor, so the API reaches the cached context with **no engine surgery**. The 
 (`recommend`, `optimize`, `opponents`, `tiers`, `projections`, `context`) is untouched.
 
 Refresh reuses the shipped convention from
-[`use-recs.ts`](../../../apps/web/components/use-recs.ts): *"the board is a pull view (no push
-channel of its own): hydrate it once, then re-pull on each `/recs/ws` push."* `refreshAnalytics()`
+[`use-recs.ts`](../../../apps/web/components/use-recs.ts): _"the board is a pull view (no push
+channel of its own): hydrate it once, then re-pull on each `/recs/ws` push."_ `refreshAnalytics()`
 sits beside the existing `refreshBoard()`.
 
 ### 3.1 Why a separate endpoint, not an extension of `GET /state`
@@ -118,8 +118,8 @@ positions from team count is forbidden and would silently mis-place every marker
 `CONTRACT_SCHEMAS` in [`parity.test.ts`](../../../packages/shared/tests/parity.test.ts). This
 follows the documented precedent in
 [`packages/shared/src/state.ts`](../../../packages/shared/src/state.ts): the board view model is
-*"deliberately OUTSIDE the E5 Pydantic⇄Zod parity surface … a client-render convenience, not a
-cross-boundary contract the gate must police."* The module docstring must cite that precedent.
+_"deliberately OUTSIDE the E5 Pydantic⇄Zod parity surface … a client-render convenience, not a
+cross-boundary contract the gate must police."_ The module docstring must cite that precedent.
 
 ## 5. Frontend
 
@@ -158,12 +158,12 @@ chart is the depth view.
 
 Mirrors the shipped honesty contract rather than inventing one.
 
-| Condition | Behaviour |
-|---|---|
-| 503 (context warming) | Panels read "warming up"; **the board keeps rendering** — the point of §3.1 |
-| 404 / 409 | Same degraded copy pattern as the board |
-| Fetch throws (status 0) | Keep the last series, matching the board's keep-last-on-null reducer |
-| Pre-draft (no picks) | Value curve renders the full board (remaining ≡ full); survival shows "appears once the draft starts" |
+| Condition               | Behaviour                                                                                             |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| 503 (context warming)   | Panels read "warming up"; **the board keeps rendering** — the point of §3.1                           |
+| 404 / 409               | Same degraded copy pattern as the board                                                               |
+| Fetch throws (status 0) | Keep the last series, matching the board's keep-last-on-null reducer                                  |
+| Pre-draft (no picks)    | Value curve renders the full board (remaining ≡ full); survival shows "appears once the draft starts" |
 
 ## 7. Out of scope
 

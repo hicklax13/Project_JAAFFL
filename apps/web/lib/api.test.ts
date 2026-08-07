@@ -162,7 +162,10 @@ describe("fetchLeague", () => {
   });
 
   it("returns null on 404", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 404 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 404 })),
+    );
     expect(await fetchLeague("unknown")).toBeNull();
   });
 
@@ -179,7 +182,10 @@ describe("fetchLeague", () => {
   });
 
   it("returns null when a 200 body is unparseable JSON", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("<<not json>>", { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("<<not json>>", { status: 200 })),
+    );
     await expect(fetchLeague("cbs-local")).resolves.toBeNull();
   });
 });
@@ -201,7 +207,10 @@ describe("getRecommendation", () => {
   });
 
   it("returns a null recommendation (never rejects) when a 200 body is unparseable JSON", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("<<not json>>", { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("<<not json>>", { status: 200 })),
+    );
     await expect(getRecommendation("cbs-local")).resolves.toEqual({
       status: 200,
       recommendation: null,
@@ -257,7 +266,10 @@ describe("fetchState", () => {
   });
 
   it("reports 404 with a null state for an unknown league", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 404 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 404 })),
+    );
     await expect(fetchState("unknown")).resolves.toEqual({ status: 404, state: null });
   });
 

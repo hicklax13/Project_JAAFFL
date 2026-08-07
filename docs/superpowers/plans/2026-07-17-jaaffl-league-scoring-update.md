@@ -4,7 +4,7 @@
 
 **Goal:** Replace the CBS-Standard-guess scoring map with the owner's authoritative JAAFFL2025 scoring, and fix every dependent test/config/doc — so the engine's projections and draft recommendations use the real league values.
 
-**Architecture:** The scoring *evaluator* (`league_points`) is value-agnostic and unchanged. The change is the scoring **map** (`defaults.jaaffl_scoring`, renamed from `cbs_standard_scoring`), its importers, and the constitution/config framing. Rush/rec/TD/2pt values are already correct, so most callers need only the rename.
+**Architecture:** The scoring _evaluator_ (`league_points`) is value-agnostic and unchanged. The change is the scoring **map** (`defaults.jaaffl_scoring`, renamed from `cbs_standard_scoring`), its importers, and the constitution/config framing. Rush/rec/TD/2pt values are already correct, so most callers need only the rename.
 
 **Tech Stack:** Python 3.12, Pydantic v2, pytest.
 
@@ -18,6 +18,7 @@ PY=/c/Users/conno/Project_JAAFFL/Project_JAAFFL/.venv/Scripts/python.exe
 RUFF=/c/Users/conno/Project_JAAFFL/Project_JAAFFL/.venv/Scripts/ruff.exe
 # tests: cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest <args>
 ```
+
 Baseline: 309 backend / 129 JS green. Commit messages end with `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 
 ---
@@ -27,6 +28,7 @@ Baseline: 309 backend / 129 JS green. Commit messages end with `Co-Authored-By: 
 The `cbs_standard_scoring` → `jaaffl_scoring` rename is atomic: renaming the function breaks `constitution.py` + 4 test files at import until they're updated, so this task does the map rewrite AND all rename fixes together, ending with a green full suite.
 
 **Files:**
+
 - Modify: `backend/src/jaaffl/league/defaults.py` (rename + rewrite map + module docstring)
 - Modify: `backend/src/jaaffl/league/constitution.py` (import/call rename + docstrings)
 - Modify: `backend/tests/test_defaults.py` (rewrite)
@@ -106,6 +108,7 @@ def test_kicker_distance_bonuses_are_cumulative() -> None:
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_defaults.py -q
 ```
+
 Expected: collection ERROR — `ImportError: cannot import name 'jaaffl_scoring'`.
 
 - [ ] **Step 3: Rewrite `defaults.py` — rename + the JAAFFL2025 map**
@@ -177,30 +180,37 @@ def jaaffl_scoring() -> tuple[list[ScoringRule], list[ScoringTier], list[Scoring
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest tests/test_defaults.py -q
 ```
+
 Expected: 6 passed. (The rest of the suite is now broken at import — fixed next.)
 
 - [ ] **Step 5: Rename importers — `constitution.py` + 3 test files**
 
 In `backend/src/jaaffl/league/constitution.py`:
+
 - line 22: `from jaaffl.league.defaults import cbs_standard_scoring` → `from jaaffl.league.defaults import jaaffl_scoring`
 - line 90: `rules, tiers, bonuses = cbs_standard_scoring()` → `rules, tiers, bonuses = jaaffl_scoring()`
-- Update the two docstrings (module lines ~9-13, and `resolve_league_settings` ~84): replace "offline ``cbs_standard_scoring()`` map is the validation fallback (TODO(capture): the REAL CBS values are capture-blocked)" with: "the owner-provided ``jaaffl_scoring()`` map is authoritative (only CBS live-frame *parsing* stays capture-blocked); a captured CBS ``league_settings`` scoring still overrides it when present."
+- Update the two docstrings (module lines ~9-13, and `resolve_league_settings` ~84): replace "offline `cbs_standard_scoring()` map is the validation fallback (TODO(capture): the REAL CBS values are capture-blocked)" with: "the owner-provided `jaaffl_scoring()` map is authoritative (only CBS live-frame _parsing_ stays capture-blocked); a captured CBS `league_settings` scoring still overrides it when present."
 
 In each of `backend/tests/test_context.py`, `backend/tests/test_materialize_projections.py`, `backend/tests/test_projections.py`:
+
 - Change `from jaaffl.league.defaults import cbs_standard_scoring` → `from jaaffl.league.defaults import jaaffl_scoring`
 - Change `rules, tiers, bonuses = cbs_standard_scoring()` → `rules, tiers, bonuses = jaaffl_scoring()`
-(These feed only rush/rec stat lines — unchanged values — so their assertions are unaffected.)
+  (These feed only rush/rec stat lines — unchanged values — so their assertions are unaffected.)
 
 - [ ] **Step 6: Fix the `test_api.py` tier-set assertion**
 
 In `backend/tests/test_api.py` (~line 358), change:
+
 ```python
     assert {t.stat for t in ls.scoring_tiers} == {"dst_points_allowed", "dst_yards_allowed"}
 ```
+
 to:
+
 ```python
     assert {t.stat for t in ls.scoring_tiers} == {"dst_points_allowed"}  # JAAFFL: no yards tier
 ```
+
 Also update the nearby comment (~line 355) `# Scoring overlay present (offline cbs_standard_scoring default until capture): CBS 6pt pass TD` → `# Scoring overlay present (owner-provided jaaffl_scoring): 6pt pass TD + single DST points-allowed bracket`.
 
 - [ ] **Step 7: Run the FULL backend suite — verify green**
@@ -208,6 +218,7 @@ Also update the nearby comment (~line 355) `# Scoring overlay present (offline c
 ```bash
 cd "$WT/backend" && PYTHONPATH="$WT/backend/src" "$PY" -m pytest -q
 ```
+
 Expected: 309 passed, 1 skipped (no value regressions — the renamed callers use unchanged rush/rec values).
 
 - [ ] **Step 8: Lint + commit**
@@ -248,18 +259,19 @@ print('pass-rule', next(r.points_per_unit for r in ls.scoring if r.stat=='passin
 print('tiers', {t.stat for t in ls.scoring_tiers})
 "
 ```
+
 Expected: `pass-rule 0.02`, `tiers {'dst_points_allowed'}` (no yards). Also re-run `tests/test_api.py -q` → passed.
 
 - [ ] **Step 3: Update docstrings/comments that describe the scoring as CBS-Standard/capture-blocked**
 
-- `backend/src/jaaffl/league/scoring.py` (module docstring lines ~11, ~22): change "CBS 'Standard' scores DST on BOTH ``dst_points_allowed`` AND ``dst_yards_allowed``, and the two tiers **sum**" → "A league MAY score DST on multiple tiers (they sum); JAAFFL2025 uses a single ``dst_points_allowed`` bracket (``league/defaults.jaaffl_scoring``)." Replace the `TODO(capture): the REAL CBS "Standard" bracket/bonus values are UNVERIFIED` paragraph with "The real JAAFFL scoring values are owner-confirmed in ``league.defaults.jaaffl_scoring``; this evaluator stays value-agnostic."
-- `backend/src/jaaffl/engine/precompute.py` (~line 14): change "``cbs_standard_scoring()`` map is the validation fallback until a live CBS scoring-page capture" → "``jaaffl_scoring()`` map is the owner-authoritative scoring (a captured CBS scoring page may still override)".
+- `backend/src/jaaffl/league/scoring.py` (module docstring lines ~11, ~22): change "CBS 'Standard' scores DST on BOTH `dst_points_allowed` AND `dst_yards_allowed`, and the two tiers **sum**" → "A league MAY score DST on multiple tiers (they sum); JAAFFL2025 uses a single `dst_points_allowed` bracket (`league/defaults.jaaffl_scoring`)." Replace the `TODO(capture): the REAL CBS "Standard" bracket/bonus values are UNVERIFIED` paragraph with "The real JAAFFL scoring values are owner-confirmed in `league.defaults.jaaffl_scoring`; this evaluator stays value-agnostic."
+- `backend/src/jaaffl/engine/precompute.py` (~line 14): change "`cbs_standard_scoring()` map is the validation fallback until a live CBS scoring-page capture" → "`jaaffl_scoring()` map is the owner-authoritative scoring (a captured CBS scoring page may still override)".
 - `backend/src/jaaffl/api/app.py` (~line 316): change "offline cbs_standard_scoring until a" → "owner-provided jaaffl_scoring (a captured CBS snapshot's scoring still wins when present)".
 
 - [ ] **Step 4: Update docs**
 
 - `docs/live-draft-recording-guide.md` (the league-settings table row): `| **Scoring** | Standard (**non-PPR** — 0 points per reception) |` → `| **Scoring** | Custom (**non-PPR** — 0 per reception); JAAFFL2025 values (1 pt/50 pass yds, no off. turnover penalty, single DST points-allowed bracket) |`.
-- `docs/owner-manual-todo.md` (~line 19, the "real CBS scoring VALUES" item): mark **RESOLVED** — "Owner provided the official JAAFFL2025 scoring 2026-07-17; encoded in ``league/defaults.jaaffl_scoring``. The CBS *frame-parsing* capture is still pending (that's for live draft-room shapes, not scoring values)."
+- `docs/owner-manual-todo.md` (~line 19, the "real CBS scoring VALUES" item): mark **RESOLVED** — "Owner provided the official JAAFFL2025 scoring 2026-07-17; encoded in `league/defaults.jaaffl_scoring`. The CBS _frame-parsing_ capture is still pending (that's for live draft-room shapes, not scoring values)."
 
 - [ ] **Step 5: Lint + commit**
 
@@ -298,13 +310,13 @@ Replace the now-wrong `cbs-standard-scoring-verified` memory with a `jaaffl-scor
 
 ## Self-review — spec coverage
 
-| Spec requirement | Task |
-|---|---|
-| passing 0.02, drop INT/fumble, K double-bonus, DST single PA bracket, drop yards tier | Task 1 Step 3 |
-| rename cbs_standard_scoring → jaaffl_scoring (all callers) | Task 1 Steps 3, 5 |
-| test_defaults rewrite; test_api tier assertion; test_scoring unchanged | Task 1 Steps 1, 6 |
-| config/league.json (format/note/identity) | Task 2 Step 1 |
-| constitution/scoring/precompute/app docstrings | Task 1 Step 5, Task 2 Step 3 |
-| recording guide + owner-manual-todo | Task 2 Step 4 |
-| memory replacement | Post-merge |
-| frozen: evaluator, roster, engine, E5 contract | not touched |
+| Spec requirement                                                                      | Task                         |
+| ------------------------------------------------------------------------------------- | ---------------------------- |
+| passing 0.02, drop INT/fumble, K double-bonus, DST single PA bracket, drop yards tier | Task 1 Step 3                |
+| rename cbs_standard_scoring → jaaffl_scoring (all callers)                            | Task 1 Steps 3, 5            |
+| test_defaults rewrite; test_api tier assertion; test_scoring unchanged                | Task 1 Steps 1, 6            |
+| config/league.json (format/note/identity)                                             | Task 2 Step 1                |
+| constitution/scoring/precompute/app docstrings                                        | Task 1 Step 5, Task 2 Step 3 |
+| recording guide + owner-manual-todo                                                   | Task 2 Step 4                |
+| memory replacement                                                                    | Post-merge                   |
+| frozen: evaluator, roster, engine, E5 contract                                        | not touched                  |

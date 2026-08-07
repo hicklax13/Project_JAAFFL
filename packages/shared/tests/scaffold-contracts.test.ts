@@ -146,8 +146,6 @@ describe("RecommendedPick.components (SC3)", () => {
   });
 
   it("rejects a negative sigma", () => {
-    expect(() =>
-      ScoreComponentsSchema.parse({ ...fullComponents, sigma: -0.1 }),
-    ).toThrow();
+    expect(() => ScoreComponentsSchema.parse({ ...fullComponents, sigma: -0.1 })).toThrow();
   });
 });
