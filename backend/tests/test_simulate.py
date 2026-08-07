@@ -167,6 +167,15 @@ def test_score_agent_vona_prefers_the_scarcer_position() -> None:
 
 
 def test_score_agent_reliability_shrinkage_defers_a_high_variance_dst() -> None:
+    """The shrinkage MECHANISM, isolated from the punt guard that subsumes it.
+
+    ``punt_guard`` is switched off here on purpose. Since Tier 8 gave ``ScoreAgent`` the shipped
+    punt guard, a DST is sorted behind every non-punted candidate until R16 regardless of its
+    score, so with the guard on this comparison has only one possible answer and would test the
+    guard rather than shrinkage. Measured over 12 slots x 5 seeds on the fixture pool, shrinkage
+    moves 0 of 60 rosters with the shipped guard and 51 of 60 without it — pinned in
+    ``test_calibrate_pools::test_reliability_shrinkage_is_subsumed_by_the_punt_guard``.
+    """
     from jaaffl.engine.optimize import expand_starting_slots
 
     # A DST outvalues an RB on raw μ, but reliability shrinkage (R1) pulls the noisy DST toward its
@@ -178,15 +187,44 @@ def test_score_agent_reliability_shrinkage_defers_a_high_variance_dst() -> None:
         slots=expand_starting_slots(_settings()),
         roster_size=17,
     )
-    no_rel = EngineParams(kappa=0.0, alpha=0.0, lambda_schedule=[], reliability_shrinkage={})
+    no_punt: dict = {"enabled": False, "stream_round": {}}
+    no_rel = EngineParams(
+        kappa=0.0, alpha=0.0, lambda_schedule=[], reliability_shrinkage={}, punt_guard=no_punt
+    )
     assert (
         ScoreAgent(no_rel).pick(["rb_a", "dst_a"], [], ctx) == "dst_a"
     )  # DST MLV 150 > RB MLV 140
     shrink = EngineParams(
-        kappa=0.0, alpha=0.0, lambda_schedule=[], reliability_shrinkage={"DST": 0.1}
+        kappa=0.0,
+        alpha=0.0,
+        lambda_schedule=[],
+        reliability_shrinkage={"DST": 0.1},
+        punt_guard=no_punt,
     )
     # DST eff = 50 + 0.1·(200−50) = 65 → MLV 15 << RB MLV 140.
     assert ScoreAgent(shrink).pick(["rb_a", "dst_a"], [], ctx) == "rb_a"
+
+
+def test_score_agent_punt_guard_defers_a_dst_that_shrinkage_alone_would_take() -> None:
+    """The other half: with the SHIPPED punt guard the DST is deferred whatever shrinkage says.
+
+    This is why ``reliability_shrinkage`` is decision-inert in the engine that ships, and why
+    Tier 6's "reliability helps" measurement — taken on a ScoreAgent with no punt guard — does not
+    describe it.
+    """
+    from jaaffl.engine.optimize import expand_starting_slots
+
+    ctx = SimContext(
+        value={"rb_a": 190.0, "dst_a": 200.0},
+        position={"rb_a": Position.RB, "dst_a": Position.DST},
+        baselines=dict.fromkeys(Position, 50.0),
+        slots=expand_starting_slots(_settings()),
+        roster_size=17,
+    )
+    shipped = EngineParams(kappa=0.0, alpha=0.0, lambda_schedule=[], reliability_shrinkage={})
+    assert shipped.punt_guard["stream_round"]["DST"] == 16
+    # Round 1 (empty roster) with QB/RB/WR/TE/K slots open → the DST is punted out of the top spot.
+    assert ScoreAgent(shipped).pick(["rb_a", "dst_a"], [], ctx) == "rb_a"
 
 
 def test_score_agent_defaults_its_candidate_cap_to_the_configured_one() -> None:
@@ -201,7 +239,11 @@ def test_score_agent_ranks_candidates_by_mlv_so_it_can_fill_a_k_or_dst_slot() ->
     """`recommend()` caps by MLV; `ScoreAgent` capped by RAW VALUE. K and DST have low raw value but
     high MLV the moment their dedicated slot is empty, so a value-ranked cap hides them entirely —
     the simulated agent could not draft a DST at all, which silently made `reliability_shrinkage`
-    (a parameter `run_study` tunes) unable to affect a single pick."""
+    (a parameter `run_study` tunes) unable to affect a single pick.
+
+    `punt_guard` is off here so the assertion tests CANDIDATE RANKING — the thing this test is
+    named for — rather than the punt sort Tier 8 added, which would defer the DST until R16 no
+    matter where it ranked."""
     from jaaffl.engine.optimize import expand_starting_slots
 
     # Twelve deep WRs outrank the only DST on raw value; with a cap of 3 a value-ranked agent never
@@ -215,7 +257,13 @@ def test_score_agent_ranks_candidates_by_mlv_so_it_can_fill_a_k_or_dst_slot() ->
         slots=expand_starting_slots(_settings()),
         roster_size=17,
     )
-    params = EngineParams(kappa=0.0, alpha=0.0, lambda_schedule=[], reliability_shrinkage={})
+    params = EngineParams(
+        kappa=0.0,
+        alpha=0.0,
+        lambda_schedule=[],
+        reliability_shrinkage={},
+        punt_guard={"enabled": False, "stream_round": {}},
+    )
     roster = ["wr0", "wr1", "wr2", "wr3"]  # WR slots + flex already full → another WR adds nothing
     agent = ScoreAgent(params, candidate_cap=3)
     assert agent.pick(sorted(value), roster, ctx) == "dst_a"
@@ -391,3 +439,69 @@ def test_mc_expected_best_available_matches_the_adp_agent_model_with_no_noise() 
     )
     expected = max(mlv[pid] for pid in by_pos[Position.RB] if pid in remaining)
     assert out[Position.RB] == pytest.approx(expected)
+
+
+def test_no_simulated_team_drafts_a_player_it_cannot_roster() -> None:
+    """The opponent field was manufacturing a famine no engine could survive.
+
+    Measured 2026-08-07 on the fixture pool: the vbd-only field took **15 of 15** kickers and
+    **15 of 15** defenses for 12 teams and rostered 13 players illegally. On the real 581-player
+    board it took **33 of 33** draftable kickers. Once an agent's dedicated need is met it falls
+    through to greedy VBD, and late in the draft VBD favours streaming positions — a remaining
+    kicker sits within a few points of his baseline while a 200th-ranked receiver is 60 below his.
+
+    That artifact, not the scoring rule, is what Tier 6, Tier 7 and Tier 8's own first pass all
+    diagnosed as "the engine cannot draft a kicker": swept over 12 seats x 2 opponent fields, the
+    shipped engine is 24/24 illegal against this field and **0/24 against opponents that draft
+    legal rosters**, taking its kicker at median R16.
+    """
+    from collections import Counter
+
+    from jaaffl.calibrate.pools import committed_engine_params, demo_sim_context
+    from jaaffl.engine.simulate import ScoreAgent, VbdOnlyAgent, simulate_draft
+
+    ctx = demo_sim_context()
+    rosters = simulate_draft(
+        ctx,
+        our_slot=5,
+        our_agent=ScoreAgent(committed_engine_params()),
+        opponents=[VbdOnlyAgent()],
+        seed=2002,
+    )
+    illegal = [
+        (team, position.value, held, ctx.roster_capacity[position])
+        for team, roster in enumerate(rosters)
+        for position, held in Counter(ctx.position[pid] for pid in roster).items()
+        if held > ctx.roster_capacity[position]
+    ]
+    assert illegal == [], f"(team, position, held, capacity) rostered illegally: {illegal}"
+
+
+def test_the_tier8_experiment_levers_are_inert_by_default() -> None:
+    """Both D1 levers must be OFF unless a measurement asks for them.
+
+    `centre_sigma=False` and `gate_surplus_stash=False` is the shipped agent. Neither lever has
+    owner sign-off, and nothing reaches `config/engine.json` on simulator evidence alone.
+
+    `ctx.sigma_median` is populated regardless — it is a measured board fact, and carrying it on
+    every context is what lets all arms share ONE context so the sampled seasons stay common
+    random numbers. Only an agent asked to centre reads it.
+    """
+    from jaaffl.calibrate.pools import committed_engine_params, demo_sim_context
+
+    ctx = demo_sim_context()
+    assert ctx.sigma_median, "the board fact should be carried even though the default ignores it"
+    params = committed_engine_params()
+
+    def walk(**flags: bool) -> list[list[str]]:
+        return simulate_draft(
+            ctx,
+            our_slot=5,
+            our_agent=ScoreAgent(params, **flags),
+            opponents=[NeedBasedAgent(), AdpNoiseAgent()],
+            seed=1001,
+        )
+
+    assert walk() == walk(centre_sigma=False, gate_surplus_stash=False)
+    # And each lever must be capable of changing something, or measuring it would be theatre.
+    assert walk() != walk(centre_sigma=True)

@@ -20,6 +20,16 @@ from typing import TYPE_CHECKING, Protocol
 from jaaffl.config import EngineParams
 from jaaffl.domain import Position
 from jaaffl.engine.optimize import StartingSlot, lineup_value, marginal_lineup_value
+from jaaffl.engine.risk import (
+    has_open_non_puntable_slot,
+    is_punted,
+    lambda_weight,
+    open_startable_by_position,
+    puntable_positions,
+    risk_penalty,
+    seat_roster,
+    slot_state_for,
+)
 
 if TYPE_CHECKING:
     import numpy as np
@@ -42,6 +52,14 @@ class SimContext:
     adp_stdev: Mapping[str, float] = field(default_factory=dict)
     sigma: Mapping[str, float] = field(default_factory=dict)
     cliff_bonus: Mapping[str, float] = field(default_factory=dict)
+    # position -> how many that ONE team may legally roster (``optimize.roster_capacity``). Empty
+    # means "unlimited", which is bit-identical to the pre-Tier-8 behaviour, so a caller that has
+    # not opted in is unchanged.
+    roster_capacity: Mapping[Position, int] = field(default_factory=dict)
+    # position -> median sigma of that position on this board. EXPERIMENT LEVER, empty by default
+    # and therefore inert: supplied, it centres the risk term (see ``risk.risk_penalty``). It is
+    # deliberately NOT ``sigma`` — the objective must keep sampling seasons from the true sigma.
+    sigma_median: Mapping[Position, float] = field(default_factory=dict)
 
 
 def optimal_lineup_value(roster: Sequence[str], ctx: SimContext) -> float:
@@ -189,6 +207,33 @@ def _vbd(pid: str, ctx: SimContext) -> float:
     return ctx.value[pid] - ctx.baselines.get(ctx.position[pid], 0.0)
 
 
+def _rosterable(available: Sequence[str], my_roster: Sequence[str], ctx: SimContext) -> list[str]:
+    """``available`` minus players this roster has no legal slot left for (``roster_capacity``).
+
+    Every agent narrows to this first. Without it, once an agent's dedicated need was met it fell
+    through to greedy VBD — which late in a draft favours STREAMING positions, because a remaining
+    kicker sits within a few points of his baseline while a 200th-ranked receiver is 60 below his.
+    Measured 2026-08-07: the field drafted 33 of 33 draftable kickers for 12 teams, holding up to
+    five each, and that famine (not the scoring rule) is what three tiers running mistook for the
+    engine being unable to draft a kicker.
+
+    Falls back to the unfiltered pool if nothing is legal, so an agent can never fail to pick — a
+    simulated draft that cannot complete would be worse than one final illegal pick, and
+    ``test_simulate`` guards the outcome either way. An empty ``roster_capacity`` means unlimited.
+    """
+    if not ctx.roster_capacity:
+        return list(available)
+    held: defaultdict[Position, int] = defaultdict(int)
+    for pid in my_roster:
+        held[ctx.position[pid]] += 1
+    legal = [
+        pid
+        for pid in available
+        if held[ctx.position[pid]] < ctx.roster_capacity.get(ctx.position[pid], len(available))
+    ]
+    return legal or list(available)
+
+
 class DraftAgent(Protocol):
     """A drafting policy: choose one ``player_id`` from ``available`` given the current roster."""
 
@@ -205,29 +250,31 @@ class VbdOnlyAgent:
     """Pure static VOR — argmax value − replacement baseline; no VONA/risk/cliff (design §6.C.2)."""
 
     def pick(self, available, my_roster, ctx, rng=None) -> str:
-        return max(available, key=lambda p: _vbd(p, ctx))
+        return max(_rosterable(available, my_roster, ctx), key=lambda p: _vbd(p, ctx))
 
 
 class NeedBasedAgent:
     """Fills an empty dedicated starting slot first (best-value eligible), else best VBD."""
 
     def pick(self, available, my_roster, ctx, rng=None) -> str:
+        pool = _rosterable(available, my_roster, ctx)
         need = _unfilled_positions(my_roster, ctx)
         if need:
-            fillers = [p for p in available if ctx.position[p] in need]
+            fillers = [p for p in pool if ctx.position[p] in need]
             if fillers:
                 return max(fillers, key=lambda p: ctx.value[p])
-        return max(available, key=lambda p: _vbd(p, ctx))
+        return max(pool, key=lambda p: _vbd(p, ctx))
 
 
 class AdpNoiseAgent:
     """The market's central tendency — argmin adp + N(0, adp_stdev). Stateless; rng from the sim."""
 
     def pick(self, available, my_roster, ctx, rng=None) -> str:
+        pool = _rosterable(available, my_roster, ctx)
         if rng is None:  # no rng → deterministic argmin (no noise)
-            return min(available, key=lambda p: ctx.adp.get(p, _FAR))
+            return min(pool, key=lambda p: ctx.adp.get(p, _FAR))
         return min(
-            available,
+            pool,
             key=lambda p: ctx.adp.get(p, _FAR) + float(rng.normal(0.0, ctx.adp_stdev.get(p, 0.0))),
         )
 
@@ -252,7 +299,8 @@ class SoftmaxVbdAgent:
         self._cap = candidate_cap
 
     def pick(self, available, my_roster, ctx, rng=None) -> str:
-        candidates = sorted(available, key=lambda p: _vbd(p, ctx), reverse=True)[: self._cap]
+        pool = _rosterable(available, my_roster, ctx)
+        candidates = sorted(pool, key=lambda p: _vbd(p, ctx), reverse=True)[: self._cap]
         if rng is None:  # no rng -> deterministic argmax, matching the other agents' convention
             return candidates[0]
         import numpy as np
@@ -263,21 +311,21 @@ class SoftmaxVbdAgent:
         return str(rng.choice(candidates, p=weights / weights.sum()))
 
 
-def _phase_lambda(params: EngineParams, round_no: int) -> float:
-    """The phase-default risk λ for ``round_no`` from ``params.lambda_schedule`` (the sim uses the
-    phase default; the last-startable/surplus override is a hot-path refinement)."""
-    for entry in params.lambda_schedule:
-        low, high = entry["rounds"]
-        if low <= round_no <= high:
-            return float(entry["lambda"])
-    return 0.0
-
-
 class ScoreAgent:
-    """Our agent: drafts by ``Score(p) = MLV + κ·max(0, VONA) − λ(round)·σ + α·cliff`` under trial
-    params (design §10.3). VONA is a tractable within-position cliff — ``MLV(p)`` minus the best
-    OTHER same-position candidate's MLV — the "take the scarce one now" proxy.
-    ``σ`` / ``cliff`` come from the context (0 for the behavioral-opponent pools that omit them).
+    """Our agent: drafts by ``Score(p) = MLV + κ·max(0, VONA) − λ·σ + α·cliff`` under trial params
+    (design §10.3), punt-sorted. VONA is a tractable within-position cliff — ``MLV(p)`` minus the
+    best OTHER same-position candidate's MLV — the "take the scarce one now" proxy, and the one
+    deliberate, declared departure from ``recommend.py`` (which uses the survival-weighted
+    ``expected_best_available``). ``σ`` / ``cliff`` come from the context (0 for the
+    behavioral-opponent pools that omit them).
+
+    **λ and the punt guard are the SHIPPED ones (Tier 8).** ``λ`` comes from
+    ``engine.risk.lambda_weight``, so ``lambda_slot_override`` applies, and the ranking is
+    punt-sorted through ``engine.risk.is_punted``. Before Tier 8 this agent read only
+    ``lambda_schedule`` and had no punt guard, so **E2/E6 could not measure either key**: driven to
+    an extreme, each changed 0 of 60 simulated rosters while ``alpha`` and ``lambda_schedule``
+    changed 60 of 60. Tier 7 closed by requiring E2/E6 evidence before touching
+    ``lambda_slot_override``; that evidence was not obtainable.
 
     **Candidates match the shipped agent.** ``recommend.py`` keeps the top ``params.candidate_cap``
     available **by MLV**; this used to keep the top 50 **by raw value**, and ``evaluate_params``
@@ -291,9 +339,25 @@ class ScoreAgent:
     replacement by ``params.reliability_shrinkage`` (K/DST are noisy → deferred), so our DECISIONS
     defer high-variance positions while the OBJECTIVE scores raw μ — a real E2 tuning lever."""
 
-    def __init__(self, params: EngineParams, *, candidate_cap: int | None = None) -> None:
+    def __init__(
+        self,
+        params: EngineParams,
+        *,
+        candidate_cap: int | None = None,
+        centre_sigma: bool = False,
+        gate_surplus_stash: bool = False,
+    ) -> None:
         self._params = params
         self._cap = params.candidate_cap if candidate_cap is None else candidate_cap
+        # Two Tier 8 EXPERIMENT LEVERS, both off by default so the agent stays the shipped agent.
+        # `centre_sigma` prices σ against `ctx.sigma_median` instead of raw; `gate_surplus_stash`
+        # withholds the surplus ceiling once every remaining pick is spoken for by an unfilled
+        # starting slot. Constructor flags rather than config keys on purpose: neither is
+        # owner-adopted, and nothing may reach `config/engine.json` on simulator evidence alone.
+        # They are flags on the SHIPPED agent (not a subclass) so the arms are measured through the
+        # real code path — a duplicate scorer is the exact defect this tier just removed.
+        self._centre_sigma = centre_sigma
+        self._gate_surplus_stash = gate_surplus_stash
         self._eff_cache_id: int | None = None
         self._eff_cache: Mapping[str, float] = {}
 
@@ -317,6 +381,8 @@ class ScoreAgent:
     def pick(self, available, my_roster, ctx, rng=None) -> str:
         params = self._params
         value = self._effective_value(ctx)
+        # A league rule, not a strategy: never spend a pick on a player no roster slot can hold.
+        available = _rosterable(available, my_roster, ctx)
         # Picks left, including this one. A replacement phantom you have no pick left to draft is
         # not a player, so MLV stops pricing an unfillable slot as though it were free (Tier 7).
         picks_remaining = max(0, ctx.roster_size - len(my_roster))
@@ -345,7 +411,24 @@ class ScoreAgent:
         # skill players whose marginal contribution to the starting nine is zero.
         candidates = sorted(available, key=lambda p: all_mlv[p], reverse=True)[: self._cap]
         mlv = {p: all_mlv[p] for p in candidates}
-        lam = _phase_lambda(params, len(my_roster) + 1)
+
+        # The SHIPPED slot/punt rule, from the one module recommend.py also reads. Until Tier 8
+        # this used a private phase-only lambda and no punt guard, so E2/E6 could not see
+        # `lambda_slot_override` or `punt_guard` at all: 0 of 60 simulated rosters moved when
+        # either was driven to an extreme, while `alpha` and `lambda_schedule` moved 60 of 60.
+        round_no = len(my_roster) + 1
+        filled = seat_roster(list(my_roster), ctx.position, ctx.slots)
+        open_startable = open_startable_by_position(filled, ctx.slots)
+        open_non_puntable = has_open_non_puntable_slot(
+            filled, ctx.slots, puntable_positions(params)
+        )
+        # Tier 8 experiment lever, off unless the caller asks: after spending this pick, are there
+        # still more picks than unfilled starting slots? If not, a "stash" is not a stash.
+        can_stash = (
+            (picks_remaining - 1) >= sum(1 for seated in filled if not seated)
+            if self._gate_surplus_stash
+            else True
+        )
 
         def vona(pid: str) -> float:
             pos = ctx.position[pid]
@@ -353,14 +436,34 @@ class ScoreAgent:
             return mlv[pid] - (max(others) if others else 0.0)
 
         def score(pid: str) -> float:
+            pos = ctx.position[pid]
+            lam = lambda_weight(
+                round_no, slot_state_for(pos, open_startable), params, can_stash=can_stash
+            )
             return (
                 mlv[pid]
                 + params.kappa * max(0.0, vona(pid))
-                - lam * ctx.sigma.get(pid, 0.0)
+                - risk_penalty(
+                    lam,
+                    ctx.sigma.get(pid, 0.0),
+                    sigma_median=ctx.sigma_median.get(pos) if self._centre_sigma else None,
+                )
                 + params.alpha * ctx.cliff_bonus.get(pid, 0.0)
             )
 
-        return max(candidates, key=score)
+        # Ranked exactly as recommend.py ranks: non-punted first, then score descending.
+        return min(
+            candidates,
+            key=lambda pid: (
+                is_punted(
+                    ctx.position[pid],
+                    round_no,
+                    params,
+                    has_open_non_puntable=open_non_puntable,
+                ),
+                -score(pid),
+            ),
+        )
 
 
 def simulate_draft(

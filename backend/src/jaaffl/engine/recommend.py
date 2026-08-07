@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import time
 from collections import Counter
-from enum import StrEnum
 
 from jaaffl.config import EngineParams
 from jaaffl.domain import (
@@ -35,79 +34,18 @@ from jaaffl.engine.opponents import (
     pick_probabilities,
     run_pressure_by_position,
 )
-from jaaffl.engine.optimize import StartingSlot, lineup_value, marginal_lineup_value
+from jaaffl.engine.optimize import lineup_value, marginal_lineup_value
+from jaaffl.engine.risk import (
+    SlotState,
+    has_open_non_puntable_slot,
+    is_punted,
+    lambda_weight,
+    open_startable_by_position,
+    puntable_positions,
+    seat_roster,
+    slot_state_for,
+)
 from jaaffl.league.replacement import dynamic_replacement_values
-
-
-class SlotState(StrEnum):
-    """Where a candidate sits relative to your startable need at its position (§3.5)."""
-
-    LAST_OPEN_STARTABLE = "last_open_startable"  # p fills your final open startable slot at its pos
-    SURPLUS = "surplus"  # depth/stash beyond startable need
-    NORMAL = "normal"
-
-
-def lambda_weight(round_no: int, slot_state: SlotState, params: EngineParams) -> float:
-    """Risk λ for the risk term ``−λ·σ̂`` (design §6.C.5).
-
-    The phase default comes from ``params.lambda_schedule`` (floor-tilt λ>0 early, ceiling-tilt
-    λ<0 late); the **slot override dominates** — filling your last open startable slot forces the
-    floor tilt, a surplus/stash forces the ceiling tilt (``params.lambda_slot_override``).
-    """
-    if slot_state is SlotState.LAST_OPEN_STARTABLE:
-        return float(params.lambda_slot_override["last_startable_slot_floor"])
-    if slot_state is SlotState.SURPLUS:
-        return float(params.lambda_slot_override["surplus_stash_ceiling"])
-    for entry in params.lambda_schedule:
-        low, high = entry["rounds"]
-        if low <= round_no <= high:
-            return float(entry["lambda"])
-    return 0.0  # out-of-schedule round → neutral (never a crash)
-
-
-def _seat_roster(
-    my_roster: list[str],
-    position: dict[str, Position],
-    slots: list[StartingSlot],
-) -> list[bool]:
-    """Greedily seat rostered players into starting slots (maximize seated) → filled-per-slot."""
-    remaining: Counter[Position] = Counter(position[p] for p in my_roster if p in position)
-    filled = [False] * len(slots)
-    for i, slot in enumerate(slots):  # dedicated (single-eligible) slots first
-        if len(slot.eligible) == 1:
-            pos = next(iter(slot.eligible))
-            if remaining.get(pos, 0) > 0:
-                filled[i] = True
-                remaining[pos] -= 1
-    for i, slot in enumerate(slots):  # then flex slots from whatever is left
-        if len(slot.eligible) > 1 and not filled[i]:
-            for pos in slot.eligible:
-                if remaining.get(pos, 0) > 0:
-                    filled[i] = True
-                    remaining[pos] -= 1
-                    break
-    return filled
-
-
-def _open_startable_by_position(
-    filled: list[bool], slots: list[StartingSlot]
-) -> dict[Position, int]:
-    """How many open (unfilled) starting slots each position is still eligible to fill."""
-    counts: dict[Position, int] = {}
-    for i, slot in enumerate(slots):
-        if not filled[i]:
-            for pos in slot.eligible:
-                counts[pos] = counts.get(pos, 0) + 1
-    return counts
-
-
-def _slot_state(pos: Position, open_startable: dict[Position, int]) -> SlotState:
-    open_count = open_startable.get(pos, 0)
-    if open_count == 0:
-        return SlotState.SURPLUS
-    if open_count == 1:
-        return SlotState.LAST_OPEN_STARTABLE
-    return SlotState.NORMAL
 
 
 def _positional_modifiers(
@@ -341,13 +279,10 @@ def recommend(
     # Slot-state accounting for my current roster (drives the λ override + punt guard). The
     # puntable positions come from the config (punt_guard.stream_round keys) — one source of truth,
     # so making, say, TE streamable is a config change, not a code change.
-    puntable = frozenset(Position(key) for key in params.punt_guard.get("stream_round", {}))
-    filled = _seat_roster(my_roster, context.position, context.starting_slots)
-    open_startable = _open_startable_by_position(filled, context.starting_slots)
-    has_open_non_puntable = any(
-        not filled[i] and not (slot.eligible <= puntable)
-        for i, slot in enumerate(context.starting_slots)
-    )
+    puntable = puntable_positions(params)
+    filled = seat_roster(my_roster, context.position, context.starting_slots)
+    open_startable = open_startable_by_position(filled, context.starting_slots)
+    has_open_non_puntable = has_open_non_puntable_slot(filled, context.starting_slots, puntable)
 
     picks: list[tuple[bool, RecommendedPick]] = []
     for pid in candidates:
@@ -355,7 +290,7 @@ def recommend(
         proj = context.projections[pid]
         mlv_p = mlv[pid]
         vona = mlv_p - expected_best.get(pos, 0.0)  # RAW (may be < 0)
-        slot_state = _slot_state(pos, open_startable)
+        slot_state = slot_state_for(pos, open_startable)
         risk_penalty = lambda_weight(round_no, slot_state, params) * proj.sigma
         applied_cliff = params.alpha * context.cliff_bonus.get(pid, 0.0)
         mods = _positional_modifiers(pid, my_roster, context, params)
@@ -382,13 +317,7 @@ def recommend(
         )
         # Punt guard (R1): demote K/DST out of #1 before their stream round unless the rest of the
         # startable roster is full — it re-ranks, never changes the score.
-        stream_round = int(params.punt_guard.get("stream_round", {}).get(pos.value, 0))
-        punted = bool(
-            params.punt_guard.get("enabled")
-            and pos in puntable
-            and round_no < stream_round
-            and has_open_non_puntable
-        )
+        punted = is_punted(pos, round_no, params, has_open_non_puntable=has_open_non_puntable)
         player = context.players.get(pid)
         picks.append(
             (

@@ -225,6 +225,52 @@ total of the 12)` over seasons sampled from `N(μ, σ)` — against a disjoint s
   `alpha = 0` suggestion above is suspended until it is re-measured, not withdrawn. Leaving
   `config/engine.json` exactly as it is remains the right call, and is what the code ships with.
 
+  ### 🔴 A DECISION FOR YOU — one setting is costing you most of your title odds `[NEW — Tier 8]`
+
+  Tier 8 repaired the calibration harness (it had been unable to see this setting at all — see §1b)
+  and then measured it properly for the first time: **real board, five independent seed blocks, 40
+  drafts per seat, 800 simulated seasons each.** The result is the largest effect this project has
+  ever measured, by a wide margin.
+
+  The setting is `lambda_slot_override`. It has two halves: a **bonus** for drafting an unpredictable
+  player you do _not_ need, and a **penalty** for drafting a steady player you _do_ need. Turning
+  both off:
+
+  | measure                      | shipped today | with the setting off | change      |
+  | ---------------------------- | ------------- | -------------------- | ----------- |
+  | **championship probability** | **0.0121**    | **0.0866**           | **+0.0745** |
+  | **projected points**         | **1462**      | **1705**             | **+243**    |
+
+  For scale: in a 12-team league an average team wins **0.0833** of the time. The engine as shipped
+  wins **0.0121** — about one seventh of its fair share. With this one setting off it is back to
+  roughly average. It gains on **both** measures, at `p = 0.0002` on each, and it is better at **every
+  one of the 12 draft seats** — the first change in this project's history to clear that bar on both
+  measures with replicates.
+
+  **Why it goes so wrong.** The bonus is multiplied by how unpredictable a player is, and that varies
+  enormously _by position_ — typical spread is 20 for a kicker, 25 for a defense, but **106 for a
+  quarterback**. Since the bonus and the penalty apply to opposite candidates, the engine can swing a
+  comparison by ~85 points on unpredictability alone, which is more than the entire value signal in
+  the late rounds. A real example from round 15 on your board: it took a running back its own value
+  model scored at **−45** over a kicker it scored at **0**, purely on this bonus. (Kickers and
+  defenses are worse still: every kicker has the identical unpredictability number, so for them this
+  term carries no information at all — it is a pure positional thumb on the scale.)
+
+  **If you want it, the whole change is two lines** in `config/engine.json`:
+
+  ```
+  "lambda_slot_override": {
+    "last_startable_slot_floor": 0.0,
+    "surplus_stash_ceiling": 0.0
+  },
+  ```
+
+  **Nothing has been changed.** `config/engine.json` is yours, the calibration CLI is dry-run unless
+  you pass `--write`, and a simulator result is not a fact about drafting — the opponents are bots,
+  not the eleven people in your room. But this is a much stronger result than the `alpha` one above,
+  measured on five seed blocks rather than one, and it points the same way on both measures rather
+  than trading one for the other. **If you change one thing before draft night, change this.**
+
 ## 1b. ⛔ READ BEFORE DRAFT NIGHT — the engine goes blind in the late rounds `[NEW — Tier 6]`
 
 **You must fill QB, K and DST yourself. The engine will not tell you to.**
@@ -296,6 +342,40 @@ so it is the next tier's job and nothing was changed for you.
 **So the 30-second rule above still applies, with one change:** you can now trust the engine to
 take a QB, K and DST on its own in the last few rounds — but **at round 16 and 17, if you still
 have no kicker, take one yourself.**
+
+### ✅ CORRECTED IN TIER 8 (2026-08-07) — the reason above is wrong, but keep the habit
+
+**The engine does draft your kicker.** Everything above this line diagnosed a real symptom and
+blamed the wrong thing. Tier 8 walked the draft from **all twelve seats against two different
+opponent styles — 24 full drafts** — and the engine as shipped filled **all nine starting slots in
+24 of 24**, taking its kicker in **round 16** on average.
+
+What was actually broken was the **practice-opponents**, not the engine. In the simulation the other
+eleven teams were drafting kickers and defenses they could never use — up to **five kickers each**,
+consuming **all 33** on the board. No engine can draft a kicker from an empty board. Real managers
+cannot do that (your league gives them one kicker slot and a bench that does not accept kickers), so
+this never described your actual draft. Once the practice opponents were made to obey the roster
+rules, the problem vanished — for every version of the engine we tried.
+
+**This is the third tier in a row to blame the engine for it, and the first to test the assumption.**
+
+**Your 30-second rule, updated:**
+
+1. Trust the engine for **rounds 1–9**. Unchanged.
+2. From **round 14**, take five seconds to glance at your empty starting slots. Not because the
+   engine is expected to fail — it did not fail once in 24 tests — but because a simulator is not
+   your draft room, this exact question has been answered wrong three times, and checking is free.
+3. If a slot is empty with only a pick or two left, take that position yourself.
+
+You no longer need the old "at 16 and 17 take a kicker yourself" rule.
+
+⚠️ **A question for you, because the answer changes the code.** Your league file says `Bench: 8` and
+does **not** say which positions a bench spot accepts. The code assumes **quarterbacks, running
+backs, receivers and tight ends only — no kickers or defenses** (`league/constitution.py`, whose own
+comment calls this "a JAAFFL modeling choice"). That assumption is what makes "one kicker per team"
+the rule the practice opponents now follow. **Does CBS let you put a kicker or a defense on your
+bench?** If it does, say so and it is a one-line change. Nothing was altered in `config/league.json`,
+which stays immutable.
 
 ✅ **Also new in Tier 6 (no action needed):** the overlay's **bye-week chip now actually works**. It
 was declared, styled and rendered all along, but nothing ever filled it in, so it could never

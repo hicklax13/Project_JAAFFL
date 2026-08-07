@@ -51,6 +51,32 @@ def expand_starting_slots(settings: LeagueSettings) -> list[StartingSlot]:
     return slots
 
 
+def roster_capacity(settings: LeagueSettings) -> dict[Position, int]:
+    """How many players at each position ONE team can legally roster: every slot it is eligible for.
+
+    A permissive upper bound at the skill positions — the bench is shared, so counting it once per
+    eligible position over-counts — and an EXACT bound at K and DST, which fit only their own
+    starting slot because ``league/constitution.py`` gives the bench ``(QB, RB, WR, TE)``. Exactness
+    where it matters is the whole point.
+
+    ``expand_starting_slots``, ``lineup_value`` and ``optimize_roster`` all already honour this
+    eligibility. This exists so the simulated draft AGENTS can honour it too, rather than being the
+    one part of the engine that ignores it: measured 2026-08-07, the behavioural field drafted
+    **33 of 33** draftable kickers for 12 teams and held up to five each, none of which it could
+    have started or benched. That manufactured a late-round famine no engine could survive, and it
+    is what Tiers 6, 7 and 8 all first mistook for the engine being unable to draft a kicker.
+
+    NOTE the bench eligibility is a JAAFFL modeling choice, not the constitution:
+    ``config/league.json`` specifies a bench COUNT with no eligibility. If CBS turns out to permit
+    benching a kicker, ``constitution._BENCH_ELIGIBLE`` changes and this follows automatically.
+    """
+    capacity: dict[Position, int] = defaultdict(int)
+    for slot in settings.roster_slots:
+        for position in slot.eligible_positions:
+            capacity[position] += slot.count
+    return dict(capacity)
+
+
 def _flex_phantom(eligible: frozenset[Position], baselines: Mapping[Position, float]) -> float:
     """Replacement value of an empty slot = the best baseline among its eligible positions."""
     return max((baselines.get(pos, 0.0) for pos in eligible), default=0.0)
