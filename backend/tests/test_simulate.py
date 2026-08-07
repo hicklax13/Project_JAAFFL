@@ -475,3 +475,33 @@ def test_no_simulated_team_drafts_a_player_it_cannot_roster() -> None:
         if held > ctx.roster_capacity[position]
     ]
     assert illegal == [], f"(team, position, held, capacity) rostered illegally: {illegal}"
+
+
+def test_the_tier8_experiment_levers_are_inert_by_default() -> None:
+    """Both D1 levers must be OFF unless a measurement asks for them.
+
+    `centre_sigma=False` and `gate_surplus_stash=False` is the shipped agent. Neither lever has
+    owner sign-off, and nothing reaches `config/engine.json` on simulator evidence alone.
+
+    `ctx.sigma_median` is populated regardless — it is a measured board fact, and carrying it on
+    every context is what lets all arms share ONE context so the sampled seasons stay common
+    random numbers. Only an agent asked to centre reads it.
+    """
+    from jaaffl.calibrate.pools import committed_engine_params, demo_sim_context
+
+    ctx = demo_sim_context()
+    assert ctx.sigma_median, "the board fact should be carried even though the default ignores it"
+    params = committed_engine_params()
+
+    def walk(**flags: bool) -> list[list[str]]:
+        return simulate_draft(
+            ctx,
+            our_slot=5,
+            our_agent=ScoreAgent(params, **flags),
+            opponents=[NeedBasedAgent(), AdpNoiseAgent()],
+            seed=1001,
+        )
+
+    assert walk() == walk(centre_sigma=False, gate_surplus_stash=False)
+    # And each lever must be capable of changing something, or measuring it would be theatre.
+    assert walk() != walk(centre_sigma=True)

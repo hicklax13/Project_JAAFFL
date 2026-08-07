@@ -26,6 +26,7 @@ from jaaffl.engine.risk import (
     lambda_weight,
     open_startable_by_position,
     puntable_positions,
+    risk_penalty,
     seat_roster,
     slot_state_for,
 )
@@ -55,6 +56,10 @@ class SimContext:
     # means "unlimited", which is bit-identical to the pre-Tier-8 behaviour, so a caller that has
     # not opted in is unchanged.
     roster_capacity: Mapping[Position, int] = field(default_factory=dict)
+    # position -> median sigma of that position on this board. EXPERIMENT LEVER, empty by default
+    # and therefore inert: supplied, it centres the risk term (see ``risk.risk_penalty``). It is
+    # deliberately NOT ``sigma`` — the objective must keep sampling seasons from the true sigma.
+    sigma_median: Mapping[Position, float] = field(default_factory=dict)
 
 
 def optimal_lineup_value(roster: Sequence[str], ctx: SimContext) -> float:
@@ -334,9 +339,25 @@ class ScoreAgent:
     replacement by ``params.reliability_shrinkage`` (K/DST are noisy → deferred), so our DECISIONS
     defer high-variance positions while the OBJECTIVE scores raw μ — a real E2 tuning lever."""
 
-    def __init__(self, params: EngineParams, *, candidate_cap: int | None = None) -> None:
+    def __init__(
+        self,
+        params: EngineParams,
+        *,
+        candidate_cap: int | None = None,
+        centre_sigma: bool = False,
+        gate_surplus_stash: bool = False,
+    ) -> None:
         self._params = params
         self._cap = params.candidate_cap if candidate_cap is None else candidate_cap
+        # Two Tier 8 EXPERIMENT LEVERS, both off by default so the agent stays the shipped agent.
+        # `centre_sigma` prices σ against `ctx.sigma_median` instead of raw; `gate_surplus_stash`
+        # withholds the surplus ceiling once every remaining pick is spoken for by an unfilled
+        # starting slot. Constructor flags rather than config keys on purpose: neither is
+        # owner-adopted, and nothing may reach `config/engine.json` on simulator evidence alone.
+        # They are flags on the SHIPPED agent (not a subclass) so the arms are measured through the
+        # real code path — a duplicate scorer is the exact defect this tier just removed.
+        self._centre_sigma = centre_sigma
+        self._gate_surplus_stash = gate_surplus_stash
         self._eff_cache_id: int | None = None
         self._eff_cache: Mapping[str, float] = {}
 
@@ -401,6 +422,13 @@ class ScoreAgent:
         open_non_puntable = has_open_non_puntable_slot(
             filled, ctx.slots, puntable_positions(params)
         )
+        # Tier 8 experiment lever, off unless the caller asks: after spending this pick, are there
+        # still more picks than unfilled starting slots? If not, a "stash" is not a stash.
+        can_stash = (
+            (picks_remaining - 1) >= sum(1 for seated in filled if not seated)
+            if self._gate_surplus_stash
+            else True
+        )
 
         def vona(pid: str) -> float:
             pos = ctx.position[pid]
@@ -408,11 +436,18 @@ class ScoreAgent:
             return mlv[pid] - (max(others) if others else 0.0)
 
         def score(pid: str) -> float:
-            lam = lambda_weight(round_no, slot_state_for(ctx.position[pid], open_startable), params)
+            pos = ctx.position[pid]
+            lam = lambda_weight(
+                round_no, slot_state_for(pos, open_startable), params, can_stash=can_stash
+            )
             return (
                 mlv[pid]
                 + params.kappa * max(0.0, vona(pid))
-                - lam * ctx.sigma.get(pid, 0.0)
+                - risk_penalty(
+                    lam,
+                    ctx.sigma.get(pid, 0.0),
+                    sigma_median=ctx.sigma_median.get(pos) if self._centre_sigma else None,
+                )
                 + params.alpha * ctx.cliff_bonus.get(pid, 0.0)
             )
 

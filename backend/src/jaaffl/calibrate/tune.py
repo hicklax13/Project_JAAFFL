@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from jaaffl.config import EngineParams
 from jaaffl.engine.optimize import roster_capacity
+from jaaffl.engine.risk import median_sigma_by_position
 from jaaffl.engine.simulate import (
     DraftAgent,
     ScoreAgent,
@@ -38,6 +39,7 @@ if TYPE_CHECKING:
 def sim_context_from_draft_context(dc: DraftContext) -> SimContext:
     """Adapt a precompute :class:`DraftContext` into a :class:`SimContext`, so E2 can tune on REAL
     projections + FFC ADP. σ is read per-player from ``projections``; everything else maps 1:1."""
+    sigma = {pid: proj.sigma for pid, proj in dc.projections.items()}
     return SimContext(
         value=dict(dc.mu),
         position=dict(dc.position),
@@ -46,9 +48,13 @@ def sim_context_from_draft_context(dc: DraftContext) -> SimContext:
         roster_size=sum(slot.count for slot in dc.settings.roster_slots),
         adp=dict(dc.adp_mean),
         adp_stdev=dict(dc.adp_sd),
-        sigma={pid: proj.sigma for pid, proj in dc.projections.items()},
+        sigma=sigma,
         cliff_bonus=dict(dc.cliff_bonus),
         roster_capacity=roster_capacity(dc.settings),
+        # A measured board FACT, always carried. Only an agent constructed with
+        # `centre_sigma=True` reads it, so carrying it changes nothing on its own — and every arm
+        # can then share ONE context, which is what keeps the common random numbers common.
+        sigma_median=median_sigma_by_position(sigma, dc.position),
     )
 
 

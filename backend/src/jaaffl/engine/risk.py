@@ -37,7 +37,58 @@ class SlotState(StrEnum):
     NORMAL = "normal"
 
 
-def lambda_weight(round_no: int, slot_state: SlotState, params: EngineParams) -> float:
+def median_sigma_by_position(
+    sigma: Mapping[str, float], position: Mapping[str, Position]
+) -> dict[Position, float]:
+    """Median σ per position over a board — the centring anchor for :func:`risk_penalty`.
+
+    Median rather than mean because σ saturates at ``VOL_RATIO_MAX`` for a large minority of
+    players, which drags a mean. Computed once over the whole player universe rather than over
+    who is still available: "is this player unusually volatile for his position" is a property of
+    the position's talent pool, and recomputing it as the board depletes would let the anchor
+    collapse in exactly the late rounds it most needs to be stable.
+
+    Measured on the real 2026 board it reproduces ``precompute._DEFAULT_SIGMA_FLOOR`` exactly at
+    all six positions (K 20.00 · DST 25.00 · TE 29.20 · WR 43.30 · RB 59.00 · QB 106.30) — i.e.
+    more than half of every position sits on the σ floor, because only 377 of 581 players carry a
+    measured per-player σ. That coincidence is a useful sanity check, not the definition.
+    """
+    from statistics import median
+
+    grouped: dict[Position, list[float]] = {}
+    for pid, value in sigma.items():
+        pos = position.get(pid)
+        if pos is not None:
+            grouped.setdefault(pos, []).append(value)
+    return {pos: median(values) for pos, values in grouped.items() if values}
+
+
+def risk_penalty(lam: float, sigma: float, *, sigma_median: float | None = None) -> float:
+    """The applied risk contribution ``λ·σ̂``. ``sigma_median=None`` is today's raw σ, exactly.
+
+    **EXPERIMENT LEVER, inert by default (Tier 8).** Supplying the position's median σ centres the
+    term, so a risk tilt means "more or less volatile *than typical for his position*" — a
+    within-position tiebreaker, which is what §3.5 describes — instead of "plays a volatile
+    position". Nothing in the shipped path supplies it yet; it exists so the calibration harness can
+    MEASURE the alternative rather than argue about it, which is the whole lesson of this tier.
+
+    Why it might matter, measured on the real 581-player board: median σ is 20.00 at K, 25.00 at
+    DST, 29.20 at TE, 43.30 at WR, 59.00 at RB and 106.30 at QB — and K and DST have **zero**
+    within-position variance (every kicker is 20.00), so for those two positions ``λ·σ`` carries no
+    risk information at all, only a positional shift. Since ``lambda_slot_override`` assigns
+    OPPOSITE signs to the two candidates being compared, the resulting swing reaches ``0.8·σ ≈ 85``
+    points at QB — larger than the entire MLV signal in the endgame.
+    """
+    return lam * (sigma if sigma_median is None else sigma - sigma_median)
+
+
+def lambda_weight(
+    round_no: int,
+    slot_state: SlotState,
+    params: EngineParams,
+    *,
+    can_stash: bool = True,
+) -> float:
     """Risk λ for the risk term ``−λ·σ̂`` (design §6.C.5).
 
     The phase default comes from ``params.lambda_schedule`` (floor-tilt λ>0 early, ceiling-tilt
@@ -52,10 +103,18 @@ def lambda_weight(round_no: int, slot_state: SlotState, params: EngineParams) ->
     a kicker filling the last open startable slot with MLV 0.00, a 45.76-point risk swing
     overturning a 44.80-point value verdict. The λ *schedule* does not have this problem nearly as
     badly, because it applies the same sign to every candidate in a round and so is common-mode.
+
+    ``can_stash`` is the second **EXPERIMENT LEVER, inert by default**: the surplus ceiling pays for
+    the OPTION value of a bench flier, and a pick you are forced to spend on a required slot carries
+    none. Passing ``False`` (when ``picks_remaining − 1`` is below the number of unfilled starting
+    slots) withholds the ceiling bonus. It reuses Tier 7's capacity arithmetic and invents no
+    coefficient. Nothing in the shipped path passes it yet.
     """
     if slot_state is SlotState.LAST_OPEN_STARTABLE:
         return float(params.lambda_slot_override["last_startable_slot_floor"])
     if slot_state is SlotState.SURPLUS:
+        if not can_stash:
+            return 0.0
         return float(params.lambda_slot_override["surplus_stash_ceiling"])
     for entry in params.lambda_schedule:
         low, high = entry["rounds"]
