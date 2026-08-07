@@ -36,13 +36,13 @@ board, at R16 there is **no kicker on the board at all**; the engine takes a DST
 The decisive experiment is the opponent field. Sweeping all 12 seats × 2 opponent fields = 24 real
 drafts per arm:
 
-| arm | opponents as shipped today | opponents that draft **legal** rosters |
-| --- | --- | --- |
-| **committed (shipped config)** | **24/24 illegal** — `{K: 24, DST: 5}` | **0/24 — legal, K at median R16** |
-| `lambda_slot_override` zeroed | 0/24, K at median R10 | 0/24 |
-| centred σ (candidate code fix) | 24/24 illegal | 0/24 |
-| feasibility gate (candidate code fix) | 24/24 illegal | 0/24 |
-| centred + gated | 24/24 illegal | 0/24 |
+| arm                                   | opponents as shipped today            | opponents that draft **legal** rosters |
+| ------------------------------------- | ------------------------------------- | -------------------------------------- |
+| **committed (shipped config)**        | **24/24 illegal** — `{K: 24, DST: 5}` | **0/24 — legal, K at median R16**      |
+| `lambda_slot_override` zeroed         | 0/24, K at median R10                 | 0/24                                   |
+| centred σ (candidate code fix)        | 24/24 illegal                         | 0/24                                   |
+| feasibility gate (candidate code fix) | 24/24 illegal                         | 0/24                                   |
+| centred + gated                       | 24/24 illegal                         | 0/24                                   |
 
 **Against a field that drafts legally the shipped engine is fine at every seat.** Against today's
 field it fails at every seat, and so does every candidate engine fix. Zeroing the override "works"
@@ -117,22 +117,22 @@ experiment. **Tier 7 closed by requiring E2/E6 evidence with `--replicates >= 3`
 `lambda_slot_override`. That evidence could not exist.**
 
 This is Tier 4's finding — "the simulated agent was not the shipped agent" — **half-fixed**. Tier 4
-repaired candidate *selection* (`candidate_cap` 50→180, ranking by MLV not raw value) and left the
-*score function* diverging. One rule implemented twice diverges; the fix is to implement it once.
+repaired candidate _selection_ (`candidate_cap` 50→180, ranking by MLV not raw value) and left the
+_score function_ diverging. One rule implemented twice diverges; the fix is to implement it once.
 
 ### Defect 3 — `λ_slot · σ` is a positional bias term (real, and NOT the cause of the above)
 
 Both factors are position-determined. `slot_state` is a property of position, and σ is
 overwhelmingly positional on the real board:
 
-| pos | n | min σ | median σ | max σ | full override swing (0.8·median) |
-| --- | --- | --- | --- | --- | --- |
-| K | 33 | 20.00 | **20.00** | 20.00 | 16.00 |
-| DST | 31 | 25.00 | **25.00** | 25.00 | 20.00 |
-| TE | 104 | 17.52 | 29.20 | 93.30 | 23.36 |
-| WR | 207 | 25.98 | 43.30 | 108.47 | 34.64 |
-| RB | 150 | 35.40 | 59.00 | 94.40 | 47.20 |
-| QB | 56 | 63.78 | **106.30** | 170.08 | **85.04** |
+| pos | n   | min σ | median σ   | max σ  | full override swing (0.8·median) |
+| --- | --- | ----- | ---------- | ------ | -------------------------------- |
+| K   | 33  | 20.00 | **20.00**  | 20.00  | 16.00                            |
+| DST | 31  | 25.00 | **25.00**  | 25.00  | 20.00                            |
+| TE  | 104 | 17.52 | 29.20      | 93.30  | 23.36                            |
+| WR  | 207 | 25.98 | 43.30      | 108.47 | 34.64                            |
+| RB  | 150 | 35.40 | 59.00      | 94.40  | 47.20                            |
+| QB  | 56  | 63.78 | **106.30** | 170.08 | **85.04**                        |
 
 Because the override assigns **opposite signs** to the two candidates being compared, the swing
 reaches `0.8·σ ≈ 85` points at QB — larger than the entire MLV signal in the endgame. Observed at
@@ -144,11 +144,11 @@ RB  Croskey-Merritt   MLV −44.80  λ=−0.40  σ=94.40  risk +37.76   score �
 ```
 
 A 45.76-point risk swing overturns a 44.80-point value verdict, to take a player whose own MLV says
-he *costs* 44.80. Note also that K and DST have **zero within-position σ variance** — every kicker
+he _costs_ 44.80. Note also that K and DST have **zero within-position σ variance** — every kicker
 is 20.00, every defense 25.00, both pinned at `_DEFAULT_SIGMA_FLOOR` — so for those two positions
 `λ·σ` carries no risk information whatsoever, only a positional shift.
 
-The λ *schedule* does not have this problem nearly as badly: it applies the same sign to every
+The λ _schedule_ does not have this problem nearly as badly: it applies the same sign to every
 candidate in a round, so it is common-mode and only re-ranks by σ, which is the intended "prefer
 upside late" behaviour. **The slot override is what breaks common-mode.**
 
@@ -159,8 +159,8 @@ Task 5 measures it, on both objectives, and recommends only if both support a ch
 
 - **A conflict surfaced, not resolved (per `config/league.json`'s `agent_usage_contract`).**
   The league file says only `"Bench": 8` with **no** eligibility. `league/constitution.py:31`
-  supplies `_BENCH_ELIGIBLE = (QB, RB, WR, TE)` and its own comment calls it *"a JAAFFL modeling
-  choice"*. So "a kicker occupies only the K slot" is the repo's assumption, not the owner's league
+  supplies `_BENCH_ELIGIBLE = (QB, RB, WR, TE)` and its own comment calls it _"a JAAFFL modeling
+  choice"_. So "a kicker occupies only the K slot" is the repo's assumption, not the owner's league
   file. Tier 8 does not change either. The fix inherits the assumption the rest of the engine
   already runs on; if CBS actually permits benching a kicker, one constant changes and every
   consumer follows.
@@ -173,26 +173,26 @@ Task 5 measures it, on both objectives, and recommends only if both support a ch
   `λ = −0.4` pays +8.00). Gating the hot path on `_BENCH_ELIGIBLE` would bet draft night on the
   ambiguous modeling choice above. Recorded as an owner question instead.
 - **A simulator is not a fact about drafting.** The opponents are behavioural agents, not the eleven
-  people in the room. What these measurements show is that the *harness* was broken; they do not
+  people in the room. What these measurements show is that the _harness_ was broken; they do not
   show that the engine will draft well on the night.
 
 ---
 
 ## File structure
 
-| File | Responsibility | Change |
-| --- | --- | --- |
-| `backend/src/jaaffl/engine/optimize.py` | roster structure derived from `LeagueSettings` | add `roster_capacity` |
-| `backend/src/jaaffl/engine/risk.py` | **new** — the one shipped risk/slot/punt rule | create |
-| `backend/src/jaaffl/engine/recommend.py` | hot path; now imports the rule instead of owning it | modify |
-| `backend/src/jaaffl/engine/simulate.py` | `SimContext.roster_capacity`; agents honour it; `ScoreAgent` uses `risk.py` | modify |
-| `backend/src/jaaffl/calibrate/tune.py` | carry capacity from `DraftContext` into `SimContext` | modify |
-| `backend/src/jaaffl/calibrate/pools.py` | fixture pool carries capacity too | modify |
-| `backend/tests/test_optimize.py` | `roster_capacity` unit tests | add |
-| `backend/tests/test_simulate.py` | opponents never roster an illegal player | add |
-| `backend/tests/test_risk.py` | imports move to the new home | modify |
-| `backend/tests/test_harness_fidelity.py` | **new** — the harness can SEE the shipped knobs | create |
-| `ROADMAP.md`, `docs/owner-manual-todo.md` | the corrected record | modify |
+| File                                      | Responsibility                                                              | Change                |
+| ----------------------------------------- | --------------------------------------------------------------------------- | --------------------- |
+| `backend/src/jaaffl/engine/optimize.py`   | roster structure derived from `LeagueSettings`                              | add `roster_capacity` |
+| `backend/src/jaaffl/engine/risk.py`       | **new** — the one shipped risk/slot/punt rule                               | create                |
+| `backend/src/jaaffl/engine/recommend.py`  | hot path; now imports the rule instead of owning it                         | modify                |
+| `backend/src/jaaffl/engine/simulate.py`   | `SimContext.roster_capacity`; agents honour it; `ScoreAgent` uses `risk.py` | modify                |
+| `backend/src/jaaffl/calibrate/tune.py`    | carry capacity from `DraftContext` into `SimContext`                        | modify                |
+| `backend/src/jaaffl/calibrate/pools.py`   | fixture pool carries capacity too                                           | modify                |
+| `backend/tests/test_optimize.py`          | `roster_capacity` unit tests                                                | add                   |
+| `backend/tests/test_simulate.py`          | opponents never roster an illegal player                                    | add                   |
+| `backend/tests/test_risk.py`              | imports move to the new home                                                | modify                |
+| `backend/tests/test_harness_fidelity.py`  | **new** — the harness can SEE the shipped knobs                             | create                |
+| `ROADMAP.md`, `docs/owner-manual-todo.md` | the corrected record                                                        | modify                |
 
 ---
 
@@ -832,7 +832,7 @@ until exit. Expect roughly 150 s per block unloaded and up to ~530 s under load.
 ./.venv/Scripts/python.exe scripts/run_tournament.py --seeds 8 --draws 800
 ```
 
-- [ ] **Step 3: Record BOTH objectives.** Every arm gets win probability *and* expected points,
+- [ ] **Step 3: Record BOTH objectives.** Every arm gets win probability _and_ expected points,
       with p-values and the replicate count. A one-sided number is how this project keeps fooling
       itself: Tier 5 showed κ buys championship odds by giving up points. Check the direction of
       `promotion_decision(a, b)` before quoting any p-value — it is one-sided with
@@ -848,17 +848,14 @@ until exit. Expect roughly 150 s per block unloaded and up to ~530 s under load.
 **Files:** none yet (measurement); a code change only if the evidence supports one.
 
 - [ ] **Step 1: Measure three arms against the Task 5 baseline**, on win probability AND points,
-      `--replicates 5`:
-      1. `lambda_slot_override` zeroed (the config-only arm).
-      2. **centred σ** — `λ·(σ_p − median σ at that position)`, so a risk tilt means "more or less
-         volatile than typical for his position" rather than "plays a volatile position". Implement
-         as a `sigma_median: Mapping[Position, float]` on `SimContext`, frozen at precompute (it is
-         a property of the player universe, not of who is left) and defaulting to empty = today's
-         raw σ. **The centred value must never be written to `ScoreComponents.sigma`**, which is
-         constrained `ge=0` and drives the overlay's risk band; only `risk_penalty` changes.
-      3. **feasibility gate** — the surplus ceiling is suppressed when `picks_remaining − 1` is less
-         than the number of unfilled starting slots, i.e. when this pick cannot be a stash. Reuses
-         Tier 7's capacity arithmetic and invents no coefficient.
+      `--replicates 5`: 1. `lambda_slot_override` zeroed (the config-only arm). 2. **centred σ** — `λ·(σ_p − median σ at that position)`, so a risk tilt means "more or less
+      volatile than typical for his position" rather than "plays a volatile position". Implement
+      as a `sigma_median: Mapping[Position, float]` on `SimContext`, frozen at precompute (it is
+      a property of the player universe, not of who is left) and defaulting to empty = today's
+      raw σ. **The centred value must never be written to `ScoreComponents.sigma`**, which is
+      constrained `ge=0` and drives the overlay's risk band; only `risk_penalty` changes. 3. **feasibility gate** — the surplus ceiling is suppressed when `picks_remaining − 1` is less
+      than the number of unfilled starting slots, i.e. when this pick cannot be a stash. Reuses
+      Tier 7's capacity arithmetic and invents no coefficient.
 
 - [ ] **Step 2: Decide honestly.** Recommend a change only if **both** objectives support it at
       `--replicates 5`. If they disagree, say so and recommend nothing — that is the Tier 5 trade,
@@ -887,7 +884,7 @@ def test_a_needed_starter_is_not_outbid_by_a_surplus_body_on_variance_alone() ->
 - Modify: `docs/owner-manual-todo.md` §1b
 
 - [ ] **Step 1: `ROADMAP.md`** — a Tier 8 block in the established voice covering: the corrected root
-      cause and that it replaces Tier 7's *and* Tier 8's own first account; the 24/24-vs-0/24 table;
+      cause and that it replaces Tier 7's _and_ Tier 8's own first account; the 24/24-vs-0/24 table;
       the 0/60-vs-60/60 blindness table; the σ-by-position table; the re-measured baseline; what was
       NOT done; and that Tier 4–7 numbers are superseded a third time.
 
@@ -941,7 +938,7 @@ node scripts/gen-overlay-tokens.mjs --check
 
 ## Self-review
 
-- **Spec coverage.** Goal 1 (re-measure) → Task 5, correctly sequenced *after* Tasks 2–3 because
+- **Spec coverage.** Goal 1 (re-measure) → Task 5, correctly sequenced _after_ Tasks 2–3 because
   either invalidates it. Goal 2 (the endgame defect) → Tasks 1–2, which fix the actual cause, plus
   Task 6 for the separate pick-quality defect Tier 7 mistook for it. The `--replicates >= 3` rule is
   honoured at 5. Both objectives are required at every decision point.
