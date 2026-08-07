@@ -13,6 +13,178 @@ order — later stages assume the earlier contracts exist.
 
 Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` done
 
+## 📍 Status — 2026-08-07 · Tier 8 (the endgame defect was never in the engine, and the harness could not see the knob)
+
+> **Tier 8 of the audit is merged** (PR #60). Tier 7 handed it a residual: the engine takes a second
+> quarterback over a kicker because `lambda_slot_override` pays for variance. Tier 8 set out to fix
+> that with E2/E6 evidence, and found first that **the evidence could not exist**, then that **the
+> defect was not in the engine at all**. Both corrections are measured, and the second one reverses
+> a conclusion three consecutive tiers reached.
+
+### The kicker famine was the opponent model
+
+Sweeping all 12 seats × 2 opponent fields on the real 581-player board — 24 drafts per arm:
+
+| arm                              | opponents as they were                | opponents that draft **legal** rosters |
+| -------------------------------- | ------------------------------------- | -------------------------------------- |
+| **committed (shipped config)**   | **24/24 illegal** — `{K: 24, DST: 5}` | **0/24 — legal, K at median R16**      |
+| `lambda_slot_override` zeroed    | 0/24, K at median R10                 | 0/24                                   |
+| centred σ (candidate fix)        | 24/24 illegal                         | 0/24                                   |
+| feasibility gate (candidate fix) | 24/24 illegal                         | 0/24                                   |
+
+**Against a field that drafts legally the shipped engine fills all nine slots at every seat.** Both
+candidate engine fixes fail 24/24 against the old field, and zeroing the override "worked" only by
+making the engine panic-draft a kicker in **round 10** to beat a field illegally consuming the whole
+supply — bad advice in a real room, not a fix.
+
+`NeedBasedAgent` / `VbdOnlyAgent` / `AdpNoiseAgent` / `SoftmaxVbdAgent` had no roster-capacity
+concept. Once an agent's dedicated need is met it falls through to greedy VBD, and late in a draft
+VBD **favours streaming positions** — a remaining kicker sits within a few points of his baseline
+while a 200th-ranked receiver is 60 below his. Measured: the field drafted **33 of 33** draftable
+kickers and **31** defenses for 12 teams, holding up to five each; on the fixture, **15 of 15** of
+each and **13 players rostered illegally in one draft**. The bench is `(QB, RB, WR, TE)`, so K and
+DST have capacity 1. `expand_starting_slots`, `lineup_value` and `optimize_roster` already honoured
+that — **only the draft agents did not.**
+
+The tell was in the numbers all along: five different fixes all failed at _exactly_ 96/192 on the
+fixture, because the pool was measuring the opponents, not the agent. With legal opponents every arm
+is **0/192**.
+
+**Tier 6's §5, Tier 7's residual, and Tier 8's own first pass all diagnosed this as the engine being
+unable to draft a kicker. All three were wrong.** Tier 7's specific instance (a second QB at R16,
+MLV −72.06, σ 170.08) does not reproduce: at R16 there is no kicker on the board at all, the engine
+takes a DST, and the final roster holds `QB:1`.
+
+### The harness could not see two shipped coefficients
+
+`ScoreAgent` — the agent every E2/E6 number is produced by — used a private phase-only λ and had no
+punt guard. 12 slots × 5 seeds, rosters compared bit-for-bit:
+
+```
+lambda_slot_override sign-flipped              rosters changed:   0/60   *** BLIND ***
+punt_guard disabled                            rosters changed:   0/60   *** BLIND ***
+lambda_schedule doubled  [POSITIVE CONTROL]    rosters changed:  60/60   MEASURABLE
+alpha = 0                [POSITIVE CONTROL]    rosters changed:  60/60   MEASURABLE
+```
+
+**So Tier 7's closing instruction — get E2/E6 evidence with `--replicates >= 3` before touching
+`lambda_slot_override` — was impossible to satisfy by anyone.** This is Tier 4's "the simulated agent
+was not the shipped agent" **half-fixed**: Tier 4 repaired candidate _selection_ and left the _score
+function_ diverging. The rule now lives once, in `engine/risk.py`, and
+`tests/test_harness_fidelity.py` requires every tuned knob to move at least one pick — verified by
+mutation.
+
+### 🔴 THE FINDING — `lambda_slot_override` is the most damaging term ever measured here
+
+Real board, **5 disjoint blocks × 8 seeds × 12 slots, 800 sampled seasons/draft**, every arm the
+shipped `ScoreAgent` with a flag (never a subclass) sharing ONE context so the seasons stay common
+random numbers:
+
+| arm                 | win prob   | Δ/slot      | min slot    | p          | points      | Δ/slot      | p          | both legs? |
+| ------------------- | ---------- | ----------- | ----------- | ---------- | ----------- | ----------- | ---------- | ---------- |
+| committed baseline  | 0.0121     | —           | —           | —          | 1462.48     | —           | —          | —          |
+| **override zeroed** | **0.0866** | **+0.0745** | **+0.0556** | **0.0002** | **1705.20** | **+242.73** | **0.0002** | **YES**    |
+| centred σ           | 0.0761     | +0.0641     | +0.0434     | 0.0002     | 1654.19     | +191.71     | 0.0002     | YES        |
+| feasibility gate    | 0.0110     | −0.0010     | −0.0027     | 0.9919     | 1463.04     | +0.56       | 0.1641     | no         |
+| centred + gated     | 0.0761     | +0.0641     | +0.0434     | 0.0002     | 1654.19     | +191.71     | 0.0002     | YES        |
+
+**Zeroing `lambda_slot_override` is worth +0.0745 championship probability per slot AND +242.73
+points per slot, at p = 0.0002 on both, non-negative at every one of the 12 slots on both.** No
+vector in this project's history has passed both legs on both objectives with five replicate blocks.
+For scale: the committed baseline wins **0.0121** where fair share in a 12-team field is **0.0833** —
+one seventh of it — and the override alone accounts for nearly all of the gap.
+
+The mechanism, and why the two halves must go together: `slot_state` is a property of **position**,
+and σ is overwhelmingly positional (median 20.00 at K · 25.00 at DST · 29.20 at TE · 43.30 at WR ·
+59.00 at RB · **106.30 at QB**, with **zero** within-position variance at K and DST — every kicker is
+20.00). Since the override assigns **opposite signs** to the two candidates being compared, the swing
+reaches `0.8·σ ≈ 85` points at QB, larger than the whole MLV signal in the endgame. Observed at R15:
+
+```
+K   Zane Gonzalez    MLV   0.00  λ=+0.40  σ=20.00  risk  −8.00   score −8.00
+RB  Croskey-Merritt  MLV −44.80  λ=−0.40  σ=94.40  risk +37.76   score −7.04   <- TAKEN
+```
+
+A 45.76-point risk swing overturns a 44.80-point value verdict, to take a player whose own MLV says
+he **costs** 44.80. The λ _schedule_ does not do this: it applies the same sign to every candidate in
+a round, so it is common-mode. **The override is what breaks common-mode.**
+
+**The centred-σ code fix works and is still the wrong answer.** It passes both legs (+0.0641 /
++191.71) but is beaten by simply removing the mechanism, so Tier 8 ships no scoring change. The
+feasibility gate is **refuted** — inert on both objectives.
+
+**Recommendation: set `lambda_slot_override` to `{0.0, 0.0}`.** NOT done here — `config/engine.json`
+is owner-adopted and a simulator result is not a fact about drafting. See `docs/owner-manual-todo.md`
+§1.
+
+### The re-measured baseline (Goal 1), and what it costs
+
+E2 `--real --trials 30 --replicates 5 --eval-seeds 8 --draws 800`:
+
+```
+tuned:  kappa=0.559 alpha=0.378 lambda=[0.238, 0.115, 0.0, -0.336, -0.447] rel K=0.233 DST=0.562
+win prob 0.0121 -> 0.0138  mean_diff +0.0017  min_slot +0.0000  p=0.0005   -> PROMOTE
+points 1462.48 -> 1478.48  mean_diff +16.00   min_slot -2.15    p=0.0093
+per-slot noise over 5 blocks: median 0.0008, max 0.0028
+```
+
+The gate says PROMOTE for the first time with replicates — **and it is a trap.** The tuned vector buys
+**+0.0017** while a knob `run_study` cannot search buys **+0.0745**, forty-four times more. §10.3 does
+not list `lambda_slot_override` as a dimension **at all**, so the study is structurally incapable of
+finding the largest effect in the system. Tier 6 showed §10.3's ranges exclude the measured optima for
+κ, α and λ; Tier 8 adds that one of the two most important knobs is not in §10.3's search space.
+**Nothing was written; `--write` was never passed.**
+
+E6 (fixture, 8 seeds, 800 draws) is the other half of the same story:
+
+| agent      | win prob   | points     |
+| ---------- | ---------- | ---------- |
+| `vbd_only` | **0.0984** | 1517.7     |
+| **ours**   | **0.0180** | **1562.1** |
+| `adp_only` | 0.0026     | 1157.8     |
+
+**Our agent scores more points than plain VBD (+44.3/slot, p = 0.0017) while winning the championship
+5.5× less often (−0.0805, p = 1.0000).** Tier 4's headline — "our edge over VBD-only is on
+championship probability, not points" — is now **exactly inverted**.
+
+### ⚠️ A Tier 6 conclusion is corrected: `reliability_shrinkage` is decision-inert
+
+With the punt guard finally live in the agent, shrinkage moves **0 of 60** rosters; with the punt
+guard off it moves **51 of 60**. Both mechanisms defer K/DST and the punt guard is absolute, so it
+wins. `recommend()` has carried the punt guard since v1, so **Tier 6's "reliability helps, +0.0027,
+p = 0.0212 at 32 seeds" was measured on an agent with no punt guard and does not describe the shipped
+engine.** `run_study` therefore spends two of five search dimensions on a knob that cannot move a
+pick — the same dilution Tier 6 found and removed for `modifier_cap`. Shrinkage still shapes μ in
+`build_projections`, so only its _decision_ role is dead; both halves are pinned by a test.
+
+### What Tier 8 did NOT do
+
+- **No scoring code changed.** `engine/risk.py` is an extraction, byte-equivalent in behaviour; the
+  two experiment levers (`centre_sigma`, `gate_surplus_stash`) are off by default and unwired from
+  the live path. `config/engine.json` and `config/league.json` are untouched.
+- **The capacity rule binds the SIMULATOR only, never `recommend()`.** The live path could also
+  surface a second kicker (MLV 0, but a SURPLUS `λ = −0.4` pays +8.00). Gating the hot path would bet
+  draft night on `constitution._BENCH_ELIGIBLE`, which its own comment calls "a JAAFFL modeling
+  choice" — `config/league.json` specifies a bench COUNT with no eligibility. **Surfaced per the
+  `agent_usage_contract`, not resolved**; it is an owner question in `docs/owner-manual-todo.md` §1b.
+- **The "remove the override branches entirely" variant is unmeasured.** The measured arm sets both
+  coefficients to 0.0, which makes LAST_OPEN_STARTABLE and SURPLUS candidates carry **no** risk term
+  while NORMAL candidates keep the phase λ. Letting all three fall through to the phase schedule is a
+  code change and a different arm.
+- **Timing is still not claimed optimal, and `--real` E6 was not run** (the tournament is
+  fixture-only). Nor was the reliability double-application investigated: on `--real`,
+  `SimContext.value` is already shrunk by `build_projections` and `ScoreAgent._effective_value`
+  shrinks it again.
+- **A better simulator is still a simulator.** The opponents are behavioural agents, not the eleven
+  people in the room.
+
+### ⚠️ Everything numeric in Tiers 4–7 is superseded a third time
+
+Tier 7 invalidated the Tier 4–6 numbers by changing what a roster is worth. Tier 8 changes what the
+opponents do **and** what our own agent scores, so every figure moves again. The α = 0 recommendation
+remains **suspended**, not withdrawn, and has now been overtaken in importance: α is worth ~0.013
+where the override is worth 0.0745. Re-measure before quoting anything.
+
 ## 📍 Status — 2026-07-27 · Tier 7 (the engine could not fill a legal roster, and the objective could not see why)
 
 > **Tier 7 of the audit is merged** (PR #58). Tier 6 _found_ the late-round defect and wrote it
