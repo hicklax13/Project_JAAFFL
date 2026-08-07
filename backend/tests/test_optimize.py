@@ -201,3 +201,24 @@ def test_mlv_is_unchanged_while_picks_outnumber_the_slots_they_must_fill() -> No
         assert marginal_lineup_value(
             "rb2", ["qb1", "rb1"], mu, pos, BASELINES, slots, picks_remaining=k
         ) == pytest.approx(marginal_lineup_value("rb2", ["qb1", "rb1"], mu, pos, BASELINES, slots))
+
+
+def test_roster_capacity_counts_every_slot_a_position_is_eligible_for() -> None:
+    """K and DST fit only their own starting slot — the JAAFFL bench is (QB, RB, WR, TE).
+
+    Measured 2026-08-07: the simulated opponent field drafted 33 of 33 draftable kickers for 12
+    teams, holding up to five each, into slots this roster does not have.
+    """
+    from jaaffl.engine.optimize import roster_capacity
+
+    capacity = roster_capacity(jaaffl_settings())
+    assert capacity[Position.K] == 1
+    assert capacity[Position.DST] == 1
+    assert capacity[Position.QB] == 9  # 1 dedicated starter + the 8 shared bench slots
+    assert capacity[Position.WR] == 12  # 3 dedicated + the WR/RB flex + 8 bench
+
+
+def test_roster_capacity_never_reports_a_position_the_roster_cannot_hold() -> None:
+    from jaaffl.engine.optimize import roster_capacity
+
+    assert Position.LB not in roster_capacity(jaaffl_settings())
