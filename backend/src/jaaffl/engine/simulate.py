@@ -20,6 +20,15 @@ from typing import TYPE_CHECKING, Protocol
 from jaaffl.config import EngineParams
 from jaaffl.domain import Position
 from jaaffl.engine.optimize import StartingSlot, lineup_value, marginal_lineup_value
+from jaaffl.engine.risk import (
+    has_open_non_puntable_slot,
+    is_punted,
+    lambda_weight,
+    open_startable_by_position,
+    puntable_positions,
+    seat_roster,
+    slot_state_for,
+)
 
 if TYPE_CHECKING:
     import numpy as np
@@ -193,9 +202,7 @@ def _vbd(pid: str, ctx: SimContext) -> float:
     return ctx.value[pid] - ctx.baselines.get(ctx.position[pid], 0.0)
 
 
-def _rosterable(
-    available: Sequence[str], my_roster: Sequence[str], ctx: SimContext
-) -> list[str]:
+def _rosterable(available: Sequence[str], my_roster: Sequence[str], ctx: SimContext) -> list[str]:
     """``available`` minus players this roster has no legal slot left for (``roster_capacity``).
 
     Every agent narrows to this first. Without it, once an agent's dedicated need was met it fell
@@ -299,21 +306,21 @@ class SoftmaxVbdAgent:
         return str(rng.choice(candidates, p=weights / weights.sum()))
 
 
-def _phase_lambda(params: EngineParams, round_no: int) -> float:
-    """The phase-default risk λ for ``round_no`` from ``params.lambda_schedule`` (the sim uses the
-    phase default; the last-startable/surplus override is a hot-path refinement)."""
-    for entry in params.lambda_schedule:
-        low, high = entry["rounds"]
-        if low <= round_no <= high:
-            return float(entry["lambda"])
-    return 0.0
-
-
 class ScoreAgent:
-    """Our agent: drafts by ``Score(p) = MLV + κ·max(0, VONA) − λ(round)·σ + α·cliff`` under trial
-    params (design §10.3). VONA is a tractable within-position cliff — ``MLV(p)`` minus the best
-    OTHER same-position candidate's MLV — the "take the scarce one now" proxy.
-    ``σ`` / ``cliff`` come from the context (0 for the behavioral-opponent pools that omit them).
+    """Our agent: drafts by ``Score(p) = MLV + κ·max(0, VONA) − λ·σ + α·cliff`` under trial params
+    (design §10.3), punt-sorted. VONA is a tractable within-position cliff — ``MLV(p)`` minus the
+    best OTHER same-position candidate's MLV — the "take the scarce one now" proxy, and the one
+    deliberate, declared departure from ``recommend.py`` (which uses the survival-weighted
+    ``expected_best_available``). ``σ`` / ``cliff`` come from the context (0 for the
+    behavioral-opponent pools that omit them).
+
+    **λ and the punt guard are the SHIPPED ones (Tier 8).** ``λ`` comes from
+    ``engine.risk.lambda_weight``, so ``lambda_slot_override`` applies, and the ranking is
+    punt-sorted through ``engine.risk.is_punted``. Before Tier 8 this agent read only
+    ``lambda_schedule`` and had no punt guard, so **E2/E6 could not measure either key**: driven to
+    an extreme, each changed 0 of 60 simulated rosters while ``alpha`` and ``lambda_schedule``
+    changed 60 of 60. Tier 7 closed by requiring E2/E6 evidence before touching
+    ``lambda_slot_override``; that evidence was not obtainable.
 
     **Candidates match the shipped agent.** ``recommend.py`` keeps the top ``params.candidate_cap``
     available **by MLV**; this used to keep the top 50 **by raw value**, and ``evaluate_params``
@@ -383,7 +390,17 @@ class ScoreAgent:
         # skill players whose marginal contribution to the starting nine is zero.
         candidates = sorted(available, key=lambda p: all_mlv[p], reverse=True)[: self._cap]
         mlv = {p: all_mlv[p] for p in candidates}
-        lam = _phase_lambda(params, len(my_roster) + 1)
+
+        # The SHIPPED slot/punt rule, from the one module recommend.py also reads. Until Tier 8
+        # this used a private phase-only lambda and no punt guard, so E2/E6 could not see
+        # `lambda_slot_override` or `punt_guard` at all: 0 of 60 simulated rosters moved when
+        # either was driven to an extreme, while `alpha` and `lambda_schedule` moved 60 of 60.
+        round_no = len(my_roster) + 1
+        filled = seat_roster(list(my_roster), ctx.position, ctx.slots)
+        open_startable = open_startable_by_position(filled, ctx.slots)
+        open_non_puntable = has_open_non_puntable_slot(
+            filled, ctx.slots, puntable_positions(params)
+        )
 
         def vona(pid: str) -> float:
             pos = ctx.position[pid]
@@ -391,6 +408,7 @@ class ScoreAgent:
             return mlv[pid] - (max(others) if others else 0.0)
 
         def score(pid: str) -> float:
+            lam = lambda_weight(round_no, slot_state_for(ctx.position[pid], open_startable), params)
             return (
                 mlv[pid]
                 + params.kappa * max(0.0, vona(pid))
@@ -398,7 +416,19 @@ class ScoreAgent:
                 + params.alpha * ctx.cliff_bonus.get(pid, 0.0)
             )
 
-        return max(candidates, key=score)
+        # Ranked exactly as recommend.py ranks: non-punted first, then score descending.
+        return min(
+            candidates,
+            key=lambda pid: (
+                is_punted(
+                    ctx.position[pid],
+                    round_no,
+                    params,
+                    has_open_non_puntable=open_non_puntable,
+                ),
+                -score(pid),
+            ),
+        )
 
 
 def simulate_draft(

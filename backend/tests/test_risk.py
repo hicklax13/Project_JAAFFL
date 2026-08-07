@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from jaaffl.engine.recommend import SlotState, lambda_weight
+from jaaffl.engine.risk import SlotState, lambda_weight
 from tests.engine_fixtures import engine_params
 
 

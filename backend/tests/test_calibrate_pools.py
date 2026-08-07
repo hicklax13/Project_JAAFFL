@@ -34,9 +34,15 @@ from jaaffl.engine.simulate import (
     simulate_draft,
 )
 
-# Two (slot, seed) cells is enough to catch a params-blind pool and keeps this under a few seconds;
-# the pre-Tier-4 pool was identical in ALL 96 cells, so a blind pool cannot squeak through on two.
-_CELLS = ((0, 1), (7, 1001))
+# The pre-Tier-4 pool was identical in ALL 96 cells, so a blind pool cannot squeak through here.
+#
+# Tier 8 WIDENED this from two cells to six. Once `ScoreAgent` became the shipped agent (punt guard
+# + `lambda_slot_override`), the endgame lost degrees of freedom and `alpha` fell to **14 of 96**
+# cells — still live, but no longer visible in the two cells this guard happened to sample, so a
+# real term looked dead. Six cells chosen to include known-sensitive seats rather than a lucky pair:
+# a guard that samples too thinly reports its own sampling, which is the Tier 6 min-slot mistake in
+# a different costume.
+_CELLS = ((0, 1), (7, 1001), (1, 1002), (11, 1), (9, 2002), (6, 1003))
 
 
 def _roster(params: EngineParams, slot: int, seed: int) -> list[str]:
@@ -53,6 +59,10 @@ def _with(**overrides: object) -> EngineParams:
     """A variant of the COMMITTED vector — not of bare ``EngineParams()``, whose empty
     ``lambda_schedule`` would make a "lambda off" variant a silent no-op."""
     return EngineParams.model_validate({**committed_engine_params().model_dump(), **overrides})
+
+
+_NO_PUNT: dict = {"enabled": False, "stream_round": {}}
+_FLIPPED_OVERRIDE = {"last_startable_slot_floor": -2.0, "surplus_stash_ceiling": 2.0}
 
 
 def _lambda_off() -> EngineParams:
@@ -114,13 +124,54 @@ def test_demo_pool_contains_the_positions_reliability_shrinkage_targets() -> Non
     assert present[Position.DST] > 12
 
 
+def test_reliability_shrinkage_is_subsumed_by_the_punt_guard() -> None:
+    """⚠️ `reliability_shrinkage` cannot change a pick in the SHIPPED engine. Measured, Tier 8.
+
+    Both mechanisms exist to defer K and DST. Shrinkage pulls their μ toward replacement, which
+    lowers their MLV; the punt guard sorts them behind every non-punted candidate outright until
+    their stream round (K R17, DST R16). The guard is ABSOLUTE, so it wins: measured over 12 slots
+    x 5 seeds, shrinkage moves **0 of 60** rosters with the shipped punt guard on and **51 of 60**
+    with it off.
+
+    `recommend()` has carried the punt guard since v1, so this redundancy is a property of the
+    shipped engine — Tier 8 only made it visible, by giving `ScoreAgent` the punt guard it had
+    never had. The consequence is a correction: **Tier 6's finding that reliability_shrinkage
+    "helps" (+0.0027/slot, p = 0.0212, 32 seeds) was measured on an agent with no punt guard, and
+    is not a statement about the engine that ships.** It also means `run_study` spends two of its
+    five search dimensions on a knob that cannot move a pick — the same power dilution Tier 6 found
+    and removed for `modifier_cap`.
+
+    Shrinkage still shapes μ itself in `engine/projections.py::build_projections` (baseline +
+    reliability·(adj − baseline)), so it is not inert everywhere — only its DECISION role is dead.
+    This test pins both halves so a future tier cannot re-derive the wrong conclusion from either.
+    """
+    shrunk = {"K": 0.1, "DST": 0.1}
+    with_guard = sum(
+        1
+        for slot, seed in _CELLS
+        if _roster(committed_engine_params(), slot, seed)
+        != _roster(_with(reliability_shrinkage=shrunk), slot, seed)
+    )
+    without_guard = sum(
+        1
+        for slot, seed in _CELLS
+        if _roster(_with(punt_guard=_NO_PUNT), slot, seed)
+        != _roster(_with(punt_guard=_NO_PUNT, reliability_shrinkage=shrunk), slot, seed)
+    )
+    assert with_guard == 0, "the punt guard no longer dominates — re-measure before trusting Tier 6"
+    assert without_guard > 0, "shrinkage is dead for some OTHER reason; find it before proceeding"
+
+
 @pytest.mark.parametrize(
     ("term", "mutated"),
     [
         ("kappa", _with(kappa=0.0)),
         ("alpha", _with(alpha=0.0)),
         ("lambda", _lambda_off()),
-        ("reliability_shrinkage", _with(reliability_shrinkage={"K": 1.0, "DST": 1.0})),
+        ("lambda_slot_override", _with(lambda_slot_override=_FLIPPED_OVERRIDE)),
+        ("punt_guard", _with(punt_guard=_NO_PUNT)),
+        # NOT `reliability_shrinkage` — it is subsumed by the punt guard, which is a property of
+        # the shipped engine rather than of this pool. See the dedicated test below.
     ],
 )
 def test_demo_pool_is_sensitive_to_every_strategic_term(term: str, mutated: EngineParams) -> None:

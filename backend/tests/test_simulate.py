@@ -167,6 +167,15 @@ def test_score_agent_vona_prefers_the_scarcer_position() -> None:
 
 
 def test_score_agent_reliability_shrinkage_defers_a_high_variance_dst() -> None:
+    """The shrinkage MECHANISM, isolated from the punt guard that subsumes it.
+
+    ``punt_guard`` is switched off here on purpose. Since Tier 8 gave ``ScoreAgent`` the shipped
+    punt guard, a DST is sorted behind every non-punted candidate until R16 regardless of its
+    score, so with the guard on this comparison has only one possible answer and would test the
+    guard rather than shrinkage. Measured over 12 slots x 5 seeds on the fixture pool, shrinkage
+    moves 0 of 60 rosters with the shipped guard and 51 of 60 without it — pinned in
+    ``test_calibrate_pools::test_reliability_shrinkage_is_subsumed_by_the_punt_guard``.
+    """
     from jaaffl.engine.optimize import expand_starting_slots
 
     # A DST outvalues an RB on raw μ, but reliability shrinkage (R1) pulls the noisy DST toward its
@@ -178,15 +187,44 @@ def test_score_agent_reliability_shrinkage_defers_a_high_variance_dst() -> None:
         slots=expand_starting_slots(_settings()),
         roster_size=17,
     )
-    no_rel = EngineParams(kappa=0.0, alpha=0.0, lambda_schedule=[], reliability_shrinkage={})
+    no_punt: dict = {"enabled": False, "stream_round": {}}
+    no_rel = EngineParams(
+        kappa=0.0, alpha=0.0, lambda_schedule=[], reliability_shrinkage={}, punt_guard=no_punt
+    )
     assert (
         ScoreAgent(no_rel).pick(["rb_a", "dst_a"], [], ctx) == "dst_a"
     )  # DST MLV 150 > RB MLV 140
     shrink = EngineParams(
-        kappa=0.0, alpha=0.0, lambda_schedule=[], reliability_shrinkage={"DST": 0.1}
+        kappa=0.0,
+        alpha=0.0,
+        lambda_schedule=[],
+        reliability_shrinkage={"DST": 0.1},
+        punt_guard=no_punt,
     )
     # DST eff = 50 + 0.1·(200−50) = 65 → MLV 15 << RB MLV 140.
     assert ScoreAgent(shrink).pick(["rb_a", "dst_a"], [], ctx) == "rb_a"
+
+
+def test_score_agent_punt_guard_defers_a_dst_that_shrinkage_alone_would_take() -> None:
+    """The other half: with the SHIPPED punt guard the DST is deferred whatever shrinkage says.
+
+    This is why ``reliability_shrinkage`` is decision-inert in the engine that ships, and why
+    Tier 6's "reliability helps" measurement — taken on a ScoreAgent with no punt guard — does not
+    describe it.
+    """
+    from jaaffl.engine.optimize import expand_starting_slots
+
+    ctx = SimContext(
+        value={"rb_a": 190.0, "dst_a": 200.0},
+        position={"rb_a": Position.RB, "dst_a": Position.DST},
+        baselines=dict.fromkeys(Position, 50.0),
+        slots=expand_starting_slots(_settings()),
+        roster_size=17,
+    )
+    shipped = EngineParams(kappa=0.0, alpha=0.0, lambda_schedule=[], reliability_shrinkage={})
+    assert shipped.punt_guard["stream_round"]["DST"] == 16
+    # Round 1 (empty roster) with QB/RB/WR/TE/K slots open → the DST is punted out of the top spot.
+    assert ScoreAgent(shipped).pick(["rb_a", "dst_a"], [], ctx) == "rb_a"
 
 
 def test_score_agent_defaults_its_candidate_cap_to_the_configured_one() -> None:
@@ -201,7 +239,11 @@ def test_score_agent_ranks_candidates_by_mlv_so_it_can_fill_a_k_or_dst_slot() ->
     """`recommend()` caps by MLV; `ScoreAgent` capped by RAW VALUE. K and DST have low raw value but
     high MLV the moment their dedicated slot is empty, so a value-ranked cap hides them entirely —
     the simulated agent could not draft a DST at all, which silently made `reliability_shrinkage`
-    (a parameter `run_study` tunes) unable to affect a single pick."""
+    (a parameter `run_study` tunes) unable to affect a single pick.
+
+    `punt_guard` is off here so the assertion tests CANDIDATE RANKING — the thing this test is
+    named for — rather than the punt sort Tier 8 added, which would defer the DST until R16 no
+    matter where it ranked."""
     from jaaffl.engine.optimize import expand_starting_slots
 
     # Twelve deep WRs outrank the only DST on raw value; with a cap of 3 a value-ranked agent never
@@ -215,7 +257,13 @@ def test_score_agent_ranks_candidates_by_mlv_so_it_can_fill_a_k_or_dst_slot() ->
         slots=expand_starting_slots(_settings()),
         roster_size=17,
     )
-    params = EngineParams(kappa=0.0, alpha=0.0, lambda_schedule=[], reliability_shrinkage={})
+    params = EngineParams(
+        kappa=0.0,
+        alpha=0.0,
+        lambda_schedule=[],
+        reliability_shrinkage={},
+        punt_guard={"enabled": False, "stream_round": {}},
+    )
     roster = ["wr0", "wr1", "wr2", "wr3"]  # WR slots + flex already full → another WR adds nothing
     agent = ScoreAgent(params, candidate_cap=3)
     assert agent.pick(sorted(value), roster, ctx) == "dst_a"
