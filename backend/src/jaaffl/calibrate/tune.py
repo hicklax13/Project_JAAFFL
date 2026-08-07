@@ -19,6 +19,7 @@ from statistics import mean, stdev
 from typing import TYPE_CHECKING, Protocol
 
 from jaaffl.config import EngineParams
+from jaaffl.engine.optimize import roster_capacity
 from jaaffl.engine.simulate import (
     DraftAgent,
     ScoreAgent,
@@ -47,6 +48,7 @@ def sim_context_from_draft_context(dc: DraftContext) -> SimContext:
         adp_stdev=dict(dc.adp_sd),
         sigma={pid: proj.sigma for pid, proj in dc.projections.items()},
         cliff_bonus=dict(dc.cliff_bonus),
+        roster_capacity=roster_capacity(dc.settings),
     )
 
 

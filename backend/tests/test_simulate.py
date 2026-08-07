@@ -391,3 +391,39 @@ def test_mc_expected_best_available_matches_the_adp_agent_model_with_no_noise() 
     )
     expected = max(mlv[pid] for pid in by_pos[Position.RB] if pid in remaining)
     assert out[Position.RB] == pytest.approx(expected)
+
+
+def test_no_simulated_team_drafts_a_player_it_cannot_roster() -> None:
+    """The opponent field was manufacturing a famine no engine could survive.
+
+    Measured 2026-08-07 on the fixture pool: the vbd-only field took **15 of 15** kickers and
+    **15 of 15** defenses for 12 teams and rostered 13 players illegally. On the real 581-player
+    board it took **33 of 33** draftable kickers. Once an agent's dedicated need is met it falls
+    through to greedy VBD, and late in the draft VBD favours streaming positions — a remaining
+    kicker sits within a few points of his baseline while a 200th-ranked receiver is 60 below his.
+
+    That artifact, not the scoring rule, is what Tier 6, Tier 7 and Tier 8's own first pass all
+    diagnosed as "the engine cannot draft a kicker": swept over 12 seats x 2 opponent fields, the
+    shipped engine is 24/24 illegal against this field and **0/24 against opponents that draft
+    legal rosters**, taking its kicker at median R16.
+    """
+    from collections import Counter
+
+    from jaaffl.calibrate.pools import committed_engine_params, demo_sim_context
+    from jaaffl.engine.simulate import ScoreAgent, VbdOnlyAgent, simulate_draft
+
+    ctx = demo_sim_context()
+    rosters = simulate_draft(
+        ctx,
+        our_slot=5,
+        our_agent=ScoreAgent(committed_engine_params()),
+        opponents=[VbdOnlyAgent()],
+        seed=2002,
+    )
+    illegal = [
+        (team, position.value, held, ctx.roster_capacity[position])
+        for team, roster in enumerate(rosters)
+        for position, held in Counter(ctx.position[pid] for pid in roster).items()
+        if held > ctx.roster_capacity[position]
+    ]
+    assert illegal == [], f"(team, position, held, capacity) rostered illegally: {illegal}"

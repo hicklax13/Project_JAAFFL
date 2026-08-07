@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from jaaffl.config import EngineParams
 from jaaffl.domain import LeagueSettings, Position, RosterSlot
-from jaaffl.engine.optimize import expand_starting_slots
+from jaaffl.engine.optimize import expand_starting_slots, roster_capacity
 from jaaffl.engine.simulate import SimContext
 
 # Per-position player counts, tier size, and the value curve. Values decay GENTLY inside a tier and
@@ -185,4 +185,5 @@ def demo_sim_context() -> SimContext:
         adp_stdev=adp_stdev,
         sigma=sigma,
         cliff_bonus=cliff_bonus,
+        roster_capacity=roster_capacity(settings),
     )

@@ -42,6 +42,10 @@ class SimContext:
     adp_stdev: Mapping[str, float] = field(default_factory=dict)
     sigma: Mapping[str, float] = field(default_factory=dict)
     cliff_bonus: Mapping[str, float] = field(default_factory=dict)
+    # position -> how many that ONE team may legally roster (``optimize.roster_capacity``). Empty
+    # means "unlimited", which is bit-identical to the pre-Tier-8 behaviour, so a caller that has
+    # not opted in is unchanged.
+    roster_capacity: Mapping[Position, int] = field(default_factory=dict)
 
 
 def optimal_lineup_value(roster: Sequence[str], ctx: SimContext) -> float:
@@ -189,6 +193,35 @@ def _vbd(pid: str, ctx: SimContext) -> float:
     return ctx.value[pid] - ctx.baselines.get(ctx.position[pid], 0.0)
 
 
+def _rosterable(
+    available: Sequence[str], my_roster: Sequence[str], ctx: SimContext
+) -> list[str]:
+    """``available`` minus players this roster has no legal slot left for (``roster_capacity``).
+
+    Every agent narrows to this first. Without it, once an agent's dedicated need was met it fell
+    through to greedy VBD — which late in a draft favours STREAMING positions, because a remaining
+    kicker sits within a few points of his baseline while a 200th-ranked receiver is 60 below his.
+    Measured 2026-08-07: the field drafted 33 of 33 draftable kickers for 12 teams, holding up to
+    five each, and that famine (not the scoring rule) is what three tiers running mistook for the
+    engine being unable to draft a kicker.
+
+    Falls back to the unfiltered pool if nothing is legal, so an agent can never fail to pick — a
+    simulated draft that cannot complete would be worse than one final illegal pick, and
+    ``test_simulate`` guards the outcome either way. An empty ``roster_capacity`` means unlimited.
+    """
+    if not ctx.roster_capacity:
+        return list(available)
+    held: defaultdict[Position, int] = defaultdict(int)
+    for pid in my_roster:
+        held[ctx.position[pid]] += 1
+    legal = [
+        pid
+        for pid in available
+        if held[ctx.position[pid]] < ctx.roster_capacity.get(ctx.position[pid], len(available))
+    ]
+    return legal or list(available)
+
+
 class DraftAgent(Protocol):
     """A drafting policy: choose one ``player_id`` from ``available`` given the current roster."""
 
@@ -205,29 +238,31 @@ class VbdOnlyAgent:
     """Pure static VOR — argmax value − replacement baseline; no VONA/risk/cliff (design §6.C.2)."""
 
     def pick(self, available, my_roster, ctx, rng=None) -> str:
-        return max(available, key=lambda p: _vbd(p, ctx))
+        return max(_rosterable(available, my_roster, ctx), key=lambda p: _vbd(p, ctx))
 
 
 class NeedBasedAgent:
     """Fills an empty dedicated starting slot first (best-value eligible), else best VBD."""
 
     def pick(self, available, my_roster, ctx, rng=None) -> str:
+        pool = _rosterable(available, my_roster, ctx)
         need = _unfilled_positions(my_roster, ctx)
         if need:
-            fillers = [p for p in available if ctx.position[p] in need]
+            fillers = [p for p in pool if ctx.position[p] in need]
             if fillers:
                 return max(fillers, key=lambda p: ctx.value[p])
-        return max(available, key=lambda p: _vbd(p, ctx))
+        return max(pool, key=lambda p: _vbd(p, ctx))
 
 
 class AdpNoiseAgent:
     """The market's central tendency — argmin adp + N(0, adp_stdev). Stateless; rng from the sim."""
 
     def pick(self, available, my_roster, ctx, rng=None) -> str:
+        pool = _rosterable(available, my_roster, ctx)
         if rng is None:  # no rng → deterministic argmin (no noise)
-            return min(available, key=lambda p: ctx.adp.get(p, _FAR))
+            return min(pool, key=lambda p: ctx.adp.get(p, _FAR))
         return min(
-            available,
+            pool,
             key=lambda p: ctx.adp.get(p, _FAR) + float(rng.normal(0.0, ctx.adp_stdev.get(p, 0.0))),
         )
 
@@ -252,7 +287,8 @@ class SoftmaxVbdAgent:
         self._cap = candidate_cap
 
     def pick(self, available, my_roster, ctx, rng=None) -> str:
-        candidates = sorted(available, key=lambda p: _vbd(p, ctx), reverse=True)[: self._cap]
+        pool = _rosterable(available, my_roster, ctx)
+        candidates = sorted(pool, key=lambda p: _vbd(p, ctx), reverse=True)[: self._cap]
         if rng is None:  # no rng -> deterministic argmax, matching the other agents' convention
             return candidates[0]
         import numpy as np
@@ -317,6 +353,8 @@ class ScoreAgent:
     def pick(self, available, my_roster, ctx, rng=None) -> str:
         params = self._params
         value = self._effective_value(ctx)
+        # A league rule, not a strategy: never spend a pick on a player no roster slot can hold.
+        available = _rosterable(available, my_roster, ctx)
         # Picks left, including this one. A replacement phantom you have no pick left to draft is
         # not a player, so MLV stops pricing an unfillable slot as though it were free (Tier 7).
         picks_remaining = max(0, ctx.roster_size - len(my_roster))
