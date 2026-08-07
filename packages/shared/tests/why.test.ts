@@ -211,7 +211,13 @@ describe("whyTermBar — box geometry + display text (§6.5)", () => {
 
   it("anchors a diverging PENALTY to the RIGHT edge so it paints left of the midline (§6.5)", () => {
     const b = whyTermBar(
-      mkTerm({ key: "risk", anchor: "diverging", contribution: -2.1, barFraction: 0.5, colorRole: "critical" }),
+      mkTerm({
+        key: "risk",
+        anchor: "diverging",
+        contribution: -2.1,
+        barFraction: 0.5,
+        colorRole: "critical",
+      }),
     );
     expect(b.anchorEdge).toBe("right");
     expect(b.offsetPct).toBe(50);
@@ -222,7 +228,13 @@ describe("whyTermBar — box geometry + display text (§6.5)", () => {
 
   it("anchors a diverging BONUS to the LEFT edge so it paints right of the midline", () => {
     const b = whyTermBar(
-      mkTerm({ key: "risk", anchor: "diverging", contribution: 1.5, barFraction: 0.3, colorRole: "pine" }),
+      mkTerm({
+        key: "risk",
+        anchor: "diverging",
+        contribution: 1.5,
+        barFraction: 0.3,
+        colorRole: "pine",
+      }),
     );
     expect(b.anchorEdge).toBe("left");
     expect(b.offsetPct).toBe(50);

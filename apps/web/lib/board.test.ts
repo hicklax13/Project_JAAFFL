@@ -4,7 +4,13 @@ import type { BoardPick } from "@jaaffl/shared";
 
 import { toDraftBoard } from "./board";
 
-function pick(overall: number, round: number, pickInRound: number, teamId: string, name: string): BoardPick {
+function pick(
+  overall: number,
+  round: number,
+  pickInRound: number,
+  teamId: string,
+  name: string,
+): BoardPick {
   return {
     overall,
     round,

@@ -36,17 +36,17 @@ the live board. See [`apps/extension/README.md`](apps/extension/README.md).
 A FastAPI service bound to `127.0.0.1`. It is the brain of the system, organized into
 subpackages that map to roadmap stages:
 
-| Package             | Roadmap stage | Responsibility                                                        |
-| ------------------- | ------------- | -------------------------------------------------------------------- |
-| `jaaffl.domain`     | —             | Pydantic models: the shared vocabulary (mirror of `packages/shared`) |
-| `jaaffl.config`     | —             | Typed settings loaded from environment (`.env`)                      |
-| `jaaffl.api`        | 1             | HTTP/WebSocket endpoints; receives draft events, serves recs         |
-| `jaaffl.ingest`     | 1–2           | Normalize raw CBS payloads into domain events                        |
-| `jaaffl.league`     | 2             | CBS scoring parser, replacement (VORP) values, positional scarcity   |
-| `jaaffl.data`       | 3             | DuckDB/SQLite/Parquet warehouse and cross-source ID crosswalks       |
-| `jaaffl.providers`  | 4             | Provider protocol + nflverse/FantasyPros/... adapters                |
-| `jaaffl.engine`     | 5             | Projection ensemble, opponent model, simulation, optimizer           |
-| `jaaffl.assistant`  | 7             | Typed function tools for the AI assistant                            |
+| Package            | Roadmap stage | Responsibility                                                       |
+| ------------------ | ------------- | -------------------------------------------------------------------- |
+| `jaaffl.domain`    | —             | Pydantic models: the shared vocabulary (mirror of `packages/shared`) |
+| `jaaffl.config`    | —             | Typed settings loaded from environment (`.env`)                      |
+| `jaaffl.api`       | 1             | HTTP/WebSocket endpoints; receives draft events, serves recs         |
+| `jaaffl.ingest`    | 1–2           | Normalize raw CBS payloads into domain events                        |
+| `jaaffl.league`    | 2             | CBS scoring parser, replacement (VORP) values, positional scarcity   |
+| `jaaffl.data`      | 3             | DuckDB/SQLite/Parquet warehouse and cross-source ID crosswalks       |
+| `jaaffl.providers` | 4             | Provider protocol + nflverse/FantasyPros/... adapters                |
+| `jaaffl.engine`    | 5             | Projection ensemble, opponent model, simulation, optimizer           |
+| `jaaffl.assistant` | 7             | Typed function tools for the AI assistant                            |
 
 ### `apps/web/` — Next.js dashboard
 

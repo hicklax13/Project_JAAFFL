@@ -46,7 +46,15 @@ const REC: Recommendation = {
         modifiers: { bye_stack: -0.1 },
       },
     },
-    { player_id: "p2", name: "Drake London", position: "WR", nfl_team: "ATL", score: 37.8, next_turn_availability: 0.41, tier: 4 },
+    {
+      player_id: "p2",
+      name: "Drake London",
+      position: "WR",
+      nfl_team: "ATL",
+      score: 37.8,
+      next_turn_availability: 0.41,
+      tier: 4,
+    },
   ],
 };
 
@@ -139,7 +147,10 @@ describe("Dashboard", () => {
   });
 
   it("updates on a WS /recs/ws push without a page reload", async () => {
-    const { api, captured } = fakeApi({ recResult: { status: 200, recommendation: null }, league: LEAGUE });
+    const { api, captured } = fakeApi({
+      recResult: { status: 200, recommendation: null },
+      league: LEAGUE,
+    });
     render(<Dashboard leagueId="cbs-local" api={api} />);
     await screen.findByText(/appear here on the next pick/i);
     act(() => captured.handlers?.onRecommendation(REC));

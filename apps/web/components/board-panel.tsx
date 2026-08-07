@@ -90,7 +90,11 @@ export function BoardPanel({ state }: { state: DraftBoardState | null }): ReactE
   );
 }
 
-function teamHeaderClass(team: string, onClock: string | null, myTeam: string | null): string | undefined {
+function teamHeaderClass(
+  team: string,
+  onClock: string | null,
+  myTeam: string | null,
+): string | undefined {
   const cls: string[] = [];
   if (team === onClock) cls.push("on-clock");
   if (team === myTeam) cls.push("mine");

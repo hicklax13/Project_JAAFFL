@@ -15,7 +15,7 @@ Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` 
 
 ## 📍 Status — 2026-07-27 · Tier 7 (the engine could not fill a legal roster, and the objective could not see why)
 
-> **Tier 7 of the audit is merged** (PR #58). Tier 6 *found* the late-round defect and wrote it
+> **Tier 7 of the audit is merged** (PR #58). Tier 6 _found_ the late-round defect and wrote it
 > down as an owner warning. Tier 7 asked why six tiers of calibration never caught it, and the
 > answer was that **the measuring instrument was blind to it**: the E2/E6 objective scored a roster
 > with no quarterback exactly as highly as one with a replacement quarterback. The fix had to start
@@ -30,13 +30,13 @@ board found three separate defects:
 1. **The baseline collapsed onto the candidate himself.** `dynamic_replacement_values` floors
    remaining startable demand at 0, so a saturated position took `_value_at_rank(ranked, 1)` — the
    **best available player** — and `lineup_value` credits `max(μ, baseline)` either way, so his own
-   MLV was *exactly* `0.0000` by construction. Measured QB `μ_best − baseline` by round:
+   MLV was _exactly_ `0.0000` by construction. Measured QB `μ_best − baseline` by round:
    `+51.15 · +9.40 · +0.32 · 0.0000 · 0.0000 …` from R4 on, never recovering. The function's own
    docstring already said it pointed one past remaining demand precisely to avoid "collapsing onto
    the best remaining candidate's own μ" — the zero floor defeated its own stated intent.
 2. **The risk term outranked value.** `lambda_slot_override` pays a SURPLUS candidate `λ = −0.4`
    — **+18.69** at the clamp-saturated `σ = 46.72` — while charging the LAST_OPEN_STARTABLE
-   candidate `+0.4`. At R17 the kicker's MLV had *not* collapsed; it was **+13.16**, and he still
+   candidate `+0.4`. At R17 the kicker's MLV had _not_ collapsed; it was **+13.16**, and he still
    lost, because `13.16 < 18.69`. **Fixing the baseline alone would not have produced a legal
    roster.**
 3. **The objective could not see either.** `roster_season_values` delegates to the same
@@ -44,16 +44,16 @@ board found three separate defects:
 
 ### The measurement that explains six tiers of silence
 
-Real board, swapping the 3 worst tight ends for the *actual* R15–R17 leftovers (Davis Mills QB
+Real board, swapping the 3 worst tight ends for the _actual_ R15–R17 leftovers (Davis Mills QB
 μ=83.60 · Brandon Aubrey K μ=89.98 · Buffalo DST μ=87.19):
 
-| | points |
-|---|---|
-| what the objective reported | **+15.34** |
+|                                 | points      |
+| ------------------------------- | ----------- |
+| what the objective reported     | **+15.34**  |
 | what the swap is actually worth | **+260.77** |
-| visible fraction | **5.9%** |
+| visible fraction                | **5.9%**    |
 
-The visible +15.34 is *entirely* the kicker (89.98 − 74.64). The QB and the DST contributed
+The visible +15.34 is _entirely_ the kicker (89.98 − 74.64). The QB and the DST contributed
 **exactly zero**. **No E2/E6 gate could ever have promoted a fix**, because the instrument could
 not measure the thing being fixed. That is the whole answer to "why did this survive six tiers".
 
@@ -76,7 +76,7 @@ after (need-based opponents)            {DST:1,QB:2,RB:1,TE:9,WR:4}      K still
 ```
 
 **A carried-forward finding is corrected: that roster leaves FOUR starting slots unfillable, not
-three.** Tier 6 counted missing *positions* (QB/K/DST) and forgot the WR/RB flex, which the 1 RB
+three.** Tier 6 counted missing _positions_ (QB/K/DST) and forgot the WR/RB flex, which the 1 RB
 and 3 WR drain before it is reached. `docs/owner-manual-todo.md` §1b said "three of your nine" and
 has been fixed.
 
@@ -100,22 +100,22 @@ or reliability recommendation of any kind.**
 
 ### What Tier 7 did NOT do
 
-* **Goal 2 (points for the kappa/lambda sweeps) — not done, and deliberately so.** It is blocked by
+- **Goal 2 (points for the kappa/lambda sweeps) — not done, and deliberately so.** It is blocked by
   the objective change above: measuring points under an instrument that is about to change would
   produce a number with a two-hour shelf life.
-* **Goal 3 (the σ clamp) — measured, not changed.** `VOL_RATIO_MAX` saturation is now *implicated*
+- **Goal 3 (the σ clamp) — measured, not changed.** `VOL_RATIO_MAX` saturation is now _implicated_
   rather than cosmetic: σ = 46.72 six times in R12–17 makes the late-round tiebreak arbitrary, and
   σ = 170.08 on a surplus QB is what still beats a kicker. Recorded, not tuned.
-* **Goal 4 (what the objective cannot see) — unchanged and still true.** `sample_season_outcomes`
+- **Goal 4 (what the objective cannot see) — unchanged and still true.** `sample_season_outcomes`
   draws one season total per player independently, so there is still **no week axis** and **no
   cross-player correlation**. `bye_stack`, `handcuff_synergy` and `sos` remain unmeasurable and
-  unimplemented. Tier 7 makes the objective see *roster legality*; it does not give it a calendar.
-* **Timing is not claimed to be optimal.** The fix guarantees a *legal* roster; whether the engine
+  unimplemented. Tier 7 makes the objective see _roster legality_; it does not give it a calendar.
+- **Timing is not claimed to be optimal.** The fix guarantees a _legal_ roster; whether the engine
   should take a QB at R10 rather than R15 is now measurable for the first time, and is unmeasured.
 
 ## 📍 Status — 2026-07-27 · Tier 6 (the remaining terms, and what the harness can actually measure)
 
-> **Tier 6 of the audit is merged** (PRs #53–#56). Tier 5 asked whether any *other* term was dead.
+> **Tier 6 of the audit is merged** (PRs #53–#56). Tier 5 asked whether any _other_ term was dead.
 > Tier 6 asked the harder question — **which terms can this harness measure at all** — and found
 > that two "unresolved" terms were resolvable all along, that the promotion gate has been rejecting
 > on its own sampling noise, and that the engine cannot fill a legal roster.
@@ -141,28 +141,28 @@ or reliability recommendation of any kind.**
 > the sole residual), not a parallel map. Live board: **152 missing → 25**, and all 25 are `FA` free
 > agents, who genuinely have no team. `league.coverage.teams_missing_bye_weeks` is the guard, and it
 > is **proven on the real board**: deleting three aliases makes preflight print `no bye resolved for
-> LAR, NOS, SFO` and coverage fall 485→440; restored, 485 of 510 and silence.
+LAR, NOS, SFO` and coverage fall 485→440; restored, 485 of 510 and silence.
 >
 > ### 2. The promotion gate's min-slot leg was rejecting on noise (PR #54) — Tier 4's deferred question
 >
 > Every vector ever rejected on this leg failed by **0.0009–0.0016**. Measured (real board, 5 disjoint
 > blocks × 8 seeds × 800 draws), the **per-slot SD of a paired difference is 0.0013–0.0089**, to
-> 0.0148 on individual slots — five to ten times *inside* the margin the leg decides on.
+> 0.0148 on individual slots — five to ten times _inside_ the margin the leg decides on.
 >
 > Block 0 uses the canonical seed block and **reproduces the Tier 5 control table digit-for-digit on
 > all five arms**, so the harness is faithful and the Tier 5 numbers are real.
 >
-> | α = 0 vs baseline | per block |
-> |---|---|
-> | `min_slot` | **+0.0009, −0.0295, −0.0231, −0.0094, −0.0139** → promotes **1 of 5** |
-> | `mean_diff` | +0.0133, +0.0063, +0.0033, +0.0133, +0.0086 → positive **5 of 5** |
+> | α = 0 vs baseline | per block                                                             |
+> | ----------------- | --------------------------------------------------------------------- |
+> | `min_slot`        | **+0.0009, −0.0295, −0.0231, −0.0094, −0.0139** → promotes **1 of 5** |
+> | `mean_diff`       | +0.0133, +0.0063, +0.0033, +0.0133, +0.0086 → positive **5 of 5**     |
 >
 > **The mean effect of α = 0 is robust; its "passes both legs" headline is a property of seed block
 > 1001–1008** — which happened to be the canonical one. Tier 5's claim that it was "the first vector
 > in this project's history to pass both legs" should be read as a statement about one seed block.
 >
 > The failure is **structural, not mere strictness**: `min` over 12 slots is an extreme-order
-> statistic, so requiring it to be non-negative as a *point estimate* demands the worst of twelve
+> statistic, so requiring it to be non-negative as a _point estimate_ demands the worst of twelve
 > noisy estimates land above zero — which a real, positive effect fails most of the time.
 >
 > `promotion_decision(..., slot_noise=...)` now asks whether a slot is **significantly** worse.
@@ -173,17 +173,17 @@ or reliability recommendation of any kind.**
 > Tier 5 reported them "statistically unresolved" at `p = 0.9355` / `p = 0.9199`. **Those p-values
 > are from the reverse-direction test.** `promotion_decision(tuned, baseline)` is one-sided with
 > `alternative="greater"`, so `promotion_decision(kappa_off, baseline) → p = 0.9355` tests whether
-> *turning κ off helps* — which nobody believes. The question "does κ help?" is
+> _turning κ off helps_ — which nobody believes. The question "does κ help?" is
 > `promotion_decision(baseline, kappa_off)`. Re-run in the correct direction, pooling disjoint
 > blocks (pooling R blocks of S seeds **is** an R·S-seed evaluation, since per-slot scores are seed
 > means):
 >
-> | blocks | seeds | κ helps | reliability helps |
-> |---|---|---|---|
-> | 1 | 8 | +0.0044, p = 0.0820 — no | +0.0026, p = 0.0967 — no |
-> | 2 | 16 | +0.0062, **p = 0.0420** | +0.0038, **p = 0.0244** |
-> | 4 | 32 | +0.0064, **p = 0.0420** | +0.0032, **p = 0.0212** |
-> | 5 | 40 | +0.0064, **p = 0.0400** | +0.0027, **p = 0.0212** |
+> | blocks | seeds | κ helps                  | reliability helps        |
+> | ------ | ----- | ------------------------ | ------------------------ |
+> | 1      | 8     | +0.0044, p = 0.0820 — no | +0.0026, p = 0.0967 — no |
+> | 2      | 16    | +0.0062, **p = 0.0420**  | +0.0038, **p = 0.0244**  |
+> | 4      | 32    | +0.0064, **p = 0.0420**  | +0.0032, **p = 0.0212**  |
+> | 5      | 40    | +0.0064, **p = 0.0400**  | +0.0027, **p = 0.0212**  |
 >
 > **Both terms help, and keep their committed values.** The required N is **16 seeds for κ**;
 > reliability crosses at 16 but wobbles back at 24 (`p = 0.0527`) before settling, so treat **32
@@ -222,14 +222,14 @@ or reliability recommendation of any kind.**
 > roster: {RB: 1, TE: 13, WR: 3}       QB 0/1 · K 0/1 · DST 0/1  -> THREE starting slots unfillable
 > ```
 >
-> **Identical under both opponent models** (best-available *and* realistic need-based), so it is not
+> **Identical under both opponent models** (best-available _and_ realistic need-based), so it is not
 > an artifact of the simulated field. And the required positions were abundantly available:
 >
 > | at my pick | available | rendered rank of the best one |
-> |---|---|---|
-> | QB, R10 | 38 | 150 |
-> | DST, R16 | 20 | 55 |
-> | K, R17 | 21 | 53 |
+> | ---------- | --------- | ----------------------------- |
+> | QB, R10    | 38        | 150                           |
+> | DST, R16   | 20        | 55                            |
+> | K, R17     | 21        | 53                            |
 >
 > The mechanism, consistent with the data: from ~R5 the top candidate's **MLV is 0.00** — every
 > remaining player at every needed position is below replacement, and `lineup_value` refuses to start
@@ -242,7 +242,7 @@ or reliability recommendation of any kind.**
 > So the answer to "is the late tilt picking upside or noise?" is **neither**: it is picking a
 > near-constant, and the roster-need signal is invisible to it. **`max(0, ·)` in MLV means an empty
 > required slot is worth exactly as much as a 13th tight end.** The punt guard works as designed (DST
-> moves 180→55 at R16) but only past *other punted* players. Not fixed here — a fix changes live
+> moves 180→55 at R16) but only past _other punted_ players. Not fixed here — a fix changes live
 > recommendations and needs E2/E6 evidence and a gate. **This is Tier 7's headline.**
 >
 > ### 6. §10.3's ranges vs the measurements (surfaced, per the `agent_usage_contract`)
@@ -251,23 +251,23 @@ or reliability recommendation of any kind.**
 > structurally incapable of finding it. Tier 6 asked whether κ and the λ bands share the defect and
 > **measured it** — one-factor sweep, real board, 3 disjoint blocks × 8 seeds × 800 draws:
 >
-> | κ | 0.00 | 0.25 | 0.50 | **0.65** (shipped) | **0.80** (§10.3 max) | 1.10 | 1.50 |
-> |---|---|---|---|---|---|---|---|
-> | win prob | 0.0932 | 0.0947 | 0.0993 | **0.0987** | **0.1032** | 0.1053 | **0.1165** |
+> | κ        | 0.00   | 0.25   | 0.50   | **0.65** (shipped) | **0.80** (§10.3 max) | 1.10   | 1.50       |
+> | -------- | ------ | ------ | ------ | ------------------ | -------------------- | ------ | ---------- |
+> | win prob | 0.0932 | 0.0947 | 0.0993 | **0.0987**         | **0.1032**           | 0.1053 | **0.1165** |
 >
 > **κ rises monotonically across the whole probed span and is still climbing at 1.50 — nearly double
-> §10.3's ceiling of 0.80.** κ = 1.50 is the argmax in *all three* blocks independently (0.1102,
+> §10.3's ceiling of 0.80.** κ = 1.50 is the argmax in _all three_ blocks independently (0.1102,
 > 0.1190, 0.1202), and the shipped 0.65 gives up **+0.0178** against it — larger than the α = 0
 > effect. The one non-monotonicity (0.65 dipping 0.0006 below 0.50) is well inside the noise floor.
 >
 > λ, scaling the whole shipped schedule (within-run, so directly comparable):
 >
-> | λ scale | 0.5× | **1.0×** (shipped) | 1.5× |
-> |---|---|---|---|
-> | win prob | **0.1233** | 0.0987 | 0.0981 |
+> | λ scale  | 0.5×       | **1.0×** (shipped) | 1.5×   |
+> | -------- | ---------- | ------------------ | ------ |
+> | win prob | **0.1233** | 0.0987             | 0.0981 |
 >
 > **λ at half the shipped magnitude beats it by +0.0246 — the largest single effect measured in this
-> project** — and it replicates in all three blocks (0.1142, 0.1287, 0.1270). Halving puts every band *outside*
+> project** — and it replicates in all three blocks (0.1142, 0.1287, 0.1270). Halving puts every band _outside_
 > its §10.3 range (band 1 → 0.15 vs a 0.20 floor; band 5 → −0.20 vs a −0.30 ceiling), so the tuner
 > cannot reach it either. That is consistent with the tuner having twice returned λ values pinned to
 > its band FLOORS: it was pushing against a wall.
@@ -279,7 +279,7 @@ or reliability recommendation of any kind.**
 > plan's letter rather than this audit's inference.
 >
 > ⚠️ **Read these with three caveats.** (1) They measure **win probability only** — points were not
-> measured for these arms, and Tier 5 showed κ *buys win probability with points*, so a large κ very
+> measured for these arms, and Tier 5 showed κ _buys win probability with points_, so a large κ very
 > plausibly costs points. (2) Three blocks, not five; the direction replicates in all three and κ's
 > dose-response spans seven points, which is the same strength-of-evidence argument Tier 5 used for
 > α, but it is not the five-block treatment §2 got. (3) A better simulator is still a simulator.
@@ -302,13 +302,13 @@ or reliability recommendation of any kind.**
 >
 > ### Why it was dead — three measurements, all of which had to change
 >
-> - **BIC cannot find tiers in this variable.** BIC is a *density-estimation* criterion ("was this
+> - **BIC cannot find tiers in this variable.** BIC is a _density-estimation_ criterion ("was this
 >   generated by k Gaussians?"). A position's value curve is smooth and monotone, not multimodal, so
 >   the honest answer is "by none of them" and BIC falls back to the simplest model. Measured argmin
->   over the draftable top-204: **k=1** for RB, QB, TE and K — on ECR *and* on μ — and k=2 for WR.
+>   over the draftable top-204: **k=1** for RB, QB, TE and K — on ECR _and_ on μ — and k=2 for WR.
 >   Over the whole 510-player board it found **8 boundaries total**: all 31 defenses in ONE tier, a
 >   kicker tier holding exactly ONE player, skill tiers of 25–54. Boris-Chen tiering works because
->   each player carries a *distribution* of expert opinions and tiers emerge where those separate;
+>   each player carries a _distribution_ of expert opinions and tiers emerge where those separate;
 >   the `rankings()` feed returns a single consensus scalar, which has had that signal averaged out.
 > - **ECR and μ are no longer the same ordering.** Pre-Tier-1, μ was `max(0, 300 − ecr)`, so cutting
 >   tiers on ECR and pricing the drop in MLV was self-consistent. Measured now:
@@ -334,7 +334,7 @@ or reliability recommendation of any kind.**
 >
 > This departs from §3.6's letter (GaussianMixture on ECR) and its `random_state` acceptance clause.
 > Surfaced per `config/league.json`'s `agent_usage_contract`, with the measurements, in
-> `engine/tiers.py`'s module docstring. §3.6's *own* acceptance criterion ("the worst player in a
+> `engine/tiers.py`'s module docstring. §3.6's _own_ acceptance criterion ("the worst player in a
 > non-bottom tier carries a **positive** CliffBonus") was already failing live at 0 of 8 boundaries.
 > `scikit-learn` was in the `engine` extra only for the GMM and is now dropped.
 >
@@ -352,24 +352,24 @@ or reliability recommendation of any kind.**
 > ### THE FINDING — α is live, and it HURTS (PR #52)
 >
 > Same harness, same conditions as Tier 4 (real pool capped to 300, held-out `[NeedBased,
-> AdpNoise]`, 8 seeds, 800 sampled seasons/draft), re-run 2026-07-27 with the term working:
+AdpNoise]`, 8 seeds, 800 sampled seasons/draft), re-run 2026-07-27 with the term working:
 >
-> | vector | win prob | Δ/slot | min slot | p | points | Δ/slot | p |
-> |---|---|---|---|---|---|---|---|
-> | committed baseline (α=0.4) | 0.0926 | — | — | — | 1748.08 | — | — |
-> | pure MLV (κ=α=λ=0, rel=1) | 0.0599 | −0.0328 | −0.0528 | 1.0000 | 1774.35 | +26.27 | 0.0002 |
-> | λ OFF only | 0.0777 | −0.0149 | −0.0309 | 0.9966 | 1747.23 | −0.85 | 0.9866 |
-> | κ OFF only | 0.0882 | −0.0044 | −0.0300 | 0.9355 | 1748.64 | +0.56 | 0.9512 |
-> | **α OFF only** | **0.1059** | **+0.0133** | **+0.0009** | **0.0002** | **1753.35** | **+5.28** | **0.0002** |
-> | reliability OFF | 0.0900 | −0.0026 | −0.0164 | 0.9199 | 1749.16 | +1.08 | 0.0312 |
-> | λ DOUBLED | 0.0852 | −0.0074 | −0.0244 | 0.9954 | 1747.49 | −0.59 | 0.7217 |
-> | α DOUBLED (0.8) | 0.0871 | −0.0055 | −0.0200 | 0.9829 | 1739.54 | −8.54 | 1.0000 |
-> | α = 0.5 (§10.3 range top) | 0.0870 | −0.0056 | −0.0200 | 0.9866 | 1740.63 | −7.45 | 1.0000 |
-> | α = 0.3 (§10.3 range floor) | 0.0940 | +0.0014 | −0.0009 | 0.0625 | 1748.64 | +0.56 | 0.0625 |
+> | vector                      | win prob   | Δ/slot      | min slot    | p          | points      | Δ/slot    | p          |
+> | --------------------------- | ---------- | ----------- | ----------- | ---------- | ----------- | --------- | ---------- |
+> | committed baseline (α=0.4)  | 0.0926     | —           | —           | —          | 1748.08     | —         | —          |
+> | pure MLV (κ=α=λ=0, rel=1)   | 0.0599     | −0.0328     | −0.0528     | 1.0000     | 1774.35     | +26.27    | 0.0002     |
+> | λ OFF only                  | 0.0777     | −0.0149     | −0.0309     | 0.9966     | 1747.23     | −0.85     | 0.9866     |
+> | κ OFF only                  | 0.0882     | −0.0044     | −0.0300     | 0.9355     | 1748.64     | +0.56     | 0.9512     |
+> | **α OFF only**              | **0.1059** | **+0.0133** | **+0.0009** | **0.0002** | **1753.35** | **+5.28** | **0.0002** |
+> | reliability OFF             | 0.0900     | −0.0026     | −0.0164     | 0.9199     | 1749.16     | +1.08     | 0.0312     |
+> | λ DOUBLED                   | 0.0852     | −0.0074     | −0.0244     | 0.9954     | 1747.49     | −0.59     | 0.7217     |
+> | α DOUBLED (0.8)             | 0.0871     | −0.0055     | −0.0200     | 0.9829     | 1739.54     | −8.54     | 1.0000     |
+> | α = 0.5 (§10.3 range top)   | 0.0870     | −0.0056     | −0.0200     | 0.9866     | 1740.63     | −7.45     | 1.0000     |
+> | α = 0.3 (§10.3 range floor) | 0.0940     | +0.0014     | −0.0009     | 0.0625     | 1748.64     | +0.56     | 0.0625     |
 >
 > **`α OFF only` passes BOTH legs of the promotion gate** — significant on the one-sided Wilcoxon
-> (p=0.0002) *and* non-negative at every one of the 12 slots (min `+0.0009`) — on win probability
-> *and* on points. No vector in this project's history had done that before.
+> (p=0.0002) _and_ non-negative at every one of the 12 slots (min `+0.0009`) — on win probability
+> _and_ on points. No vector in this project's history had done that before.
 >
 > The **dose-response is monotone**: α = 0.0 → 0.1059 · 0.3 → 0.0940 · 0.4 (shipped) → 0.0926 ·
 > 0.5 → 0.0870 · 0.8 → 0.0871. The measured optimum sits **below** §10.3's specified `[0.3, 0.5]`
@@ -393,7 +393,7 @@ or reliability recommendation of any kind.**
 > settings (30 trials, seed 1, 2 train / 8 eval seeds, 800 draws) it tuned to κ=0.592 **α=0.500**
 > λ=[0.242, 0.102, 0.0, −0.369, −0.472], rel K=0.279 DST=0.332 → win prob 0.0926 → 0.1090
 > (`mean_diff +0.0164, p = 0.0005`) but points 1748.08 → 1739.43 (`−8.65/slot`), and
-> `min_slot_diff −0.0016` → **KEEP baseline**, failing only the non-negative leg *again*. It picked
+> `min_slot_diff −0.0016` → **KEEP baseline**, failing only the non-negative leg _again_. It picked
 > α at the top of its allowed range while the one-factor table says the top of that range is the
 > worst value in it. That is not a conflict, it is a power problem: Optuna fits **six dimensions
 > jointly on two training seeds over thirty trials**, so it cannot attribute credit to any single
@@ -403,7 +403,7 @@ or reliability recommendation of any kind.**
 > α = 0 no matter how many trials it runs.
 >
 > **Recommendation: set `alpha` to 0.0.** NOT done here — `config/engine.json` is owner-adopted and
-> a simulator result is not a fact about drafting. The term stays wired and is now *measurable*, so
+> a simulator result is not a fact about drafting. The term stays wired and is now _measurable_, so
 > this can be revisited. See `docs/owner-manual-todo.md` §1 for the owner decision.
 >
 > **A better simulator is still a simulator.** The opponents are behavioral agents, not the eleven
@@ -415,19 +415,19 @@ or reliability recommendation of any kind.**
 > ### The guard (PR #51)
 >
 > `league.coverage.inert_cliff_positions`, alongside `board_coverage_gaps` with the same
-> report-never-raise contract: per startable position, *is any drop priced above zero?* One
+> report-never-raise contract: per startable position, _is any drop priced above zero?_ One
 > condition covers both live shapes of death (DST had no boundary at all; the other five had
 > boundaries that all priced to zero). `precompute` logs `precompute_inert_tier_cliff` and still
 > serves the board; `preflight` exits non-zero, but only for **non-puntable** positions, because
 > K/DST boards really are flat. **Proven to fire on the real board**, not a fixture: mutating
 > tiering to one tier per position makes the real preflight print `FAIL: no tier cliff can ever be
-> priced at QB, RB, TE, WR` and exit 1 with `0 priced drops over 510 tiered`; unmutated it exits 0
+priced at QB, RB, TE, WR` and exit 1 with `0 priced drops over 510 tiered`; unmutated it exits 0
 > with `16 priced drops`. The mutation was verified present on disk before the run and gone after.
 >
 > **E6 is unchanged and re-verified**, because `calibrate/pools.py::demo_sim_context` computes its
 > cliffs inline and never calls `assign_tiers`: ours 0.1226 > adp_only 0.1148 > vbd_only 0.1036;
 > points ours 1588.3 vs vbd_only 1588.2 (`+0.1, p=0.5750`), ours BEATS adp_only (`+16.4/slot,
-> p=0.0002`). That the fixture guard passed throughout is exactly the point — **a fixture can prove
+p=0.0002`). That the fixture guard passed throughout is exactly the point — **a fixture can prove
 > the harness can measure a term, never that the board carries one.**
 >
 > ### Exit survey — is any OTHER term dead? (measured, so Tier 6 starts from fact)
@@ -436,13 +436,13 @@ or reliability recommendation of any kind.**
 > walking a full 12×17 draft from seat 6 and tallying the **top-10 rendered rows at each of my 17
 > picks** (170 rows), with `survival_basis = my_slot` on all 17:
 >
-> | term | rows non-zero | verdict |
-> |---|---|---|
-> | `risk_penalty` (λ·σ) | 170 / 170 (100%) | live |
-> | `mlv` | 37 / 170 (21.8%) | live, but see below |
-> | `vona > 0` | 32 / 170 (18.8%) | live |
-> | `cliff_bonus` | 16 / 170 (9.4%) | live **as of this tier** (was 0) |
-> | any modifier | **0 / 170** | the dict is always empty — see below |
+> | term                 | rows non-zero    | verdict                              |
+> | -------------------- | ---------------- | ------------------------------------ |
+> | `risk_penalty` (λ·σ) | 170 / 170 (100%) | live                                 |
+> | `mlv`                | 37 / 170 (21.8%) | live, but see below                  |
+> | `vona > 0`           | 32 / 170 (18.8%) | live                                 |
+> | `cliff_bonus`        | 16 / 170 (9.4%)  | live **as of this tier** (was 0)     |
+> | any modifier         | **0 / 170**      | the dict is always empty — see below |
 >
 > **The first reading of this survey was wrong, and the honesty field caught it.** Run against a
 > synthetic `DraftState` it reported `vona > 0` on **0 of 170** rows, which looks exactly like
@@ -463,7 +463,7 @@ or reliability recommendation of any kind.**
 > **MLV is zero on 78% of rendered rows**, and from **round 6 onward at this seat the BEST
 > candidate's MLV is 0.00** — `marginal_lineup_value` is computed against the roster you already
 > have, so once your starters are seated an extra body adds nothing to the starting lineup. So ~12
-> of 17 picks are ranked with no value term at all, leaving `−λ·σ` (which goes *negative* in R10–17,
+> of 17 picks are ranked with no value term at all, leaving `−λ·σ` (which goes _negative_ in R10–17,
 > i.e. tilts to ceiling) as effectively the only live signal. That is arguably the design working as
 > written rather than a defect — but nothing has ever verified that the late-round ceiling tilt
 > picks sensibly, and it is where `handcuff_synergy` was meant to live.
@@ -502,7 +502,7 @@ or reliability recommendation of any kind.**
 > works end-to-end**: real nflverse player universe → transparent engine → decomposed pick pushed
 > to the overlay over `WS /recs/ws`.
 >
-> **Tier 2 of the audit is merged** (PRs #33–#37) — *trust & honesty on the primary surface*. Five
+> **Tier 2 of the audit is merged** (PRs #33–#37) — _trust & honesty on the primary surface_. Five
 > places where the overlay looked like it was working:
 >
 > - **The foot renders.** `footRoster`/`footSync` were created, appended, and never assigned, so
@@ -513,12 +513,12 @@ or reliability recommendation of any kind.**
 >   reading "fresh" forever over rotting data.
 > - **Degraded modes are visible.** Nothing ever called `setStatus("manual")`, so a capture failure
 >   still looked fully live. Manual provenance is now latched from the real paste path and outranks
->   a *healthy* socket (never a degraded one). The `ESTIMATED` badge is keyed off **trust**
+>   a _healthy_ socket (never a degraded one). The `ESTIMATED` badge is keyed off **trust**
 >   (`!manualBoard && socketState === "live"`), not the displayed status word — keying it off the
 >   word made the caveat vanish on "Reconnecting…", i.e. exactly as things got worse.
 > - **`?mc=true` is real.** `use_mc_vona` appeared only on `recommend()`'s signature. Wired to a new
 >   `simulate.mc_expected_best_available`, which estimates the same quantity as the analytic form
->   but with a *coupled* opponent model. Measured (239 players, horizon 2, 2000 rollouts): analytic
+>   but with a _coupled_ opponent model. Measured (239 players, horizon 2, 2000 rollouts): analytic
 >   **p95 9 ms** vs MC **p95 1.14 s** (plan budget <2 s), RB VONA 59.51 → 65.96, and **the two
 >   disagree on the #1 pick**. The response now states `vona_method`.
 > - **`Why?` works, and pin is its own control.** `whyBtn` had no listener at all; `onPin` rode the
@@ -531,13 +531,13 @@ or reliability recommendation of any kind.**
 >   xEP-backed ones. Now on `RecommendedPick.projection_sources`, with one shared rule
 >   (`packages/shared/src/provenance.ts`) so overlay and dashboard cannot drift.
 >
-> **Tier 3 of the audit is merged** (PRs #39–#44) — *draft-night readiness*. Every piece was
+> **Tier 3 of the audit is merged** (PRs #39–#44) — _draft-night readiness_. Every piece was
 > individually tested and none had ever run together on real frames. A complete captured 12×14
 > draft now replays end to end — raw NUL-terminated frames → `parse.ts` → `handle_event` →
 > `fold_state` → `resolve_pick_ids` → `recommend()` — asserting on the **rendered pick**, not on
 > health signals. It found four real defects, none of which any unit test could see:
 >
-> - **The overlay's VONA was structurally 0.00 on draft night.** No CBS frame names the *viewer's*
+> - **The overlay's VONA was structurally 0.00 on draft night.** No CBS frame names the _viewer's_
 >   own team, so `parse.ts` cannot emit `my_team_id`; `opponents._my_overall_picks` then raises and
 >   survival degrades to "everyone is available". `GET /recommendation?team_id=` supplies the slot —
 >   the `/recs/ws` **push** path that actually feeds the overlay did not. Measured on the real
@@ -550,7 +550,7 @@ or reliability recommendation of any kind.**
 >   that snapshot. Replaying deltas alone left three drafted players unmasked and recommendable.
 > - **The manual-paste regex split on hyphenated surnames.** `9. 9 - Jaxon Smith-Njigba, WR, SEA`
 >   parsed to `team_id "9 - Jaxon Smith"` / `player_name "Njigba"` — a pick that resolves to nobody
->   and is offered again. The code carried a *reasoned comment* defending the greedy match; real NFL
+>   and is offered again. The code carried a _reasoned comment_ defending the greedy match; real NFL
 >   rosters falsify it. The separator is space-surrounded; a surname hyphen is not.
 > - **The fixture redactor corrupted its own goldens.** A real one-character team display name in the
 >   new capture made `safety_net`'s substring pass rewrite every occurrence of that letter:
@@ -561,7 +561,7 @@ or reliability recommendation of any kind.**
 > the best pick and the dashboard banner; and MC-VONA is held off the push path by a
 > **structural** (mutation-verified) guard rather than a flaky wall-clock gate.
 >
-> **Tier 4 of the audit is merged** (PRs #47–#49) — *the E2/E6 calibration harness*. E2 kept
+> **Tier 4 of the audit is merged** (PRs #47–#49) — _the E2/E6 calibration harness_. E2 kept
 > answering "keep baseline"; it turns out it could not have answered anything else. **Five**
 > independent reasons, each measured rather than reasoned:
 >
@@ -569,10 +569,10 @@ or reliability recommendation of any kind.**
 >   deterministic μ and never reads `SimContext.sigma` — verified: σ×10, σ=0 and the shipped σ all
 >   return `915.200000`. So `λ·σ` moved the ranking away from the very μ the scorer paid out on:
 >   λ could be **penalised and never rewarded**. Replaced by sampling each player's season from
->   `N(μ, σ)` — keyed by *player id*, so a player realizes the same season on every roster that
+>   `N(μ, σ)` — keyed by _player id_, so a player realizes the same season on every roster that
 >   holds him (common random numbers) — and scoring by **win probability**: `P(highest realized
->   season total of the 12)`. That choice is the strategy definition, so the two alternatives are
->   rejected *in tests*: a mean-outcome objective rises monotonically with σ (Jensen — the lineup is
+season total of the 12)`. That choice is the strategy definition, so the two alternatives are
+>   rejected _in tests_: a mean-outcome objective rises monotonically with σ (Jensen — the lineup is
 >   re-optimised after the fact) and a floor percentile falls monotonically; either fixes λ's sign
 >   globally and leaves the λ **schedule** — whose whole content is that λ flips sign between R1 and
 >   R17 — as unmeasurable as before. Plan §3.9 already named the target: playoff odds are "the true
@@ -585,35 +585,35 @@ or reliability recommendation of any kind.**
 >   baseline number described a vector the engine does not run**, and the pure-MLV control was not
 >   testing λ: the arm it was compared against already had none.
 > - **The fixture pools could not express any strategic term.** Across 96 (slot × seed ×
->   opponent-field) cells on *both* `_demo_context()`s, turning κ, α **and** λ off left a
+>   opponent-field) cells on _both_ `_demo_context()`s, turning κ, α **and** λ off left a
 >   **bit-identical roster in 96/96**: `cliff_bonus` was `{}`, σ took two values, there were no
 >   K/DST players for `reliability_shrinkage` to shrink, and a flat 40.0 baseline for every position
 >   inflated MLV into a band where λ·σ can never re-rank. E2 `--smoke` ran Optuna over a constant.
 > - **The simulated agent was not the shipped agent.** `ScoreAgent` hardcoded `candidate_cap=50`
->   (config says 180) and capped by *raw value* where `recommend.py` caps by *MLV* — which hid K and
+>   (config says 180) and capped by _raw value_ where `recommend.py` caps by _MLV_ — which hid K and
 >   DST entirely, so it could not draft a DST at all.
 > - **`--eval-seeds` was inert.** Every held-out opponent was deterministic; 1 and 6 eval seeds gave
->   bit-identical numbers. Train/held-out are now disjoint *and* both stochastic (a new
+>   bit-identical numbers. Train/held-out are now disjoint _and_ both stochastic (a new
 >   `SoftmaxVbdAgent` trains, `AdpNoiseAgent` moves to held-out).
 >
 > **What the corrected harness measures** (real xEP pool, 300 players, held-out
 > `[NeedBased, AdpNoise]`, 8 seeds, 800 sampled seasons/draft; win prob vs the σ-blind points view):
 >
-> | vector | win prob | Δ/slot | min slot | p | points | Δ/slot | p |
-> |---|---|---|---|---|---|---|---|
-> | committed baseline | 0.1077 | — | — | — | 1754.51 | — | — |
-> | **pure MLV** (κ=α=λ=0, rel=1) | **0.0624** | **−0.0454** | −0.0813 | 0.9998 | **1776.16** | **+21.65** | 0.0002 |
-> | λ OFF only | 0.0710 | −0.0367 | −0.0758 | 1.0000 | 1749.96 | −4.55 | 1.0000 |
-> | κ OFF only | 0.0993 | −0.0084 | −0.0886 | 0.8174 | 1771.67 | +17.16 | 0.0049 |
-> | α OFF only | 0.1077 | +0.0000 | +0.0000 | 1.0000 | 1754.51 | +0.00 | 1.0000 |
-> | reliability OFF | 0.1037 | −0.0040 | −0.0106 | 1.0000 | 1755.00 | +0.49 | 0.8438 |
-> | λ DOUBLED | 0.0920 | −0.0158 | −0.0789 | 0.9983 | 1750.76 | −3.75 | 0.6333 |
+> | vector                        | win prob   | Δ/slot      | min slot | p      | points      | Δ/slot     | p      |
+> | ----------------------------- | ---------- | ----------- | -------- | ------ | ----------- | ---------- | ------ |
+> | committed baseline            | 0.1077     | —           | —        | —      | 1754.51     | —          | —      |
+> | **pure MLV** (κ=α=λ=0, rel=1) | **0.0624** | **−0.0454** | −0.0813  | 0.9998 | **1776.16** | **+21.65** | 0.0002 |
+> | λ OFF only                    | 0.0710     | −0.0367     | −0.0758  | 1.0000 | 1749.96     | −4.55      | 1.0000 |
+> | κ OFF only                    | 0.0993     | −0.0084     | −0.0886  | 0.8174 | 1771.67     | +17.16     | 0.0049 |
+> | α OFF only                    | 0.1077     | +0.0000     | +0.0000  | 1.0000 | 1754.51     | +0.00      | 1.0000 |
+> | reliability OFF               | 0.1037     | −0.0040     | −0.0106  | 1.0000 | 1755.00     | +0.49      | 0.8438 |
+> | λ DOUBLED                     | 0.0920     | −0.0158     | −0.0789  | 0.9983 | 1750.76     | −3.75      | 0.6333 |
 >
 > **The 2026-07-25 headline reverses.** Pure-MLV still wins on points (+21.65/slot, p=0.0002 — it
-> *strengthens*), but it gives away **42% of its championship probability** (0.1077 → 0.0624,
+> _strengthens_), but it gives away **42% of its championship probability** (0.1077 → 0.0624,
 > p=0.9998). The old harness could only see the points half of that trade, which is exactly why it
 > concluded pure-MLV wins. **λ is the load-bearing term**: switching it off costs win probability
-> *and* points, and doubling it also hurts — so the shipped magnitude sits near a local optimum
+> _and_ points, and doubling it also hurts — so the shipped magnitude sits near a local optimum
 > rather than at a boundary. κ buys win probability with expected points (−0.0084 for +17.16 pts,
 > p=0.82 — a real trade, statistically unresolved at 8 seeds).
 >
@@ -636,19 +636,19 @@ or reliability recommendation of any kind.**
 > `+0.0000` on both measures because `cliff_bonus` has **293 entries and every one is 0.0**.
 > `assign_tiers` yields only **8 tier boundaries across the whole 510-player board** (DST gets a
 > single tier, so it has none), with tiers holding 25–54 players; only **102 of 510** players are
-> above replacement, so the weakest player of a tier and the best of the next tier are *both* below
+> above replacement, so the weakest player of a tier and the best of the next tier are _both_ below
 > replacement, where `lineup_value` floors MLV at 0 — every boundary computes `max(0, 0.00 − 0.00)`.
 > Consequence: `recommend.py`'s `applied_cliff = α · 0.0` is exactly 0.00 for every live pick, the
 > overlay's tier-cliff bar can never be non-zero, and `explain.py`'s "the talent drops off after
 > this tier" sentence can never render. **Not fixed here** — the fix is a tiering-policy decision
 > (how many tiers, over the draftable subset or the whole board, on ECR or on MLV) that changes live
 > recommendations and deserves its own design pass, not a bolt-on to a calibration PR.
-> *(→ Tier 5 did that pass. The term is live now, and the measurement says it should be off.)*
+> _(→ Tier 5 did that pass. The term is live now, and the measurement says it should be off.)_
 
 > **What Tier 3 did NOT do** (scoped honestly): a **replay is not a live draft.** The pipeline has
 > now run end to end on real captured frames, but it has still never run against a LIVE CBS room —
 > no draft-night rehearsal against a room that is actually ticking. `ESTIMATED` is still driven by a
-> degraded *board*, not the forward-year trigger §6.6 names: `xep_season = season − 1` is
+> degraded _board_, not the forward-year trigger §6.6 names: `xep_season = season − 1` is
 > retrospective, so **no forward-year figure exists to flag** — the trigger would have nothing to
 > fire on. `Why?` remains a local decomposition, **not** wired to the Responses API (§6.8); an
 > `OPENAI_API_KEY` now exists, but that path adds a network call, a cost, and a latency budget to the
@@ -680,10 +680,10 @@ or reliability recommendation of any kind.**
 
 - [x] MV3 extension that runs only on CBS fantasy league/draft pages (`apps/extension`)
 - [x] Content scripts extract league metadata + live pick events; normalize to shared schema
-      *(**capture DONE 2026-07-24** — the network-frame vocabulary is now the REAL decoded CBS
+      _(**capture DONE 2026-07-24** — the network-frame vocabulary is now the REAL decoded CBS
       protocol, see [`docs/research/cbs-draft-protocol.md`](docs/research/cbs-draft-protocol.md):
       NUL-terminated frames, `picks/completed`, `fullstatedelta.order`. DOM-selector and
-      settings-page vocabularies remain synthetic — they need a settings/board capture)*
+      settings-page vocabularies remain synthetic — they need a settings/board capture)_
 - [x] Stream normalized events to the localhost backend (`jaaffl.api`, `jaaffl.ingest`)
 - [x] **Decided against `webRequest`/`declarativeNetRequest`** — replaced by the 3-probe MAIN-world
       capture (WebSocket + `fetch`/XHR monkeypatch, React-fiber framework read, `MutationObserver`
@@ -692,14 +692,14 @@ or reliability recommendation of any kind.**
 ## Stage 2 — Normalize league settings
 
 - [~] Parse CBS roster slots, flex eligibility, scoring rules, team count, keeper/dynasty
-      flags, and draft order from the live room / settings pages (`jaaffl.league`)
-      *(scoring model + JAAFFL2025 values complete; the live draft-room **order** now reads from
-      the real `fullstatedelta.order` — never inferred. The settings-PAGE parse is still
-      capture-blocked: the 2026-07-24 session captured draft-room frames, not a settings page)*
-- [x] Never assume snake order from league size — read the actual draft board *(enforced in
-      `parse.ts` + engine horizon; order comes from the board / manual-paste, never inferred)*
-- [x] Persist every league snapshot for self-owned historical analysis *(snapshot-every-settings
-      into the warehouse, PR #7)*
+  flags, and draft order from the live room / settings pages (`jaaffl.league`)
+  _(scoring model + JAAFFL2025 values complete; the live draft-room **order** now reads from
+  the real `fullstatedelta.order` — never inferred. The settings-PAGE parse is still
+  capture-blocked: the 2026-07-24 session captured draft-room frames, not a settings page)_
+- [x] Never assume snake order from league size — read the actual draft board _(enforced in
+      `parse.ts` + engine horizon; order comes from the board / manual-paste, never inferred)_
+- [x] Persist every league snapshot for self-owned historical analysis _(snapshot-every-settings
+      into the warehouse, PR #7)_
 
 ## Stage 3 — Data warehouse
 
@@ -713,19 +713,19 @@ or reliability recommendation of any kind.**
 - [x] **$0 prototype tier (default):** nflverse / nflfastR historical stats (free) + **FFC ADP** +
       CBS on-page projections/rankings/ADP read via the extension from the user's session
 - [ ] **[opt-in, off by default]** Paid tier: FantasyPros rankings/projections/ADP/news/injuries
-      *(disabled stub present; needs an owner key + enable flag)*
+      _(disabled stub present; needs an owner key + enable flag)_
 - [ ] **[out of scope for the prototype]** Commercial tier: SportsDataIO / Sportradar real-time,
-      behind the same interface *(disabled stubs present)*
+      behind the same interface _(disabled stubs present)_
 
 ## Stage 5 — Transparent draft engine
 
 - [x] Exact CBS scoring translation + replacement values + tier breaks (`jaaffl.league`)
-- [x] Projection ensemble (`jaaffl.engine.projections`) *(PR #29: **real** nflverse xEP
+- [x] Projection ensemble (`jaaffl.engine.projections`) _(PR #29: **real** nflverse xEP
       (`Capability.EXPECTED_POINTS`) + ECR, both scored under the owner-verified `jaaffl_scoring`
       map. Replaces the `300 − ecr` placeholder. Per-player σ from measured weekly residuals;
       per-position drift σ measured, not chosen (`scripts/measure_projection_sigma.py`). CBS
       on-page projections remain a third source once a settings/board capture exists — that path
-      is still unreachable, `cbs_page_snapshots` has 0 rows)*
+      is still unreachable, `cbs_page_snapshots` has 0 rows)_
 - [x] Opponent pick-probability model — analytic survival (`jaaffl.engine.opponents`)
 - [x] Marginal Lineup Value via Hungarian assignment (`jaaffl.engine.optimize`) — the v1 flex-aware
       optimizer the engine actually uses
@@ -734,61 +734,61 @@ or reliability recommendation of any kind.**
       available]); analytic VONA remains the shipped v1 hot-path default. **`?mc=true` is now
       actually wired** (PR #35): `mc_expected_best_available` replaces the analytic per-position
       `E_π` with a coupled rollout, the response states `vona_method`, no readable draft order
-      degrades to analytic *and says so*, and `simulate` imports lazily so the analytic path pays
+      degrades to analytic _and says so_, and `simulate` imports lazily so the analytic path pays
       nothing. Measured: analytic p95 9 ms · MC p95 1.14 s at 2000 rollouts (budget <2 s)
 - [x] **[stretch]** Constrained roster optimization via OR-Tools CP-SAT
-      (`jaaffl.engine.optimize::optimize_roster`) — the season-simulator end-state ILP *(needs
-      `engine-stretch`)*
+      (`jaaffl.engine.optimize::optimize_roster`) — the season-simulator end-state ILP _(needs
+      `engine-stretch`)_
 - [ ] **[stretch]** Only then: XGBoost residual models, injury-risk calibration, 2027 aging curves
-- [x] Treat 2027 outputs as **ESTIMATED** unless a forward-year vendor feed is licensed *(policy
-      enforced)*
+- [x] Treat 2027 outputs as **ESTIMATED** unless a forward-year vendor feed is licensed _(policy
+      enforced)_
 
 ## Stage 6 — Two-surface UI
 
-- [x] Thin in-page overlay: best pick / next-turn risk / why (`apps/extension` overlay) *(Tier 2,
+- [x] Thin in-page overlay: best pick / next-turn risk / why (`apps/extension` overlay) _(Tier 2,
       PRs #33/#34/#36/#37: the **foot** renders roster + a ticking sync age + recompute ms; the
       **manual-paste** and **ESTIMATED** degraded states are driven from the real paste path;
       **`Why?`** opens a local decomposition that shows the score reconciling to its terms; **pin**
       has its own control writing an advisory `chrome.storage.local` log; ECR-only projections are
-      **marked**. Verified in real Chromium via the E4 Playwright spec, not only jsdom)*
-- [x] Next.js dashboard: board analytics, manager tendencies, scenarios (`apps/web`) *(live
+      **marked**. Verified in real Chromium via the E4 Playwright spec, not only jsdom)_
+- [x] Next.js dashboard: board analytics, manager tendencies, scenarios (`apps/web`) _(live
       recommendation feed, **draft board & pick-log** via `GET /state`, and the **value-curve +
       survival-curve** analytics panels via `GET /analytics` — all done; manager-tendency panel
-      deferred until ≥1 recorded draft accrues `manager_tendencies` rows)*
+      deferred until ≥1 recorded draft accrues `manager_tendencies` rows)_
 - [x] **AG Grid removed by design** (deep-research: overkill for a 204-cell static board);
       distributions/trends render as **bespoke accessible SVG** (no ECharts dependency)
 
 ## Stage 7 — AI assistant (wire early, integrate last)
 
 - [x] Typed function tools for DB queries, league-state summaries, news lookups (`jaaffl.assistant`)
-      *(dispatch wired: `explain_recommendation` renders `ScoreComponents` prose via
+      _(dispatch wired: `explain_recommendation` renders `ScoreComponents` prose via
       `explain_pick`, `league_summary` folds settings+state; `query_warehouse`/`player_news` stay
-      NotImplementedError until the LLM loop)*
-- [ ] OpenAI Responses API: function calling + file search + optional web search *(the only
-      key-gated piece — needs an owner `OPENAI_API_KEY`)*
+      NotImplementedError until the LLM loop)_
+- [ ] OpenAI Responses API: function calling + file search + optional web search _(the only
+      key-gated piece — needs an owner `OPENAI_API_KEY`)_
 - [ ] **Text-only.** Voice / Realtime is explicitly out of scope for the prototype (see ADR 0003)
 
 ## Cross-cutting
 
 - [~] **Calibration (Track J)** — `jaaffl.calibrate` + `scripts/`: **E1** flex-split
-      (`calibrate_flex_split.py`), **E3** projection-validation (`validate_projections.py`), and
-      **E2** param tuning (`tune_engine_params.py` — Optuna study + no-regression gate; `--real`
-      builds a precompute-backed pool), and the **E6** efficacy tournament (`run_tournament.py` —
-      our agent vs VBD-only / ADP-only baselines) all done + run live. **Tier 4 (2026-07-26) rebuilt
-      the harness** after the 2026-07-25 re-run showed it could not validate the strategic terms at
-      all: the scorer was σ-blind, the baseline carried `lambda_schedule = []`, both fixture pools
-      were params-blind in 96/96 cells, the simulated agent was not the shipped agent, and
-      `--eval-seeds` was inert. Drafts are now scored by **win probability** over seasons sampled
-      from `N(μ, σ)`, against a **disjoint stochastic** held-out field, with the **committed**
-      `config/engine.json` as the baseline. The verdict is still **KEEP baseline** — but now for an
-      informative reason: the tuned vector is *significantly better* on win probability
-      (`+0.0130/slot, p = 0.0029`) and fails only the non-negative-at-every-slot leg
-      (`min_slot −0.0014`, inside MC noise). **Pure-MLV's apparent win reverses**: it gains
-      `+21.65 pts/slot` while shedding 42% of its championship probability. Full tables in the
-      status block above. ⚠️ **α is still structurally inert, and on the LIVE path** — all 293
-      `cliff_bonus` values are 0.0 because tiers are far too coarse (8 boundaries across 510
-      players) and fall below replacement where MLV is floored. That is the one calibration
-      follow-up still open
+  (`calibrate_flex_split.py`), **E3** projection-validation (`validate_projections.py`), and
+  **E2** param tuning (`tune_engine_params.py` — Optuna study + no-regression gate; `--real`
+  builds a precompute-backed pool), and the **E6** efficacy tournament (`run_tournament.py` —
+  our agent vs VBD-only / ADP-only baselines) all done + run live. **Tier 4 (2026-07-26) rebuilt
+  the harness** after the 2026-07-25 re-run showed it could not validate the strategic terms at
+  all: the scorer was σ-blind, the baseline carried `lambda_schedule = []`, both fixture pools
+  were params-blind in 96/96 cells, the simulated agent was not the shipped agent, and
+  `--eval-seeds` was inert. Drafts are now scored by **win probability** over seasons sampled
+  from `N(μ, σ)`, against a **disjoint stochastic** held-out field, with the **committed**
+  `config/engine.json` as the baseline. The verdict is still **KEEP baseline** — but now for an
+  informative reason: the tuned vector is _significantly better_ on win probability
+  (`+0.0130/slot, p = 0.0029`) and fails only the non-negative-at-every-slot leg
+  (`min_slot −0.0014`, inside MC noise). **Pure-MLV's apparent win reverses**: it gains
+  `+21.65 pts/slot` while shedding 42% of its championship probability. Full tables in the
+  status block above. ⚠️ **α is still structurally inert, and on the LIVE path** — all 293
+  `cliff_bonus` values are 0.0 because tiers are far too coarse (8 boundaries across 510
+  players) and fall below replacement where MLV is floored. That is the one calibration
+  follow-up still open
 - [x] **Projection σ measurement** — `scripts/measure_projection_sigma.py` (read-only) measures the
       per-position year-over-year projection error that anchors the risk band, replacing the flat
       v1 σ placeholder. Also settles season-sum vs rate×17 for μ with two-year-pair evidence

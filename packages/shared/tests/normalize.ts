@@ -108,8 +108,9 @@ export function normalizeSchema(root: Record<string, unknown>): Desc {
       case undefined: {
         // Bare {} means "any" (e.g. record values of z.unknown()). A typeless node that
         // still carries structural keywords is an unhandled encoding — throw, don't pass.
-        const unhandled = ["items", "prefixItems", "patternProperties", "not", "contains"]
-          .filter((key) => node[key] !== undefined);
+        const unhandled = ["items", "prefixItems", "patternProperties", "not", "contains"].filter(
+          (key) => node[key] !== undefined,
+        );
         if (unhandled.length > 0) {
           throw new Error(`typeless node with unhandled keywords: ${unhandled.join(", ")}`);
         }

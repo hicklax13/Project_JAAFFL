@@ -11,8 +11,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "lint": "echo \"(lint: add eslint)\" && exit 0"
+    "test": "vitest run"
   },
   "dependencies": {
     "zod": "^3.23.8"

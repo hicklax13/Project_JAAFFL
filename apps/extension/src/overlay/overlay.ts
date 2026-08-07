@@ -46,9 +46,6 @@ const STATUS_MAP: Record<OverlaySyncState, { text: string; color: string }> = {
   manual: { text: "Manual paste · not live", color: "var(--warning)" },
 };
 
-/** States whose numbers came off a board we cannot vouch for → badge them ESTIMATED (§6.6). */
-const ESTIMATED_STATES = new Set<OverlaySyncState>(["manual", "stale"]);
-
 // Overlay layout on top of the shared component kit (which already defines .pos/.sc-*/.btn/etc.).
 const OVERLAY_CSS = `
 :host { all: initial; }
@@ -153,7 +150,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (text != null) node.textContent = text;
   return node;
 }
-
 
 /** One Score-Components bar bound to a term (§6.5) — geometry + text from the shared whyTermBar. */
 function whyRow(term: WhyTerm, position: Position | null): HTMLElement {
@@ -499,7 +495,8 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
     box.appendChild(whyLine("Ceiling (p90)", c.ceiling.toFixed(1)));
     box.appendChild(whyLine("σ", c.sigma.toFixed(1)));
     box.appendChild(whyLine("Replacement baseline", c.replacement_baseline.toFixed(1)));
-    if (c.reliability != null) box.appendChild(whyLine("Reliability r_pos", c.reliability.toFixed(2)));
+    if (c.reliability != null)
+      box.appendChild(whyLine("Reliability r_pos", c.reliability.toFixed(2)));
     if (c.vona_horizon != null) box.appendChild(whyLine("VONA horizon", `${c.vona_horizon} turns`));
     if (c.best_available_next != null) {
       box.appendChild(whyLine("E[best available next]", c.best_available_next.toFixed(1)));
@@ -526,7 +523,8 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
     const subParts: string[] = [];
     if (best.nfl_team) subParts.push(best.nfl_team);
     if (best.bye_week != null) subParts.push(`bye ${best.bye_week}`);
-    if (best.components) subParts.push(`replacement ${best.components.replacement_baseline.toFixed(0)}`);
+    if (best.components)
+      subParts.push(`replacement ${best.components.replacement_baseline.toFixed(0)}`);
     subEl.textContent = subParts.join(" · ");
 
     // Projection provenance (§5). Marked ONLY when degraded, so the chip's presence carries the
@@ -587,9 +585,10 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
         nm.append(" ", altChip);
       }
       row.appendChild(nm);
-      const rt = p.next_turn_availability != null
-        ? `${p.score.toFixed(1)} · ${formatPct(p.next_turn_availability)}`
-        : p.score.toFixed(1);
+      const rt =
+        p.next_turn_availability != null
+          ? `${p.score.toFixed(1)} · ${formatPct(p.next_turn_availability)}`
+          : p.score.toFixed(1);
       row.appendChild(el("span", "rt", rt));
       altList.appendChild(row);
     });

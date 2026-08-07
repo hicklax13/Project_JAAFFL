@@ -37,9 +37,11 @@ const CBS = join(HERE, "fixtures", "cbs");
 const TEAMS = 12;
 
 function livePicks() {
-  const events = JSON.parse(
-    readFileSync(join(CBS, "full-draft.events.json"), "utf-8"),
-  ) as Array<{ event_type: string; pick_number: number | null; data: Record<string, unknown> }>;
+  const events = JSON.parse(readFileSync(join(CBS, "full-draft.events.json"), "utf-8")) as Array<{
+    event_type: string;
+    pick_number: number | null;
+    data: Record<string, unknown>;
+  }>;
   return events.filter((e) => e.event_type === "pick_made");
 }
 

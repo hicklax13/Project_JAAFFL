@@ -16,15 +16,15 @@ error→close cleanup. Two copies of one state machine drift.
 
 Read line-by-line from both files (not from the `/simplify` summary, which missed the last two):
 
-| Event | Web (`api.ts`) | Overlay (`recs.ts`) |
-| --- | --- | --- |
-| first arg | `leagueId`; url from `opts.url ?? WS_BASE + /recs/ws` | `url` positional |
-| on open | `attempt=0`; status `live`; **sends subscribe frame** | `attempt=0`; status `live`; **arms stale timer** |
-| on rec/snapshot | `onRecommendation(rec)` | **status `live`**; **re-arms stale**; `onRecommendation(rec)` |
-| on ping | send pong | send pong |
-| on close | status `reconnecting` | **clears stale**; status `disconnected` |
-| on error | `ws.close()` | `ws.close()` |
-| on unsubscribe | clear timer; **status `closed`**; `ws.close()` | clear both timers; **no status**; `ws.close()` |
+| Event           | Web (`api.ts`)                                        | Overlay (`recs.ts`)                                           |
+| --------------- | ----------------------------------------------------- | ------------------------------------------------------------- |
+| first arg       | `leagueId`; url from `opts.url ?? WS_BASE + /recs/ws` | `url` positional                                              |
+| on open         | `attempt=0`; status `live`; **sends subscribe frame** | `attempt=0`; status `live`; **arms stale timer**              |
+| on rec/snapshot | `onRecommendation(rec)`                               | **status `live`**; **re-arms stale**; `onRecommendation(rec)` |
+| on ping         | send pong                                             | send pong                                                     |
+| on close        | status `reconnecting`                                 | **clears stale**; status `disconnected`                       |
+| on error        | `ws.close()`                                          | `ws.close()`                                                  |
+| on unsubscribe  | clear timer; **status `closed`**; `ws.close()`        | clear both timers; **no status**; `ws.close()`                |
 
 Two divergences are load-bearing and easy to erase by accident:
 
@@ -42,16 +42,21 @@ Joins `parseRecsFrame` + `RECS_PROTOCOL_VERSION`, which the module already owns.
 
 ```ts
 export type RecsSocketPhase = "connecting" | "live" | "stale" | "reconnecting" | "closed";
-export interface WebSocketLike { /* hoisted; was declared identically in both surfaces */ }
+export interface WebSocketLike {
+  /* hoisted; was declared identically in both surfaces */
+}
 
-export function createRecsSocket(url: string, opts: {
-  onRecommendation: (rec: Recommendation) => void;
-  onStatus?: (phase: RecsSocketPhase) => void;
-  onOpen?: (send: (data: string) => void) => void;  // per (re)connect, once open
-  staleAfterMs?: number;   // presence enables stale tracking
-  backoffMs?: number[];
-  wsFactory?: (url: string) => WebSocketLike;
-}): () => void
+export function createRecsSocket(
+  url: string,
+  opts: {
+    onRecommendation: (rec: Recommendation) => void;
+    onStatus?: (phase: RecsSocketPhase) => void;
+    onOpen?: (send: (data: string) => void) => void; // per (re)connect, once open
+    staleAfterMs?: number; // presence enables stale tracking
+    backoffMs?: number[];
+    wsFactory?: (url: string) => WebSocketLike;
+  },
+): () => void;
 ```
 
 One canonical phase machine:

@@ -12,12 +12,12 @@
 
 ## ⛔ SEQUENCING GATE — read before Task 1
 
-A **concurrent** Claude Desktop session ("Dedup /recs/ws client into shared core", *Session 1*) is
+A **concurrent** Claude Desktop session ("Dedup /recs/ws client into shared core", _Session 1_) is
 live-editing the SAME repo's `apps/extension/src/overlay/overlay.ts` (and `apps/web/lib/api.ts`,
 `apps/extension/src/lib/recs.ts`). Its socket refactor and this one both modify `overlay.ts`.
 
 **Do NOT begin Task 2 or any code change until Session 1 is fully merged to BOTH local `main` and
-GitHub `origin/main`.** Implementation happens *after* the rebase, on top of Session 1's merged
+GitHub `origin/main`.** Implementation happens _after_ the rebase, on top of Session 1's merged
 `overlay.ts`, so there is no git merge conflict to resolve — instead we integrate one import line
 into `overlay.ts`'s then-current shape. Task 1 is the gate; Task 2 is the rebase.
 
@@ -30,12 +30,12 @@ This plan lives on branch `worktree-refactor+why-term-bar` (worktree at
 
 ## File Structure
 
-| File | Responsibility | Change |
-| --- | --- | --- |
-| `packages/shared/src/why.ts` | The "why" decomposition + now its render geometry & score formatters | Add `WhyBarEdge`, `WhyTermBar`, `whyTermBar`, `formatScore`, `formatSignedScore`; fix stale render comment |
-| `packages/shared/tests/why.test.ts` | Unit tests for the "why" primitives | Add `whyTermBar` + formatter suites |
-| `apps/web/components/why-panel.tsx` | React renderer of the decomposition | `TermRow` uses `whyTermBar`; `WhyPanel` uses shared formatters; delete local `fmt`/`fmtSigned` |
-| `apps/extension/src/overlay/overlay.ts` | Shadow-DOM overlay renderer | `whyRow` uses `whyTermBar`; delete local `signed` |
+| File                                    | Responsibility                                                       | Change                                                                                                     |
+| --------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `packages/shared/src/why.ts`            | The "why" decomposition + now its render geometry & score formatters | Add `WhyBarEdge`, `WhyTermBar`, `whyTermBar`, `formatScore`, `formatSignedScore`; fix stale render comment |
+| `packages/shared/tests/why.test.ts`     | Unit tests for the "why" primitives                                  | Add `whyTermBar` + formatter suites                                                                        |
+| `apps/web/components/why-panel.tsx`     | React renderer of the decomposition                                  | `TermRow` uses `whyTermBar`; `WhyPanel` uses shared formatters; delete local `fmt`/`fmtSigned`             |
+| `apps/extension/src/overlay/overlay.ts` | Shadow-DOM overlay renderer                                          | `whyRow` uses `whyTermBar`; delete local `signed`                                                          |
 
 `packages/shared/src/index.ts` re-exports via `export * from "./why"` — **no index edit needed.**
 
@@ -48,30 +48,36 @@ This plan lives on branch `worktree-refactor+why-term-bar` (worktree at
 - [ ] **Step 1: Fetch and check GitHub `origin/main` carries Session 1's socket core**
 
 Run:
+
 ```bash
 cd .claude/worktrees/refactor+why-term-bar
 git fetch origin
 git show origin/main:packages/shared/src/socket.ts 2>/dev/null | grep -q "createRecsSocket" \
   && echo "origin/main: MERGED" || echo "origin/main: NOT YET — STOP AND WAIT"
 ```
+
 Expected to proceed: `origin/main: MERGED`. `createRecsSocket` is Session 1's new export; its
 presence on `origin/main` is the merge signal. If `NOT YET`, stop — the gate is closed.
 
 - [ ] **Step 2: Confirm local `main` also updated (user required both)**
 
 Run:
+
 ```bash
 git show main:packages/shared/src/socket.ts 2>/dev/null | grep -q "createRecsSocket" \
   && echo "local main: MERGED" || echo "local main: NOT YET — STOP AND WAIT"
 ```
+
 Expected to proceed: `local main: MERGED`.
 
 - [ ] **Step 3: Confirm Session 1 left no uncommitted WIP in the main checkout**
 
 Run:
+
 ```bash
 git -C ../../.. status --porcelain -- apps/web/lib/api.ts apps/extension/src/lib/recs.ts apps/extension/src/overlay/overlay.ts
 ```
+
 Expected: empty output (Session 1's edits are committed/merged, not dangling). If non-empty,
 Session 1 is still working — stop and wait.
 
@@ -84,30 +90,36 @@ Session 1 is still working — stop and wait.
 - [ ] **Step 1: Rebase the branch (spec + gitignore only) onto origin/main**
 
 Run:
+
 ```bash
 git rebase origin/main
 ```
+
 Expected: clean replay. This branch's two commits touch only `docs/` and `.gitignore`, so **no
 `overlay.ts` conflict occurs here** — the conflict the sequencing gate guards against is avoided by
-implementing *after* this rebase, directly on Session 1's merged `overlay.ts`.
+implementing _after_ this rebase, directly on Session 1's merged `overlay.ts`.
 If `.gitignore` conflicts (Session 1 added a similar ignore), keep both rules and
 `git rebase --continue`.
 
 - [ ] **Step 2: Re-install deps (lockfile may have moved under Session 1)**
 
 Run:
+
 ```bash
 pnpm install --frozen-lockfile
 ```
+
 Expected: `Done`. If the lockfile changed and `--frozen-lockfile` fails, run `pnpm install` and note
 it in the PR.
 
 - [ ] **Step 3: Re-verify a green baseline on the new base, before any edit**
 
 Run:
+
 ```bash
 pnpm -r typecheck && pnpm -r test
 ```
+
 Expected: typecheck green; all suites green. Record the shared/web/extension counts — they are the
 "untouched" targets for Tasks 4-5. (Session 1 may have changed the extension count; whatever it is
 now is the target.)
@@ -115,10 +127,12 @@ now is the target.)
 - [ ] **Step 4: Read the post-merge overlay.ts import block**
 
 Run:
+
 ```bash
 sed -n '1,40p' apps/extension/src/overlay/overlay.ts
 ```
-Note the exact current `@jaaffl/shared` import list — Task 5 adds `whyTermBar` into *that* list
+
+Note the exact current `@jaaffl/shared` import list — Task 5 adds `whyTermBar` into _that_ list
 (Session 1 may have added/removed names). Do not assume the authoring-time shape.
 
 ---
@@ -126,6 +140,7 @@ Note the exact current `@jaaffl/shared` import list — Task 5 adds `whyTermBar`
 ## Task 3: The `whyTermBar` helper + exported formatters (TDD)
 
 **Files:**
+
 - Modify: `packages/shared/src/why.ts` (add types/helper/formatters after `decomposeWhy`; fix comment at lines ~17-20)
 - Test: `packages/shared/tests/why.test.ts` (append two `describe` blocks)
 
@@ -200,7 +215,13 @@ describe("whyTermBar — box geometry + display text (§6.5)", () => {
 
   it("anchors a diverging PENALTY to the RIGHT edge so it paints left of the midline (§6.5)", () => {
     const b = whyTermBar(
-      mkTerm({ key: "risk", anchor: "diverging", contribution: -2.1, barFraction: 0.5, colorRole: "critical" }),
+      mkTerm({
+        key: "risk",
+        anchor: "diverging",
+        contribution: -2.1,
+        barFraction: 0.5,
+        colorRole: "critical",
+      }),
     );
     expect(b.anchorEdge).toBe("right");
     expect(b.offsetPct).toBe(50);
@@ -211,7 +232,13 @@ describe("whyTermBar — box geometry + display text (§6.5)", () => {
 
   it("anchors a diverging BONUS to the LEFT edge so it paints right of the midline", () => {
     const b = whyTermBar(
-      mkTerm({ key: "risk", anchor: "diverging", contribution: 1.5, barFraction: 0.3, colorRole: "pine" }),
+      mkTerm({
+        key: "risk",
+        anchor: "diverging",
+        contribution: 1.5,
+        barFraction: 0.3,
+        colorRole: "pine",
+      }),
     );
     expect(b.anchorEdge).toBe("left");
     expect(b.offsetPct).toBe(50);
@@ -234,9 +261,11 @@ describe("whyTermBar — box geometry + display text (§6.5)", () => {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run:
+
 ```bash
 pnpm --filter @jaaffl/shared test
 ```
+
 Expected: FAIL — `whyTermBar`, `formatScore`, `formatSignedScore`, and type `WhyTermBar` are not
 exported yet (compile/import error). The existing `decomposeWhy`/`parseEngineParams`/`whyTermColorVar`
 suites still pass.
@@ -330,18 +359,22 @@ for both surfaces. This deletes the fossil.)
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run:
+
 ```bash
 pnpm --filter @jaaffl/shared test
 ```
+
 Expected: PASS — all suites green, including the two new blocks and every pre-existing
 `decomposeWhy` case (unchanged).
 
 - [ ] **Step 6: Typecheck shared**
 
 Run:
+
 ```bash
 pnpm --filter @jaaffl/shared typecheck
 ```
+
 Expected: green.
 
 - [ ] **Step 7: Commit**
@@ -364,6 +397,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ## Task 4: Web renderer becomes a pure consumer
 
 **Files:**
+
 - Modify: `apps/web/components/why-panel.tsx`
 - Test: `apps/web/components/why-panel.test.tsx` (**not edited** — it must pass untouched)
 
@@ -418,7 +452,10 @@ Replace the whole `TermRow` function:
 ```tsx
 function TermRow({ term, position }: { term: WhyTerm; position: Position | null }): ReactElement {
   const bar = whyTermBar(term);
-  const fill: CSSProperties = { width: `${bar.widthPct}%`, background: whyTermColorVar(term.colorRole, position) };
+  const fill: CSSProperties = {
+    width: `${bar.widthPct}%`,
+    background: whyTermColorVar(term.colorRole, position),
+  };
   fill[bar.anchorEdge] = `${bar.offsetPct}%`;
   return (
     <div className="sc-row">
@@ -426,10 +463,16 @@ function TermRow({ term, position }: { term: WhyTerm; position: Position | null 
         {term.label}
       </span>
       <div className="sc-track" role="presentation">
-        {bar.midlinePct !== null && <span className="sc-mid" style={{ left: `${bar.midlinePct}%` }} />}
+        {bar.midlinePct !== null && (
+          <span className="sc-mid" style={{ left: `${bar.midlinePct}%` }} />
+        )}
         <span className="sc-fill" style={fill} />
       </div>
-      <span className="mono" data-testid={`why-term-${term.key}`} style={{ fontSize: "var(--fs-xs)" }}>
+      <span
+        className="mono"
+        data-testid={`why-term-${term.key}`}
+        style={{ fontSize: "var(--fs-xs)" }}
+      >
         {bar.displayValue}
       </span>
     </div>
@@ -440,6 +483,7 @@ function TermRow({ term, position }: { term: WhyTerm; position: Position | null 
 - [ ] **Step 4: Update `WhyPanel`'s three formatter call sites**
 
 In `WhyPanel`, replace `fmt(` → `formatScore(` and `fmtSigned(` → `formatSignedScore(`:
+
 - `reconcileLabel`: `` `Reconstructs to ${formatScore(why.score)} from its components` `` and
   `` `Warning: does not reconstruct to ${formatScore(why.score)} (residual ${formatSignedScore(why.residual)})` ``
 - modifier chip: `{term.label} {formatSignedScore(term.contribution)}`
@@ -448,9 +492,11 @@ In `WhyPanel`, replace `fmt(` → `formatScore(` and `fmtSigned(` → `formatSig
 - [ ] **Step 5: Run the web suite UNMODIFIED**
 
 Run:
+
 ```bash
 pnpm --filter @jaaffl/web test
 ```
+
 Expected: PASS, same count as the Task 2 baseline. Note especially `why-panel.test.tsx`:
 `.sc-fill` background still `var(--pos-rb)`; `why-term-mlv` still `33.7`; `why-term-risk` still
 contains `2.1` (substring of rendered `−2.1`); total still `42.1`.
@@ -458,16 +504,22 @@ contains `2.1` (substring of rendered `−2.1`); total still `42.1`.
 - [ ] **Step 6: Typecheck web**
 
 Run:
+
 ```bash
 pnpm --filter @jaaffl/web typecheck
 ```
+
 Expected: green. If `fill[bar.anchorEdge] = ...` errors on the computed key, fall back to a
 conditional spread (still sourcing every value from `bar`):
+
 ```tsx
-const edge = bar.anchorEdge === "right"
-  ? { right: `${bar.offsetPct}%` }
-  : { left: `${bar.offsetPct}%` };
-const fill: CSSProperties = { ...edge, width: `${bar.widthPct}%`, background: whyTermColorVar(term.colorRole, position) };
+const edge =
+  bar.anchorEdge === "right" ? { right: `${bar.offsetPct}%` } : { left: `${bar.offsetPct}%` };
+const fill: CSSProperties = {
+  ...edge,
+  width: `${bar.widthPct}%`,
+  background: whyTermColorVar(term.colorRole, position),
+};
 ```
 
 - [ ] **Step 7: Commit**
@@ -488,6 +540,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ## Task 5: Extension overlay becomes a pure consumer
 
 **Files:**
+
 - Modify: `apps/extension/src/overlay/overlay.ts`
 - Test: `apps/extension/tests/overlay.test.ts` + `apps/extension/e2e/overlay.spec.ts` (**not edited**)
 
@@ -550,21 +603,26 @@ const signed = (n: number): string => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFi
 - [ ] **Step 4: Run the extension suite UNMODIFIED**
 
 Run:
+
 ```bash
 pnpm --filter @jaaffl/extension test
 ```
+
 Expected: PASS, same count as the Task 2 baseline. `overlay.test.ts` still finds ≥ 4 `.sc-fill`
 nodes (4 core terms → 4 fills, unchanged).
 
 - [ ] **Step 5: Typecheck extension**
 
 Run:
+
 ```bash
 pnpm --filter @jaaffl/extension typecheck
 ```
+
 Expected: green. `fill.style[bar.anchorEdge]` indexes `CSSStyleDeclaration` with a `"left"|"right"`
 union — both are writable `string` properties, so this type-checks. If it errors, use an explicit
 branch:
+
 ```ts
 if (bar.anchorEdge === "right") fill.style.right = `${bar.offsetPct}%`;
 else fill.style.left = `${bar.offsetPct}%`;
@@ -591,9 +649,11 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - [ ] **Step 1: Prove the three tested files are byte-untouched except the intended files**
 
 Run:
+
 ```bash
 git diff --stat origin/main...HEAD
 ```
+
 Expected: only `packages/shared/src/why.ts`, `packages/shared/tests/why.test.ts`,
 `apps/web/components/why-panel.tsx`, `apps/extension/src/overlay/overlay.ts`, plus the pre-existing
 `docs/…` spec/plan and `.gitignore`. No test file other than `why.test.ts` is modified.
@@ -601,19 +661,23 @@ Expected: only `packages/shared/src/why.ts`, `packages/shared/tests/why.test.ts`
 - [ ] **Step 2: Run every gate**
 
 Run:
+
 ```bash
 pnpm -r typecheck && pnpm -r lint && pnpm -r test
 ```
+
 Expected: all green. Test counts: shared = baseline + the new `whyTermBar`/formatter cases; web and
 extension = **exactly** their Task 2 baselines (untouched).
 
 - [ ] **Step 3: Run E4 (Playwright) — the real overlay in Chromium**
 
 Run:
+
 ```bash
 pnpm --filter @jaaffl/extension exec playwright install --with-deps chromium
 pnpm --filter @jaaffl/extension exec playwright test e2e/overlay.spec.ts
 ```
+
 Expected: PASS. E4 bundles the overlay to an IIFE, injects it, calls `mountOverlay()` +
 `handle.update(rec)`, and asserts the `.sc-fill` "why" bars paint into the Shadow DOM. If the
 `playwright test` invocation differs in this repo, discover it first:
@@ -622,11 +686,13 @@ Expected: PASS. E4 bundles the overlay to an IIFE, injects it, calls `mountOverl
 - [ ] **Step 4: Confirm the duplication is actually gone**
 
 Run:
+
 ```bash
 grep -n "barFraction \* 50\|barFraction \* 100\|right: \"50%\"\|\* 50}%\|\* 100}%" \
   apps/web/components/why-panel.tsx apps/extension/src/overlay/overlay.ts || echo "NO geometry literals remain in either renderer ✓"
 grep -rn "n >= 0 ? \"+\"" apps/web apps/extension || echo "NO local signed-formatter remains ✓"
 ```
+
 Expected: both print the ✓ line — geometry math and the signing rule now live only in `why.ts`.
 
 ---
@@ -638,16 +704,19 @@ Expected: both print the ✓ line — geometry math and the signing rule now liv
 - [ ] **Step 1: Final fetch + rebase (in case main moved during implementation)**
 
 Run:
+
 ```bash
 git fetch origin
 git rebase origin/main
 ```
+
 Expected: clean. If `overlay.ts` now conflicts (main moved again), resolve by keeping Session 1's
 surrounding code and this task's `whyRow`/import edits, then re-run Task 6 Steps 2-3 before pushing.
 
 - [ ] **Step 2: Push the branch**
 
 Run:
+
 ```bash
 git push -u origin HEAD
 ```
@@ -655,6 +724,7 @@ git push -u origin HEAD
 - [ ] **Step 3: Open the PR**
 
 Run (via `gh`; body via heredoc):
+
 ```bash
 gh pr create --base main --title "Refactor: shared whyTermBar geometry for the two 'why' renderers" --body "$(cat <<'EOF'
 Extracts a pure `whyTermBar(term)` beside `decomposeWhy` so `TermRow` (web) and `whyRow`

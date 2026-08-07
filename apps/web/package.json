@@ -9,8 +9,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "lint": "echo \"(lint: add eslint)\" && exit 0"
+    "test": "vitest run"
   },
   "dependencies": {
     "@jaaffl/shared": "workspace:*",

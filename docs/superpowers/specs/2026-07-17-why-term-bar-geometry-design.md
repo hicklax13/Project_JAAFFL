@@ -23,14 +23,14 @@ edit is one no suite would catch you getting half-right.
 
 Read line-by-line from both renderers (not from the `/simplify` summary):
 
-| Case | Web (`TermRow`) | Overlay (`whyRow`) |
-| --- | --- | --- |
-| `anchor: "left"` | `left: 0`, `width: bf*100%` | `left="0"`, `width=bf*100%` |
-| diverging, `contribution < 0` | `right: "50%"`, `width: bf*50%` | `right="50%"`, `width=bf*50%` |
-| diverging, `contribution >= 0` | `left: "50%"`, `width: bf*50%` | `left="50%"`, `width=bf*50%` |
-| midline | `.sc-mid` at `left: 50%` iff diverging | `.sc-mid` at `left: 50%` iff diverging |
-| display text | `mlv ? toFixed(1) : signed` | `mlv ? toFixed(1) : signed` |
-| minus glyph | U+2212 (verified by codepoint) | U+2212 (verified by codepoint) |
+| Case                           | Web (`TermRow`)                        | Overlay (`whyRow`)                     |
+| ------------------------------ | -------------------------------------- | -------------------------------------- |
+| `anchor: "left"`               | `left: 0`, `width: bf*100%`            | `left="0"`, `width=bf*100%`            |
+| diverging, `contribution < 0`  | `right: "50%"`, `width: bf*50%`        | `right="50%"`, `width=bf*50%`          |
+| diverging, `contribution >= 0` | `left: "50%"`, `width: bf*50%`         | `left="50%"`, `width=bf*50%`           |
+| midline                        | `.sc-mid` at `left: 50%` iff diverging | `.sc-mid` at `left: 50%` iff diverging |
+| display text                   | `mlv ? toFixed(1) : signed`            | `mlv ? toFixed(1) : signed`            |
+| minus glyph                    | U+2212 (verified by codepoint)         | U+2212 (verified by codepoint)         |
 
 **None.** Unlike the socket refactor, the two copies are currently behavior-equivalent — including
 the minus glyph, which is U+2212 MINUS SIGN in both, not an ASCII hyphen. This is a pure dedup with
@@ -49,22 +49,22 @@ of step with the plan. `waterfall` appears in that comment and **nowhere else in
 
 Plan **§6.5** is the authority and specifies bars for both surfaces:
 
-| Term | §6.5 geometry | Colour |
-| --- | --- | --- |
-| MLV | left-anchored, ≥0 | `--pos-{pos}` |
-| VONA | left-anchored; clamped at 0 | `--brass-solid` |
-| Risk | **diverging around 0** via `.sc-mid`: penalty left/red, bonus right/pine | `--critical` / `--pine` |
-| Cliff | left-anchored, ≥0 | `--pine` |
-| Modifiers | small chips, capped | status hues |
+| Term      | §6.5 geometry                                                            | Colour                  |
+| --------- | ------------------------------------------------------------------------ | ----------------------- |
+| MLV       | left-anchored, ≥0                                                        | `--pos-{pos}`           |
+| VONA      | left-anchored; clamped at 0                                              | `--brass-solid`         |
+| Risk      | **diverging around 0** via `.sc-mid`: penalty left/red, bonus right/pine | `--critical` / `--pine` |
+| Cliff     | left-anchored, ≥0                                                        | `--pine`                |
+| Modifiers | small chips, capped                                                      | status hues             |
 
-This matters beyond tidiness: had the waterfall been live, sharing geometry would be *wrong* — it
+This matters beyond tidiness: had the waterfall been live, sharing geometry would be _wrong_ — it
 would hard-code a model the dashboard was scheduled to outgrow. It is not live. The comment is
 corrected as part of this work.
 
 ### 2. The sign → CSS-edge mapping is inverted, and it is correct
 
 §6.5 says a penalty paints **left/red**. The code gives a negative contribution `right: 50%` —
-pinning the fill's *right* edge at the midline so it grows **leftward**, painting the left half.
+pinning the fill's _right_ edge at the midline so it grows **leftward**, painting the left half.
 So a negative contribution's CSS edge is `right`.
 
 This is why the field is named **`anchorEdge`, not `side`**: `{ side: "right" }` for a bar the user
@@ -121,14 +121,14 @@ create a second callable path to the same value.
 
 Each collapses to: `whyTermBar(term)` → `whyTermColorVar(term.colorRole, position)` → apply.
 `TermRow`'s ternary and `whyRow`'s if/else both disappear. Web keeps its `data-testid`; the overlay
-keeps `.sc-val`. The extension's `signed` is used *only* by `whyRow` and is deleted outright.
+keeps `.sc-val`. The extension's `signed` is used _only_ by `whyRow` and is deleted outright.
 
 Out of scope: the overlay's `best.score.toFixed(1)` and alt-row formatting are untouched.
 
 ### Typing note
 
 `fill.style[bar.anchorEdge] = ...` is fine on `CSSStyleDeclaration` (imperative, extension). React's
-`CSSProperties` with a *computed* union key may widen to a string index signature and fail to
+`CSSProperties` with a _computed_ union key may widen to a string index signature and fail to
 satisfy the type. The cast-free escape is mutation, since both `left` and `right` accept `string`:
 
 ```tsx
@@ -137,7 +137,7 @@ fill[bar.anchorEdge] = `${bar.offsetPct}%`;
 ```
 
 To be **confirmed by `tsc`, not assumed**. Fallback if it fights: a conditional spread, which costs a
-branch but keeps every *value* sourced from `bar`.
+branch but keeps every _value_ sourced from `bar`.
 
 ## Tests
 

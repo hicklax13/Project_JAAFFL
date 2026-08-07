@@ -2,7 +2,12 @@
 
 import { useEffect, useReducer, useRef } from "react";
 
-import type { DraftAnalytics, DraftBoardState, LeagueSettings, Recommendation } from "@jaaffl/shared";
+import type {
+  DraftAnalytics,
+  DraftBoardState,
+  LeagueSettings,
+  Recommendation,
+} from "@jaaffl/shared";
 
 import {
   type AnalyticsResult,
@@ -106,7 +111,10 @@ const INITIAL: DraftRoomState = {
  * then track WS /recs/ws pushes (snapshot + rec) with the socket's connection state. The socket
  * is opened in an effect and closed on cleanup (React 19 / StrictMode-safe).
  */
-export function useDraftRoom(leagueId: string, apiOverride?: Partial<DraftRoomApi>): DraftRoomState {
+export function useDraftRoom(
+  leagueId: string,
+  apiOverride?: Partial<DraftRoomApi>,
+): DraftRoomState {
   const [state, dispatch] = useReducer(reducer, INITIAL);
   const apiRef = useRef<DraftRoomApi>({ ...REAL_API, ...apiOverride });
 

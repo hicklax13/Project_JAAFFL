@@ -46,7 +46,14 @@ const REC: Recommendation = {
         modifiers: {},
       },
     },
-    { player_id: "p2", name: "Drake London", position: "WR", nfl_team: "ATL", score: 37.8, next_turn_availability: 0.41 },
+    {
+      player_id: "p2",
+      name: "Drake London",
+      position: "WR",
+      nfl_team: "ATL",
+      score: 37.8,
+      next_turn_availability: 0.41,
+    },
   ],
 };
 
@@ -157,8 +164,12 @@ describe("overlay panel controls", () => {
     const head = shadow.querySelector<HTMLElement>(".ov-head")!;
     const panel = shadow.querySelector<HTMLElement>(".panel")!;
 
-    head.dispatchEvent(new MouseEvent("pointerdown", { clientX: 500, clientY: 100, bubbles: true }));
-    window.dispatchEvent(new MouseEvent("pointermove", { clientX: 460, clientY: 160, bubbles: true }));
+    head.dispatchEvent(
+      new MouseEvent("pointerdown", { clientX: 500, clientY: 100, bubbles: true }),
+    );
+    window.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 460, clientY: 160, bubbles: true }),
+    );
     window.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
 
     // Dragging switches the panel off its hard-coded `right` anchor onto explicit coords.
@@ -173,7 +184,9 @@ describe("overlay panel controls", () => {
     const panel = shadow.querySelector<HTMLElement>(".panel")!;
 
     btn.dispatchEvent(new MouseEvent("pointerdown", { clientX: 500, clientY: 100, bubbles: true }));
-    window.dispatchEvent(new MouseEvent("pointermove", { clientX: 300, clientY: 300, bubbles: true }));
+    window.dispatchEvent(
+      new MouseEvent("pointermove", { clientX: 300, clientY: 300, bubbles: true }),
+    );
     window.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
 
     expect(panel.style.left).toBe(""); // never moved

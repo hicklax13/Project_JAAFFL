@@ -32,10 +32,16 @@ function TermRow({ term, position }: { term: WhyTerm; position: Position | null 
         {term.label}
       </span>
       <div className="sc-track" role="presentation">
-        {bar.midlinePct !== null && <span className="sc-mid" style={{ left: `${bar.midlinePct}%` }} />}
+        {bar.midlinePct !== null && (
+          <span className="sc-mid" style={{ left: `${bar.midlinePct}%` }} />
+        )}
         <span className="sc-fill" style={fill} />
       </div>
-      <span className="mono" data-testid={`why-term-${term.key}`} style={{ fontSize: "var(--fs-xs)" }}>
+      <span
+        className="mono"
+        data-testid={`why-term-${term.key}`}
+        style={{ fontSize: "var(--fs-xs)" }}
+      >
         {bar.displayValue}
       </span>
     </div>

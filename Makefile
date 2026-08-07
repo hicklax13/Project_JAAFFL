@@ -28,10 +28,10 @@ web-dev:
 ext-dev:
 	pnpm --filter @jaaffl/extension dev
 
-## lint: lint Python (ruff) and JS (workspace)
+## lint: lint Python (ruff) and JS (eslint + prettier --check)
 lint:
 	cd backend && (uv run ruff check . || ruff check .)
-	pnpm -r lint
+	pnpm lint
 
 ## fmt: auto-format Python and JS
 fmt:

@@ -29,12 +29,12 @@ professional before any commercial use.
 
 ## Data-provider licensing
 
-| Provider           | Tier / cost                                  | Use posture in this repo                          |
-| ------------------ | -------------------------------------------- | ------------------------------------------------- |
-| nflverse/nflfastR  | Free / open                                  | Default historical + validation base              |
-| FantasyPros API    | Free prototype; ~$5.99/mo personal Premium   | Personal, **non-commercial** only; off by default |
-| SportsDataIO       | Commercial (trial available)                 | Commercial track only; off by default             |
-| Sportradar         | Commercial                                   | Commercial track only; off by default             |
+| Provider          | Tier / cost                                | Use posture in this repo                          |
+| ----------------- | ------------------------------------------ | ------------------------------------------------- |
+| nflverse/nflfastR | Free / open                                | Default historical + validation base              |
+| FantasyPros API   | Free prototype; ~$5.99/mo personal Premium | Personal, **non-commercial** only; off by default |
+| SportsDataIO      | Commercial (trial available)               | Commercial track only; off by default             |
+| Sportradar        | Commercial                                 | Commercial track only; off by default             |
 
 - The FantasyPros low-cost Premium tier is **personal, non-commercial**. A commercial
   launch must move to FantasyPros Commercial, SportsDataIO, Sportradar, or equivalent.

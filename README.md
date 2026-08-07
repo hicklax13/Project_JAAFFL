@@ -56,14 +56,14 @@ interface so free/personal and licensed/commercial feeds are swappable at runtim
 
 ## Repository layout
 
-| Path                | Language   | Responsibility                                                             |
-| ------------------- | ---------- | -------------------------------------------------------------------------- |
-| `backend/`          | Python     | FastAPI companion service, data warehouse, draft engine, AI assistant      |
-| `apps/extension/`   | TypeScript | Manifest V3 CBS sync layer + in-draft overlay                              |
-| `apps/web/`         | TypeScript | Next.js analytics dashboard                                                |
-| `packages/shared/`  | TypeScript | Shared event/league/recommendation schemas (Zod) used across the JS side  |
-| `data/`             | —          | Local warehouse artifacts (git-ignored)                                     |
-| `docs/`             | —          | Research report, ADRs, legal & compliance notes                            |
+| Path               | Language   | Responsibility                                                           |
+| ------------------ | ---------- | ------------------------------------------------------------------------ |
+| `backend/`         | Python     | FastAPI companion service, data warehouse, draft engine, AI assistant    |
+| `apps/extension/`  | TypeScript | Manifest V3 CBS sync layer + in-draft overlay                            |
+| `apps/web/`        | TypeScript | Next.js analytics dashboard                                              |
+| `packages/shared/` | TypeScript | Shared event/league/recommendation schemas (Zod) used across the JS side |
+| `data/`            | —          | Local warehouse artifacts (git-ignored)                                  |
+| `docs/`            | —          | Research report, ADRs, legal & compliance notes                          |
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how the pieces fit together and
 [`ROADMAP.md`](ROADMAP.md) for the dependency-ordered build plan.

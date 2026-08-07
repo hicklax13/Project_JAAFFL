@@ -35,7 +35,10 @@ export function SurvivalPanel({ ranked }: { ranked: RecommendedPick[] }): ReactE
               <PositionChip position={p.position} />
               <span className="surv-name">{playerName(p)}</span>
               <div className="surv-track" aria-hidden="true">
-                <span className="surv-fill" style={{ width: `${prob * 100}%`, background: color }} />
+                <span
+                  className="surv-fill"
+                  style={{ width: `${prob * 100}%`, background: color }}
+                />
               </div>
               <span className="surv-pct mono" style={{ color }}>
                 {formatPct(prob)}
@@ -87,7 +90,10 @@ export function TierLadder({ ranked }: { ranked: RecommendedPick[] }): ReactElem
               </ul>
               {cliff != null && cliff > 0 && (
                 <div className="tier-cliff">
-                  <span className="stat-pill is-critical" aria-label={`Tier cliff of ${cliff.toFixed(1)} points to Tier ${tiers[idx + 1]}`}>
+                  <span
+                    className="stat-pill is-critical"
+                    aria-label={`Tier cliff of ${cliff.toFixed(1)} points to Tier ${tiers[idx + 1]}`}
+                  >
                     ▾ {cliff.toFixed(1)} cliff
                   </span>
                 </div>

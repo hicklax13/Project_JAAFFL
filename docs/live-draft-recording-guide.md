@@ -21,7 +21,7 @@ recommendations can be wired up.
 **What to expect on screen today:** the on-page overlay panel will show **"Watching the board"**.
 Live auto-recommendations are **not wired in the free ($0) path yet** (the engine replies
 "warming up" until a player-universe loader lands — see
-[`owner-manual-todo.md` §4](owner-manual-todo.md)). So the job of *this* session is to **record**,
+[`owner-manual-todo.md` §4](owner-manual-todo.md)). So the job of _this_ session is to **record**,
 not to get live pick advice. If you want picks fed in and echoed back during the draft, use the
 **Manual paste** box (Step 11).
 
@@ -38,27 +38,27 @@ steps record your **real** draft on draft night.
 These are memorialized in [`config/league.json`](../config/league.json) and are treated as fixed.
 Before your real draft, open your league's **Settings** page on CBS and confirm every row matches:
 
-| Setting             | Value                                                                      |
-| ------------------- | -------------------------------------------------------------------------- |
-| **Platform**        | CBS Sports                                                                 |
-| **Draft type**      | Snake                                                                       |
-| **Teams**           | 12                                                                         |
-| **Draft order**     | Decided in-person, then entered into the CBS system (not a plain snake)    |
-| **Scoring**         | Custom (**non-PPR** — 0 per reception); JAAFFL2025 values (1 pt/50 pass yds, no off. turnover penalty, single DST points-allowed bracket) |
-| **Rounds**          | 17                                                                         |
+| Setting         | Value                                                                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Platform**    | CBS Sports                                                                                                                                |
+| **Draft type**  | Snake                                                                                                                                     |
+| **Teams**       | 12                                                                                                                                        |
+| **Draft order** | Decided in-person, then entered into the CBS system (not a plain snake)                                                                   |
+| **Scoring**     | Custom (**non-PPR** — 0 per reception); JAAFFL2025 values (1 pt/50 pass yds, no off. turnover penalty, single DST points-allowed bracket) |
+| **Rounds**      | 17                                                                                                                                        |
 
 **Roster slots per team (9 starters + 8 bench = 17):**
 
-| Slot      | Count | Notes                                             |
-| --------- | ----- | ------------------------------------------------- |
-| QB        | 1     |                                                   |
-| RB        | 1     |                                                   |
-| WR        | 3     |                                                   |
-| **WR/RB** | 1     | Flex — **WR or RB only** (no TE, QB, K, or DST)   |
-| TE        | 1     |                                                   |
-| K         | 1     |                                                   |
-| DST       | 1     |                                                   |
-| Bench     | 8     |                                                   |
+| Slot      | Count | Notes                                           |
+| --------- | ----- | ----------------------------------------------- |
+| QB        | 1     |                                                 |
+| RB        | 1     |                                                 |
+| WR        | 3     |                                                 |
+| **WR/RB** | 1     | Flex — **WR or RB only** (no TE, QB, K, or DST) |
+| TE        | 1     |                                                 |
+| K         | 1     |                                                 |
+| DST       | 1     |                                                 |
+| Bench     | 8     |                                                 |
 
 > If anything on CBS differs, **stop and tell Claude** — do not edit `config/league.json` yourself.
 > These values are the immutable "league constitution" the whole engine calibrates against.
@@ -69,13 +69,13 @@ Before your real draft, open your league's **Settings** page on CBS and confirm 
 
 You need four things. Install any that you don't already have:
 
-| Tool              | Version   | Download                                                            |
-| ----------------- | --------- | ------------------------------------------------------------------- |
-| **Google Chrome** | current   | https://www.google.com/chrome/                                      |
-| **Python**        | ≥ 3.11    | https://www.python.org/downloads/                                   |
-| **Node.js**       | 22 (LTS)  | https://nodejs.org/en/download                                      |
-| **pnpm**          | ≥ 10      | https://pnpm.io/installation                                        |
-| **uv** (optional) | current   | https://docs.astral.sh/uv/getting-started/installation/            |
+| Tool              | Version  | Download                                                |
+| ----------------- | -------- | ------------------------------------------------------- |
+| **Google Chrome** | current  | https://www.google.com/chrome/                          |
+| **Python**        | ≥ 3.11   | https://www.python.org/downloads/                       |
+| **Node.js**       | 22 (LTS) | https://nodejs.org/en/download                          |
+| **pnpm**          | ≥ 10     | https://pnpm.io/installation                            |
+| **uv** (optional) | current  | https://docs.astral.sh/uv/getting-started/installation/ |
 
 Quick way to install pnpm once Node is present:
 
@@ -268,6 +268,7 @@ every kind of frame (settings, on-the-clock, picks, results) is captured at leas
 
    (These files are **git-ignored** — they may contain your league name and are never committed.
    Only redacted "golden" fixtures get committed later, by Claude.)
+
 4. **Tell Claude: "capture done."** Claude then finalizes the CBS field mappings (`parse.ts`),
    fills in the real snapshot fields, reconciles the scoring map, and promotes redacted fixtures —
    the work that unlocks live recommendations.
@@ -277,7 +278,7 @@ every kind of frame (settings, on-the-clock, picks, results) is captured at leas
 ## 11. Manual paste — the guaranteed way to feed picks (fallback)
 
 Because live auto-parsing isn't finalized yet (that's what Step 10 unlocks), the reliable way to
-get picks *into* JAAFFL during any draft is the **Manual paste** box built into the overlay:
+get picks _into_ JAAFFL during any draft is the **Manual paste** box built into the overlay:
 
 1. On the CBS draft page, find the JAAFFL overlay panel (top-right of the page).
 2. Expand **"Manual paste (fallback)"**.
@@ -293,6 +294,7 @@ get picks *into* JAAFFL during any draft is the **Manual paste** box built into 
    - The optional **`ORDER:`** line supplies the **in-person draft order** (your league decides the
      order in person, so JAAFFL can't infer it — this is how you tell it).
    - Each pick line is: `<pick #>. <Team> - <Player>, <POS>, <NFL team>`.
+
 4. Click **"Send picks."** The status shows how many events were accepted.
 
 This routes through the exact same validation path as live capture, so it's a safe draft-day
@@ -302,16 +304,16 @@ backstop no matter what.
 
 ## 12. Troubleshooting
 
-| Symptom                                             | Fix                                                                                                                              |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| No `REC` badge after clicking the icon              | Make sure the extension card is **ON** in `chrome://extensions`, then reload the CBS tab and click the icon again.               |
-| Overlay panel never appears on the CBS page         | Confirm the URL matches the patterns in Step 7. Reload the page. Check the extension card is enabled.                            |
-| `curl http://127.0.0.1:8788/health` fails           | The backend isn't running — start it with `make backend-dev` (Step 6) and leave that terminal open.                              |
-| No `rec-*.jsonl` file appears while recording       | Backend must be running **before** you toggle REC. Check the backend terminal for errors; re-toggle REC off/on.                  |
+| Symptom                                                    | Fix                                                                                                                                                                                                                                                |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No `REC` badge after clicking the icon                     | Make sure the extension card is **ON** in `chrome://extensions`, then reload the CBS tab and click the icon again.                                                                                                                                 |
+| Overlay panel never appears on the CBS page                | Confirm the URL matches the patterns in Step 7. Reload the page. Check the extension card is enabled.                                                                                                                                              |
+| `curl http://127.0.0.1:8788/health` fails                  | The backend isn't running — start it with `make backend-dev` (Step 6) and leave that terminal open.                                                                                                                                                |
+| No `rec-*.jsonl` file appears while recording              | Backend must be running **before** you toggle REC. Check the backend terminal for errors; re-toggle REC off/on.                                                                                                                                    |
 | REC badge is on, sockets connect, but **zero frames land** | You almost certainly dismissed Chrome's **Local Network Access** prompt (Step 8). Click the icon left of the URL and allow it. Confirm by watching for `OPTIONS /dev/recordings ... 400` in the backend log — that is the preflight being blocked. |
-| Overlay panel covers the draft board                | Click **▾** in the panel header to collapse it, or drag the panel by its header. Both persist across reloads. Do NOT disable the extension — that stops recording. |
-| Extension card shows fewer than 3 content scripts   | Known `@crxjs` build risk with the MAIN-world entry. Re-run `pnpm --filter @jaaffl/extension build`, remove + re-load unpacked.  |
-| CBS settings don't match Step 1's table             | **Don't** edit `config/league.json`. Tell Claude what differs so the conflict is handled correctly.                             |
+| Overlay panel covers the draft board                       | Click **▾** in the panel header to collapse it, or drag the panel by its header. Both persist across reloads. Do NOT disable the extension — that stops recording.                                                                                 |
+| Extension card shows fewer than 3 content scripts          | Known `@crxjs` build risk with the MAIN-world entry. Re-run `pnpm --filter @jaaffl/extension build`, remove + re-load unpacked.                                                                                                                    |
+| CBS settings don't match Step 1's table                    | **Don't** edit `config/league.json`. Tell Claude what differs so the conflict is handled correctly.                                                                                                                                                |
 
 ---
 

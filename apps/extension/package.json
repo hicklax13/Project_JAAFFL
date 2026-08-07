@@ -9,8 +9,7 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test",
-    "lint": "echo \"(lint: add eslint)\" && exit 0"
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@jaaffl/shared": "workspace:*"
