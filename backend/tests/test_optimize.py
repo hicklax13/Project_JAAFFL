@@ -222,3 +222,31 @@ def test_roster_capacity_never_reports_a_position_the_roster_cannot_hold() -> No
     from jaaffl.engine.optimize import roster_capacity
 
     assert Position.LB not in roster_capacity(jaaffl_settings())
+
+
+def test_value_over_replacement_is_the_unfloored_mlv() -> None:
+    """VOR is what MLV reduces to on an empty roster — this module's own reduction guarantee —
+    and it keeps ordering candidates below replacement, where MLV clamps every one of them to
+    exactly 0.0. That clamp is what left the engine ranking 180 tied candidates by dict order."""
+    from jaaffl.engine.optimize import value_over_replacement
+
+    slots = expand_starting_slots(jaaffl_settings())
+    mu = {"good": 300.0, "weak": 60.0, "weaker": 10.0}
+    position = dict.fromkeys(mu, Position.WR)
+    baselines = {Position.WR: 100.0}
+
+    # Empty roster: MLV IS VOR for an above-replacement player (the reduction guarantee).
+    assert marginal_lineup_value("good", [], mu, position, baselines, slots) == pytest.approx(
+        value_over_replacement("good", mu, position, baselines)
+    )
+
+    # With the WR slots taken by better players, MLV floors BOTH weak players to exactly 0.0 —
+    # and VOR still separates them by 50 points.
+    full = ["good"] * 4
+    mlvs = {
+        pid: marginal_lineup_value(pid, full, mu, position, baselines, slots)
+        for pid in ("weak", "weaker")
+    }
+    assert mlvs["weak"] == mlvs["weaker"] == 0.0
+    assert value_over_replacement("weak", mu, position, baselines) == -40.0
+    assert value_over_replacement("weaker", mu, position, baselines) == -90.0
