@@ -330,6 +330,54 @@ total of the 12)` over seasons sampled from `N(μ, σ)` — against a disjoint s
   behave like the normal round-by-round schedule — and it is **worse** than simply turning it off.
   So there is no cleverer fix waiting; this is the decision.
 
+  ### ✅ TIER 10 UPDATE — the missing half has been found and fixed, and it makes this decision matter more
+
+  Tier 9 ended with "even with the setting off, something else is costing you roughly half a fair
+  share and nobody has found it yet." **Tier 10 found it, and it was not a setting at all.**
+
+  From the moment your nine starting slots are full, every remaining player the engine could take
+  scored **exactly the same** — zero. Not "close to zero": bit-for-bit identical. So the engine had
+  no opinion at all about **8 of your 17 picks**, and the tie was being settled by the order players
+  happened to sit in an internal list. In one measured case its top recommendation was a player
+  projected for **122.9** points while a player projected for **204.2** sat in the same tie.
+
+  That has been fixed in code (nothing for you to do): when the engine genuinely cannot tell two
+  players apart, it now prefers the one worth more relative to a freely available replacement.
+
+  **Why this changes the decision above rather than replacing it.** The fix and the setting are
+  **coupled** — measured on your real board:
+
+  | what you run                       | championship probability | projected points |
+  | ---------------------------------- | ------------------------ | ---------------- |
+  | today's settings, before the fix   | 0.0072                   | 1460             |
+  | today's settings, **with the fix** | 0.0071                   | 1450             |
+  | **setting off**, before the fix    | 0.0683                   | 1714             |
+  | **setting off, with the fix**      | **0.1161**               | **1717**         |
+  | plain best-available (the bar)     | 0.1066                   | 1662             |
+
+  Read the second row: **the fix does nothing while this setting is on.** With the setting live the
+  engine was already breaking those ties — badly, on unpredictability — so there was nothing left to
+  fix. Turn the setting off and the same fix is worth **+0.0478** championship probability.
+
+  So: **the two lines below are now worth more than they were yesterday**, and they are still the
+  only thing on your desk.
+
+  ```
+  "lambda_slot_override": {
+    "last_startable_slot_floor": 0.0,
+    "surplus_stash_ceiling": 0.0
+  },
+  ```
+
+  ⚠️ **Be precise about what the combination buys.** With both, the engine **beats** a plain
+  best-available draft on points (+55, a solid result) and is **level with it** on championship
+  odds — 0.1161 against 0.1066, ahead by an amount too small to call a win (the measurement's own
+  noise is about twice that gap). It is the first time the engine has not been _behind_ the naive
+  baseline, and the first time it sits above a 12-team average (0.0833). It is not yet a win.
+
+  **Nothing has been changed.** `config/engine.json` is yours; verified 2026-08-09 it still reads
+  `0.4 / −0.4`.
+
   **Nothing has been changed, again.** `config/engine.json` is yours. A simulator is still not a
   fact about drafting — the other eleven teams are bots, not the people in your room. What is now
   measured, on your real board and on a practice board, under three different opponent line-ups, is
@@ -450,6 +498,25 @@ comment calls this "a JAAFFL modeling choice"). That assumption is what makes "o
 the rule the practice opponents now follow. **Does CBS let you put a kicker or a defense on your
 bench?** If it does, say so and it is a one-line change. Nothing was altered in `config/league.json`,
 which stays immutable.
+
+> 📊 **Tier 10 gave that question a price.** It used to be abstract; now it is measured. The Tier 10
+> tie-break prefers the player worth more relative to a freely available replacement — and by that
+> yardstick a spare kicker looks better than a deep receiver, because the kicker sits a few points
+> under his replacement while the receiver is 120 under his. The **practice draft** never notices,
+> because there the engine is forbidden from drafting a player it cannot roster. **Your live overlay
+> has no such rule** — deliberately, because adding one would bake in the guess above about what your
+> bench accepts.
+>
+> Walking three full 17-round drafts through the real recommendation code, 51 of your picks:
+>
+> ```
+> before Tier 10:  0 of 51 picks were at a position your roster was already full at
+> after  Tier 10:  1 of 51   (a second kicker, round 12, at one seat of three)
+> ```
+>
+> So the cost of leaving this open is roughly **one wasted late-round suggestion per draft**, and the
+> 30-second rule above already catches it. **Tell us whether CBS lets a kicker or defense sit on your
+> bench** and that goes to zero; until you do, nothing will be assumed on your behalf.
 
 ✅ **Also new in Tier 6 (no action needed):** the overlay's **bye-week chip now actually works**. It
 was declared, styled and rendered all along, but nothing ever filled it in, so it could never

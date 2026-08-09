@@ -13,6 +13,226 @@ order — later stages assume the earlier contracts exist.
 
 Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` done
 
+## 📍 Status — 2026-08-09 · Tier 10 (the engine drafted half its roster in dictionary order)
+
+> **Tier 10 of the audit is merged** (PR #62). Tier 9 closed with an unexplained residual: even with
+> `lambda_slot_override` zeroed the engine wins the championship **less often than a plain VBD
+> draft** (0.0683 vs 0.1066 on the real board, against a 12-team fair share of 0.0833). The cause is
+> not a coefficient and never was. Once the starting nine is full, **every remaining candidate scores
+> exactly 0.0**, and the ranking degenerates to `context.mu` **dictionary insertion order** — for 8 of
+> this league's 17 picks.
+
+### The residual reproduces, digit for digit
+
+Real board (581 players capped to 300), 5 disjoint blocks × 8 seeds × 12 slots, 800 sampled seasons,
+field `[SoftmaxVbd, NeedBased]` — the Tier 9 design, replayed:
+
+| comparison, **real** board     | championship probability | expected points     |
+| ------------------------------ | ------------------------ | ------------------- |
+| ours (committed) vs `vbd_only` | −0.0994 (p = 1.0000)     | −201.8 (p = 1.0000) |
+| `override_off` vs `vbd_only`   | −0.0383 (p = 0.9998)     | +51.9 (p = 0.0005)  |
+
+Identical to the Tier 9 block below. The residual is real, stable, and was measured correctly.
+
+### 🔴 THE FINDING — four terms vanish on the same candidates, and the sort key is dict order
+
+`marginal_lineup_value` is `L*(R∪{p}) − L*(R)`. It is **exactly 0.00** for every candidate who
+cannot improve the optimal nine — which is not merely the below-replacement tail: with a strong
+lineup already seated it includes players far **above** replacement. The rest of the score collapses
+with it:
+
+| term               | value            | why                                                              |
+| ------------------ | ---------------- | ---------------------------------------------------------------- |
+| `MLV`              | **exactly 0.00** | he cracks no starting slot                                       |
+| `κ · max(0, VONA)` | **exactly 0.00** | `expected_best_available` ≥ 0 while MLV = 0, so VONA ≤ 0 → clamp |
+| `α · cliff_bonus`  | **exactly 0.00** | legitimately 0 below replacement (`engine/tiers.py`)             |
+| `− λ · σ`          | **exactly 0.00** | every position is `SURPLUS` once filled → the override's ceiling |
+| **score**          | **0.0000**       | for every remaining candidate                                    |
+
+`picks.sort(key=(punted, -score))` is **stable**, so ties keep the order of `candidates`, which is a
+stable sort of `available` = `[pid for pid in context.mu if pid not in picked]`.
+
+**Measured on the SHIPPED hot path** — `recommend()`, real board, a real entered `draft_order` so
+survival is live (`survival_basis=my_slot`), round 14, `lambda_slot_override` zeroed:
+
+```
+candidates sharing the TOP score (0.000000) exactly:  180 of 180
+candidates with a POSITIVE vona (so kappa could break the tie):  0
+tie order == context.mu insertion order?              True
+projected points of the top 12, in ranked order:
+    [122.9, 16.0, 21.2, 37.5, 31.7, 127.5, 75.5, 47.9, 61.7, 66.9, 24.7, 57.3]
+engine's #1: mu=122.9    vs BEST tied mu=204.2    (gap 81.4 points)
+```
+
+**This is not a simulator artifact** — it is what the overlay would have shown on draft night. On the
+test fixture the same mechanism ties **119 of 124** ranked candidates, and the best of them is a
+264-point receiver sitting **+144** over his own baseline, scored identically to a 10-point kicker.
+
+Behaviourally, in the simulator — re-asking the shipped agent the identical question with the pool
+reversed, real board, 3 slots × 3 seeds = 153 of our picks:
+
+| arm                | picks decided by **list order**         | mean VBD of the 8 weakest picks |
+| ------------------ | --------------------------------------- | ------------------------------- |
+| ours (committed)   | 36/153 (23.5%)                          | −56.06                          |
+| **`override_off`** | **70/153 (45.8%)** — every pick R10→R17 | **−121.63**                     |
+| `vbd_only`         | **0/153 (0.0%)**                        | **−37.99**                      |
+
+### Two ordering decisions, not one
+
+1. **The candidate cap.** `sorted(available, key=mlv, reverse=True)[:cap]` — at round 14 that chose
+   **180 of 425** available players by dict order. A player never scored can never be recommended.
+2. **The final rank**, among equal scores.
+
+Only the first needed fixing: `min`/`list.sort` are stable, so the rank inherits the cap's order.
+Adding the same tiebreak to the rank key was measured by mutation to move **zero** picks, so it was
+dropped — this project deletes code its own tests cannot see.
+
+### Where the gap lives — the field is innocent, and our starting nine was already better
+
+12 slots × 4 seeds × 400 draws, real board:
+
+| arm                          | p(win)     | realized season μ | realized **sd** | E[field max] | points     | slots filled | bench VBD |
+| ---------------------------- | ---------- | ----------------- | --------------- | ------------ | ---------- | ------------ | --------- |
+| ours (committed)             | 0.0061     | 1529.5            | 211.6           | 2134.6       | 1461.4     | 8.00         | −55.5     |
+| `override_off`               | 0.0732     | 1802.0            | 192.4           | 2137.6       | 1710.7     | 9.00         | −122.5    |
+| **`override_off` + the fix** | **0.1127** | **1866.2**        | 186.1           | 2135.7       | **1714.5** | 9.00         | **−37.8** |
+| `vbd_only`                   | 0.0953     | 1823.1            | 181.7           | 2130.6       | 1648.9     | 8.81         | −38.0     |
+
+`E[field max]` is flat across all four arms (2130.6–2137.6 against a 337-point gap), so **"our picks
+leave a stronger field behind" is refuted on the real board** as it was on the fixture. Our starting
+nine was **already better** than VBD's — 9.00 vs 8.81 slots filled, +61.8 points. The engine was
+losing the championship **purely on the bench**, the half of the draft its own points objective
+prices at zero.
+
+### The fix, measured — and the refuting control came out the right way
+
+`optimize.value_over_replacement` (μ − replacement) is not a new signal: `optimize.py`'s own
+reduction guarantee already states "empty roster ⇒ MLV_p = μ_p − baseline(pos(p))". VOR **is** MLV
+before the lineup floors it at zero, so the candidate cut now uses it as a deterministic secondary
+key (then player id). Nothing is added to any score — this **re-ranks and never changes a score**,
+exactly as the punt guard does, so every `ScoreComponents` decomposition is untouched.
+
+Real board, 5 blocks × 8 seeds × 12 slots, 800 draws. Every pair gated as E2 gates: one-sided
+Wilcoxon across the 12 slots **plus** the noise-aware non-regression leg.
+
+| A vs B                                   | objective | A      | B      | A−B         | min slot | p          | beats?  |
+| ---------------------------------------- | --------- | ------ | ------ | ----------- | -------- | ---------- | ------- |
+| **`override_off`+fix vs `override_off`** | win       | 0.1161 | 0.0683 | **+0.0478** | +0.0340  | **0.0002** | **YES** |
+| **`override_off`+fix vs `override_off`** | points    | 1716.7 | 1713.5 | **+3.1**    | +0.5     | **0.0002** | **YES** |
+| `override_off`+fix vs σ-order control    | win       | 0.1161 | 0.0990 | **+0.0171** | +0.0064  | **0.0002** | **YES** |
+| `override_off`+fix vs σ-order control    | points    | 1716.7 | 1715.7 | +1.0        | −2.4     | 0.0547     | no      |
+| **`override_off`+fix vs `vbd_only`**     | win       | 0.1161 | 0.1066 | +0.0095     | −0.0241  | **0.1167** | **no**  |
+| **`override_off`+fix vs `vbd_only`**     | points    | 1716.7 | 1661.7 | **+55.0**   | +1.3     | **0.0002** | **YES** |
+
+⚠️ **State the verdict precisely, because the tempting version is wrong.** Against `vbd_only` the
+fixed engine **beats it on points** (+55.0, p = 0.0002, non-negative at every one of the 12 slots)
+and is **ahead but NOT significantly ahead on championship probability** (+0.0095, p = 0.1167,
+against per-slot paired noise of median ~0.02). **The residual is eliminated, not reversed:** the
+comparison moves from a clear loss to a statistical tie with the point estimate in our favour, and
+the engine sits above a 12-team fair share (0.1161 vs 0.0833) for the first time. Anyone writing
+"the engine now beats best-available on both objectives" is quoting a p-value that does not exist.
+
+**The refuting control.** "The objective just rewards any bench that raises spread" is **refuted**:
+an arm breaking the identical ties toward high σ instead of high value loses to the value key by
++0.0171 at p = 0.0002. Any deterministic order beats no order — σ recovers +0.0307 on its own,
+because σ is a noisy proxy for value — but value is worth a further 56% on top. Honest limit: on the
+**points** leg the two are indistinguishable (p = 0.0547), so the refutation rests on the
+championship leg alone. The decomposition agrees it is not variance: the winning arm carries the
+**lower** realized sd (186.1 vs 192.4) and wins on realized **mean** (+64.2).
+
+**The probe was faithful.** Every `+fix` number above was first measured with a probe that merely
+reordered the pool. Re-running the identical experiment with the probe removed and the tiebreak in
+the shipped agent reproduces it exactly: 0.1161 / 1716.7, +0.0095 (p = 0.1167) / +55.0 (p = 0.0002)
+against `vbd_only`. The σ-order wrapper becomes **exactly inert** (+0.0000 on both objectives),
+which is independent proof the pick no longer depends on the order the pool arrives in.
+
+### ⚠️ The code fix and the config change are COUPLED
+
+| arm, **real** board                | win prob | points |
+| ---------------------------------- | -------- | ------ |
+| ours (committed), pre-fix          | 0.0072   | 1459.9 |
+| ours (committed), **with the fix** | 0.0071   | 1450.1 |
+| `override_off`, pre-fix            | 0.0683   | 1713.5 |
+| `override_off`, **with the fix**   | 0.1161   | 1716.7 |
+
+The tiebreak is worth **nothing** while `lambda_slot_override` is live — 0.0071 vs 0.0072
+(p = 0.5508) and −9.8 points (p = 0.0007) — because `λ = ±0.4` already breaks the ties by σ, and the
+candidate-cap change is then a small net negative. It is worth **+0.0478** once the setting is
+zeroed. **Neither half is sufficient alone**, and the Tier 8/9 recommendation is still the owner's:
+verified 2026-08-09, `config/engine.json` still reads `0.4 / −0.4`.
+
+### ⚠️ A measured side effect on the LIVE path, disclosed rather than fixed
+
+VOR is a positional-scarcity measure, not a roster-marginal one: a spare kicker sits a few points
+under his baseline while a 200th-ranked receiver is 120 under his, so VOR calls the kicker better
+even when you already hold one. The **simulator** cannot see this — `_rosterable` gates
+`roster_capacity` there, so the +0.0478 is measured among players you can actually roster — but
+`recommend()` has never had that gate (Tier 8 declined to add it, because it would bet draft night
+on `constitution._BENCH_ELIGIBLE`, an owner question that is still open).
+
+Measured by walking full 17-round drafts through `recommend()` at three seats, 51 of our picks:
+
+```
+pre-fix :  0 of 51 picks had no legal roster slot
+post-fix:  1 of 51 picks had no legal roster slot   (a second K, round 12, one seat of three)
+```
+
+**Not gated here.** Gating the hot path resolves an owner question unilaterally, which the
+`agent_usage_contract` forbids; it is surfaced in `docs/owner-manual-todo.md` §1b with this
+measurement attached, which is far more actionable than the abstract version Tier 8 left.
+
+### The instrument, again — instance six, and this time it is the objective
+
+`test_harness_fidelity.py` has asked one question for five tiers: change the knob, does any pick
+move? Tier 10 adds the question no knob can ask — **change nothing but the order the pool arrives
+in, does any pick move?** It did, for **60 of 60** simulated rosters; 0 of 60 after the fix, verified
+by mutation in both directions.
+
+- **Tier 4** — both fixture pools were params-blind (96/96 identical rosters).
+- **Tier 5** — `alpha` multiplied a `cliff_bonus` map of 293 zeros.
+- **Tier 6** — three positional modifiers were priced by nothing.
+- **Tier 8** — `ScoreAgent` read neither `lambda_slot_override` nor `punt_guard` (0/60 rosters).
+- **Tier 9** — E6 had no `--replicates` and gated on a leg Tier 6 had discredited.
+- **Tier 10 — the OBJECTIVE.** `mean_lineup_value_objective` scores the optimal nine under fixed μ,
+  so it prices a bench player at exactly **0** — 8 of 17 picks. The fix moves it by **+3.1** and the
+  championship leg by **+0.0478**. The points leg did not merely miss the defect: under
+  `override_off` it reported the engine as the **best points-scorer in the field** while it was
+  drafting half its roster in dictionary order.
+
+### ⚠️ Surfaced, not fixed: the two objectives still bracket bench value
+
+`mean_lineup_value_objective` prices a bench player at 0; `roster_season_values` re-optimises the
+lineup with **perfect hindsight** of the realised season, an upper bound on option value. The truth
+is between, so the **size** of +0.0478 is objective-dependent. What is not objective-dependent: a
+bench chosen by dictionary order is worse than one chosen by value under any objective that is not
+identically zero, and the fix costs nothing on the points leg (+3.1, p = 0.0002). Fixing the
+bracketing needs a week axis and belongs to its own tier.
+
+### What Tier 10 did NOT do
+
+- **No coefficient, no config key, no score changed.** The fix is a sort key. `config/engine.json`
+  and `config/league.json` are untouched, and the Tier 8/9 `lambda_slot_override` recommendation is
+  still **OPEN** with the owner — verified 2026-08-09, the file still reads `0.4 / −0.4`.
+- **The engine is LEVEL with `vbd_only` on championship probability, not ahead of it** (+0.0095,
+  p = 0.1167). Only the points leg is a win.
+- **The live path is not capacity-gated**, and the fix makes it marginally more likely to surface a
+  player the roster cannot hold (0/51 → 1/51). Disclosed above, owner's call.
+- **No week axis.** `sample_season_outcomes` still draws one independent season total per player, so
+  `bye_stack`, `handcuff_synergy` and `sos` remain unmeasurable and unimplemented.
+- **E2 was not re-run.** Re-running the study before the `lambda_slot_override` decision is made
+  would measure noise around a decision nobody has taken.
+- **A simulator is not a fact about drafting.** The opponents are behavioural agents, not the eleven
+  people in the room.
+
+### ⚠️ What is superseded
+
+- Tier 9's **"the residual is unidentified — that is Tier 10's question, and nothing in this tier
+  answers it"**: identified, measured on the shipped hot path, and closed to a statistical tie.
+- Tier 9's real-board `override_off` figures (0.0683 / 1713.5) remain correct **as the pre-fix
+  measurement** and are labelled as such throughout. Post-fix the same arm is 0.1161 / 1716.7.
+- Nothing else. The fix cannot move a comparison where scores already differ, so every measurement
+  of a term whose candidates were not tied stands unchanged.
+
 ## 📍 Status — 2026-08-09 · Tier 9 (the engine loses to VBD because of a term that fires in round 3)
 
 > **Tier 9 of the audit is merged** (PR #61). Tier 8 left the most serious number in the project on

@@ -231,6 +231,24 @@ the gate:
 
 ---
 
+### ⚠️ Two ways implementation diverged from this plan (recorded, not hidden)
+
+1. **Half the planned fix was blind, and mutation caught it.** The plan put the tiebreak in BOTH the
+   `candidate_cap` cut and the final rank key. Mutating the rank key moved **zero** picks — `min()`
+   and `list.sort` are stable, so the rank already inherits the cut's order — so by this project's
+   own standard (`test_harness_fidelity`: change it, does a pick move?) that half was decoration and
+   was dropped. Only the candidate cut carries the tiebreak.
+2. **The live path has a side effect the simulator structurally cannot see.** VOR is a positional
+   scarcity measure, so it rates a spare kicker above a deep receiver even when the roster is full at
+   K. `_rosterable` gates `roster_capacity` in the simulator, so the measured +0.0478 is an
+   among-rosterable-players figure; `recommend()` has no such gate. Measured by walking three full
+   drafts through `recommend()`: **0 of 51 picks pre-fix, 1 of 51 post-fix** had no legal roster slot.
+   Not gated — Tier 8 declined to gate the hot path because it would bet draft night on
+   `constitution._BENCH_ELIGIBLE`, an owner question that is still open. Surfaced in
+   `docs/owner-manual-todo.md` §1b with the measurement attached.
+
+---
+
 ## File structure
 
 | File                                      | Responsibility                        | Change                        |
