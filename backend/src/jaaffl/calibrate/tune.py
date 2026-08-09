@@ -328,44 +328,122 @@ def promotion_decision(
     }
 
 
+def tournament_verdict(objectives: Mapping[str, Mapping]) -> dict[str, dict]:
+    """Per baseline, which objectives the reference agent beats it on and which it loses on.
+
+    E6 reported each objective in its own paragraph and never combined them, so an agent that
+    scores MORE points than plain VBD while winning the championship 5.5x LESS often produced two
+    unremarkable-looking lines and no alarm. A split decision is the single most informative thing
+    a two-objective tournament can say — Tier 5 found ``kappa`` buying championship odds by giving
+    up points, and Tier 9 found the shipped ``lambda_slot_override`` doing the reverse — so it is
+    computed here rather than left to a reader.
+
+    Objective names are sorted so the output is stable across runs.
+    """
+    baselines: set[str] = set()
+    for report in objectives.values():
+        baselines.update(report["vs_baselines"])
+    verdict: dict[str, dict] = {}
+    for baseline in sorted(baselines):
+        beats_on = sorted(
+            name
+            for name, report in objectives.items()
+            if report["vs_baselines"].get(baseline, {}).get("beats")
+        )
+        loses_on = sorted(name for name in objectives if name not in beats_on)
+        verdict[baseline] = {
+            "beats_on": beats_on,
+            "loses_on": loses_on,
+            "split": bool(beats_on and loses_on),
+            "beats_all": not loses_on,
+        }
+    return verdict
+
+
 def run_tournament(
     ctx: SimContext,
     *,
     contenders: Mapping[str, DraftAgent],
     opponents: Sequence[DraftAgent],
-    seeds: Sequence[int],
+    seed_blocks: Sequence[Sequence[int]],
     teams: int = 12,
     reference: str | None = None,
-    objective: SimObjective | None = None,
+    objectives: Mapping[str, SimObjective | None] | None = None,
+    draws: int = 400,
 ) -> dict:
-    """E6 efficacy proof (design §9.3 / §3.9): evaluate each named contender across all 12 slots vs
-    a common opponent field, then compare each other contender to the ``reference`` (default: the
-    first — our agent) via the one-sided Wilcoxon gate. The project's OWN validation (our agent vs
-    VBD-only and ADP-only baselines), never a vendor/literature claim. ``beats`` = the reference is
-    significantly >= that baseline AND non-negative at every slot."""
-    per_slot = {
-        name: evaluate_agent(
-            agent, ctx, opponents=opponents, seeds=seeds, teams=teams, objective=objective
-        )
-        for name, agent in contenders.items()
+    """E6 efficacy proof (design §9.3 / §3.9): every named contender at all 12 slots against a
+    common field, compared to ``reference`` (default: the first — our agent) on EVERY objective.
+    The project's OWN validation, never a vendor/literature claim.
+
+    ``seed_blocks`` are DISJOINT seed blocks, not a flat seed list. Pooling R blocks of S seeds is
+    exactly an R*S-seed evaluation AND yields the per-slot sampling SD of the paired difference,
+    which is fed to :func:`promotion_decision` as ``slot_noise``. Before Tier 9 this took a flat
+    ``seeds`` and passed no noise, so ``beats`` used the strict point-estimate min-slot leg that
+    Tier 6 measured as "not discriminating, it was sampling" — on a single block, which is the
+    standard E2 has met since Tier 6 and E6 never has. **Every E6 number this project published
+    before Tier 9 came from one block.**
+
+    Every objective is scored from ONE simulated draft per (slot, seed), and the report carries a
+    :func:`tournament_verdict`: an agent can beat a baseline on points while losing to it on
+    championship probability, and E6 used to print those as two unrelated paragraphs.
+    """
+    scored: Mapping[str, SimObjective | None] = objectives or {
+        "win probability": WinProbabilityObjective(n_draws=draws),
+        "mean lineup value": None,
     }
+    # objective -> agent -> block -> per-slot scores
+    raw: dict[str, dict[str, list[list[float]]]] = {name: {} for name in scored}
+    for agent_name, agent in contenders.items():
+        for name in scored:
+            raw[name][agent_name] = []
+        for block in seed_blocks:
+            block_scores = evaluate_agent_objectives(
+                agent, ctx, opponents=opponents, seeds=block, teams=teams, objectives=scored
+            )
+            for name, values in block_scores.items():
+                raw[name][agent_name].append(values)
+
     ref = reference or next(iter(contenders))
-    vs_baselines = {}
-    for name, values in per_slot.items():
-        if name == ref:
-            continue
-        decision = promotion_decision(per_slot[ref], values)
-        vs_baselines[name] = {
-            "mean_diff": decision["mean_diff"],
-            "min_slot_diff": decision["min_slot_diff"],
-            "p_value": decision["p_value"],
-            "beats": decision["promote"],
+    report: dict[str, dict] = {}
+    for name in scored:
+        pooled = {
+            agent_name: pooled_per_slot(blocks)[0] for agent_name, blocks in raw[name].items()
+        }
+        ref_blocks = raw[name][ref]
+        vs_baselines: dict[str, dict] = {}
+        for agent_name, blocks in raw[name].items():
+            if agent_name == ref:
+                continue
+            # The noise that matters is the sd of the PAIRED difference, per baseline — not one
+            # number for the objective. Pooling it across baselines would average away the very
+            # heterogeneity the second leg exists to test against.
+            diffs = [
+                [r - b for r, b in zip(ref_block, block, strict=True)]
+                for ref_block, block in zip(ref_blocks, blocks, strict=True)
+            ]
+            _, slot_noise = pooled_per_slot(diffs)
+            decision = promotion_decision(
+                pooled[ref],
+                pooled[agent_name],
+                slot_noise=slot_noise if len(seed_blocks) > 1 else None,
+            )
+            vs_baselines[agent_name] = {
+                "mean_diff": decision["mean_diff"],
+                "min_slot_diff": decision["min_slot_diff"],
+                "p_value": decision["p_value"],
+                "beats": decision["promote"],
+                "slot_noise": slot_noise,
+            }
+        report[name] = {
+            "per_slot": pooled,
+            "mean": {agent_name: mean(values) for agent_name, values in pooled.items()},
+            "vs_baselines": vs_baselines,
         }
     return {
-        "per_slot": per_slot,
-        "mean": {name: mean(values) for name, values in per_slot.items()},
         "reference": ref,
-        "vs_baselines": vs_baselines,
+        "blocks": len(seed_blocks),
+        "objectives": report,
+        "verdict": tournament_verdict(report),
     }
 
 

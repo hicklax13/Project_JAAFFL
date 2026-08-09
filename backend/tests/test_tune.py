@@ -165,7 +165,7 @@ def test_evaluate_agent_scores_any_agent_across_slots() -> None:
 
 def test_run_tournament_ranks_our_agent_against_baselines() -> None:
     """E6 (efficacy): our ScoreAgent vs VBD-only and ADP-only baselines, each at every slot vs a
-    common field, compared per-slot. Structure + Wilcoxon, not a fixture-pool win claim."""
+    common field. Structure + Wilcoxon on BOTH objectives, not a fixture-pool win claim."""
     from jaaffl.calibrate.tune import run_tournament
 
     contenders = {
@@ -177,13 +177,39 @@ def test_run_tournament_ranks_our_agent_against_baselines() -> None:
         _small_ctx(),
         contenders=contenders,
         opponents=[VbdOnlyAgent(), AdpNoiseAgent()],
-        seeds=[1, 2],
+        seed_blocks=[[1, 2]],
+        draws=8,
     )
-    assert set(report["mean"]) == {"score", "vbd", "adp"}
     assert report["reference"] == "score"
-    assert set(report["vs_baselines"]) == {"vbd", "adp"}
-    for comparison in report["vs_baselines"].values():
-        assert {"p_value", "mean_diff", "min_slot_diff", "beats"} <= comparison.keys()
+    assert report["blocks"] == 1
+    assert set(report["objectives"]) == {"win probability", "mean lineup value"}
+    for objective in report["objectives"].values():
+        assert set(objective["mean"]) == {"score", "vbd", "adp"}
+        assert len(objective["per_slot"]["score"]) == 12
+        assert set(objective["vs_baselines"]) == {"vbd", "adp"}
+        for comparison in objective["vs_baselines"].values():
+            assert {"p_value", "mean_diff", "min_slot_diff", "beats"} <= comparison.keys()
+    assert set(report["verdict"]) == {"vbd", "adp"}
+
+
+def test_run_tournament_pools_disjoint_seed_blocks() -> None:
+    """Every E6 number this project has published came from ONE seed block, Tier 8's 5.5x
+    championship inversion included. Tier 6 proved a single block samples its own noise and gave
+    E2 --replicates; E6 never got them, so its gate has always used the leg Tier 6 discredited."""
+    from jaaffl.calibrate.tune import run_tournament
+
+    report = run_tournament(
+        _small_ctx(),
+        contenders={"score": ScoreAgent(EngineParams()), "vbd": VbdOnlyAgent()},
+        opponents=[VbdOnlyAgent(), AdpNoiseAgent()],
+        seed_blocks=[[1, 2], [3, 4]],
+        draws=8,
+    )
+    assert report["blocks"] == 2
+    for objective in report["objectives"].values():
+        for comparison in objective["vs_baselines"].values():
+            assert len(comparison["slot_noise"]) == 12
+            assert all(sd >= 0.0 for sd in comparison["slot_noise"])
 
 
 def test_cap_sim_pool_keeps_low_value_positions() -> None:
@@ -392,3 +418,33 @@ def test_evaluate_agent_objectives_agrees_with_evaluate_agent() -> None:
         objectives={"pts": mean_lineup_value_objective},
     )
     assert many["pts"] == single
+
+
+def test_tournament_verdict_flags_a_split_decision() -> None:
+    """The defect that let Tier 9's finding sit unexamined for a tier: E6 printed
+    '+44.3 points p=0.0017' and '-0.0805 win prob p=1.0000' eight lines apart and never said
+    the two disagree. A split is the headline, not a footnote."""
+    from jaaffl.calibrate.tune import tournament_verdict
+
+    report = {
+        "win probability": {"vs_baselines": {"vbd_only": {"beats": False}}},
+        "mean lineup value": {"vs_baselines": {"vbd_only": {"beats": True}}},
+    }
+    verdict = tournament_verdict(report)
+    assert verdict["vbd_only"]["split"] is True
+    assert verdict["vbd_only"]["beats_all"] is False
+    assert verdict["vbd_only"]["beats_on"] == ["mean lineup value"]
+    assert verdict["vbd_only"]["loses_on"] == ["win probability"]
+
+
+def test_tournament_verdict_reports_a_clean_sweep() -> None:
+    from jaaffl.calibrate.tune import tournament_verdict
+
+    report = {
+        "win probability": {"vs_baselines": {"vbd_only": {"beats": True}}},
+        "mean lineup value": {"vs_baselines": {"vbd_only": {"beats": True}}},
+    }
+    verdict = tournament_verdict(report)
+    assert verdict["vbd_only"]["beats_all"] is True
+    assert verdict["vbd_only"]["split"] is False
+    assert verdict["vbd_only"]["loses_on"] == []
