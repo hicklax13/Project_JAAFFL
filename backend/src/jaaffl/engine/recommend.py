@@ -274,7 +274,9 @@ def recommend(
             )
 
     # 5) Candidate pool: top-K available by MLV (bounded hot path), as a TOTAL order — ties broken
-    # by the value MLV floors away, then by id, never by dict order (Tier 10). MLV is exactly 0.00
+    # by the value MLV floors away, then by id, never by dict order on this ANALYTIC path (Tier 10;
+    # the opt-in MC-VONA rollout in `simulate.mc_expected_best_available` still breaks ADP ties by
+    # pool index, and is off by default). MLV is exactly 0.00
     # for every candidate who cannot improve the optimal nine, which is not merely the
     # below-replacement tail: with a strong lineup already seated it includes players far ABOVE
     # replacement. Their whole score collapses with it — `κ·max(0, VONA)` clamps because

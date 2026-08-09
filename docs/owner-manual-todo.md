@@ -355,9 +355,15 @@ total of the 12)` over seasons sampled from `N(μ, σ)` — against a disjoint s
   | **setting off, with the fix**      | **0.1161**               | **1717**         |
   | plain best-available (the bar)     | 0.1066                   | 1662             |
 
-  Read the second row: **the fix does nothing while this setting is on.** With the setting live the
-  engine was already breaking those ties — badly, on unpredictability — so there was nothing left to
-  fix. Turn the setting off and the same fix is worth **+0.0478** championship probability.
+  Read the second row carefully: **while this setting is on, the fix does not help you — it costs
+  you about 10 projected points.** That is small but it is a real, measured loss, not noise. With
+  the setting live the engine was already breaking those ties — badly, on unpredictability — so
+  there was nothing left for the fix to improve, and it slightly reshuffles which players the engine
+  considers at all. Turn the setting off and the same fix is worth **+0.0478** championship
+  probability instead.
+
+  So the honest summary is: **the code that just shipped makes your engine marginally worse until
+  you change these two lines, and substantially better once you do.**
 
   So: **the two lines below are now worth more than they were yesterday**, and they are still the
   only thing on your desk.

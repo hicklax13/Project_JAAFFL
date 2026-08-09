@@ -11,8 +11,9 @@ starting nine is full, every remaining candidate scores **exactly 0.0**, and the
 degenerates to `context.mu` **dictionary insertion order** — for 8 of its 17 picks.
 
 **Architecture:** One shared rule, `optimize.value_over_replacement` (μ − replacement baseline),
-used as a deterministic **secondary sort key** in the two ordering decisions that `recommend.py` and
-`simulate.ScoreAgent` each make: the `candidate_cap` cut and the final rank. VOR is not a new
+used as a deterministic **secondary sort key** in the `candidate_cap` cut that `recommend.py` and
+`simulate.ScoreAgent` each make. (The plan originally changed the final rank key too; mutation
+showed that half moved zero picks — see "Two ways implementation diverged" below.) VOR is not a new
 signal — it is exactly what `marginal_lineup_value` reduces to before the lineup floors it at zero
 (`optimize.py`'s own stated reduction guarantee), so the change restores information the floor
 discards rather than inventing a term. Nothing is added to any score, so no `ScoreComponents`
@@ -251,16 +252,16 @@ the gate:
 
 ## File structure
 
-| File                                      | Responsibility                        | Change                        |
-| ----------------------------------------- | ------------------------------------- | ----------------------------- |
-| `backend/src/jaaffl/engine/optimize.py`   | MLV + the lineup solver               | add `value_over_replacement`  |
-| `backend/src/jaaffl/engine/simulate.py`   | E2/E6 agents                          | 2 sort keys; `_vbd` delegates |
-| `backend/src/jaaffl/engine/recommend.py`  | the live hot path                     | 2 sort keys                   |
-| `backend/tests/test_optimize.py`          | MLV/lineup unit cover                 | add 1 test                    |
-| `backend/tests/test_simulate.py`          | agent unit cover                      | add 2 tests                   |
-| `backend/tests/test_recommend.py`         | hot-path cover                        | add 2 tests                   |
-| `backend/tests/test_harness_fidelity.py`  | the harness must see what it measures | add 1 test + docstring        |
-| `ROADMAP.md`, `docs/owner-manual-todo.md` | the corrected record                  | modify                        |
+| File                                      | Responsibility                        | Change                       |
+| ----------------------------------------- | ------------------------------------- | ---------------------------- |
+| `backend/src/jaaffl/engine/optimize.py`   | MLV + the lineup solver               | add `value_over_replacement` |
+| `backend/src/jaaffl/engine/simulate.py`   | E2/E6 agents                          | 1 sort key; `_vbd` delegates |
+| `backend/src/jaaffl/engine/recommend.py`  | the live hot path                     | 1 sort key                   |
+| `backend/tests/test_optimize.py`          | MLV/lineup unit cover                 | add 1 test                   |
+| `backend/tests/test_simulate.py`          | agent unit cover                      | add 2 tests                  |
+| `backend/tests/test_recommend.py`         | hot-path cover                        | add 2 tests                  |
+| `backend/tests/test_harness_fidelity.py`  | the harness must see what it measures | add 1 test + docstring       |
+| `ROADMAP.md`, `docs/owner-manual-todo.md` | the corrected record                  | modify                       |
 
 ---
 

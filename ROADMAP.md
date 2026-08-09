@@ -181,6 +181,28 @@ post-fix:  1 of 51 picks had no legal roster slot   (a second K, round 12, one s
 `agent_usage_contract` forbids; it is surfaced in `docs/owner-manual-todo.md` §1b with this
 measurement attached, which is far more actionable than the abstract version Tier 8 left.
 
+⚠️ **And there is a second amplifier, found in code review, pointing the same way.** Tier 8 listed
+"the reliability double-application was not investigated" as an open item (see its block below).
+It is now measured, because Tier 10 promoted it from affecting only the above-replacement head to
+deciding roughly half the roster. On the `--real` path the chain is: `engine/projections.py` shrinks
+μ toward replacement by `reliability_shrinkage`; `engine/context.py` copies that into
+`DraftContext.mu`; `calibrate/tune.py`'s `sim_context_from_draft_context` copies it into
+`SimContext.value`; and `ScoreAgent._effective_value` shrinks it **again**. Median VOR on the real
+board, live path vs calibration harness:
+
+| position    | live (`ctx.value`) | harness (`_effective_value`) | ratio    |
+| ----------- | ------------------ | ---------------------------- | -------- |
+| **DST**     | −10.54             | −4.22                        | **2.50** |
+| **K**       | −4.57              | −1.83                        | **2.50** |
+| QB/RB/TE/WR | (unchanged)        | (unchanged)                  | 1.00     |
+
+2.50 is exactly `1 / 0.4`, the committed `reliability_shrinkage`. So the **harness** rates a spare
+kicker 2.5× closer to replacement than the live engine does — the same direction as the side effect
+above. `demo_sim_context` builds `value` from a raw curve and shrinks once, so the fixture path is
+correct and **no test can see this**. **Not fixed here:** correcting it changes every real-board
+number a fourth time and deserves its own tier with its own measurement, not a late edit to this
+one. It is the top candidate for Tier 11.
+
 ### The instrument, again — instance six, and this time it is the objective
 
 `test_harness_fidelity.py` has asked one question for five tiers: change the knob, does any pick
@@ -217,6 +239,9 @@ bracketing needs a week axis and belongs to its own tier.
   p = 0.1167). Only the points leg is a win.
 - **The live path is not capacity-gated**, and the fix makes it marginally more likely to surface a
   player the roster cannot hold (0/51 → 1/51). Disclosed above, owner's call.
+- **The reliability double-application is measured but NOT fixed** (2.50× extra compression at K and
+  DST on the `--real` harness path only, table above). Fixing it supersedes every real-board number
+  again; it is Tier 11's first job, and no test can currently see it.
 - **No week axis.** `sample_season_outcomes` still draws one independent season total per player, so
   `bye_stack`, `handcuff_synergy` and `sos` remain unmeasurable and unimplemented.
 - **E2 was not re-run.** Re-running the study before the `lambda_slot_override` decision is made

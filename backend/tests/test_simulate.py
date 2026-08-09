@@ -554,9 +554,20 @@ def test_score_agent_pick_does_not_depend_on_pool_order() -> None:
     0.0, ``min()`` returns the first of the tied set, and the pick became a function of the order
     the pool arrived in. Measured on the real board, 45.8% of our picks moved when the identical
     pool was merely reversed."""
+    from jaaffl.engine.optimize import marginal_lineup_value
+
     ctx = _tied_ctx()
     agent = ScoreAgent(_TIED_PARAMS)
     pool = sorted(set(ctx.value) - set(_TIED_ROSTER))
+    # Anti-vacuity: if a future edit to _tied_ctx stopped producing the tie, two matching picks
+    # would prove nothing at all. Require the tie to exist before asserting anything about it.
+    floored = [
+        p
+        for p in pool
+        if marginal_lineup_value(p, _TIED_ROSTER, ctx.value, ctx.position, ctx.baselines, ctx.slots)
+        == 0.0
+    ]
+    assert len(floored) > 1, "fixture no longer floors two candidates to MLV 0 — no tie to break"
     assert agent.pick(pool, _TIED_ROSTER, ctx) == agent.pick(pool[::-1], _TIED_ROSTER, ctx)
 
 

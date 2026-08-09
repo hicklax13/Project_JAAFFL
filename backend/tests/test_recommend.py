@@ -318,7 +318,17 @@ def test_projection_provenance_is_absent_rather_than_faked_when_unknown() -> Non
 def _full_lineup() -> tuple[list[DraftPick], object]:
     """A pick log filling OUR nine starting slots, and the params under which the remaining
     below-replacement candidates all score exactly 0.0 — a filled slot makes every position
-    SURPLUS, so the surplus ceiling is the only lambda any candidate can receive."""
+    SURPLUS, so the surplus ceiling is the only lambda any candidate can receive.
+
+    ⚠️ Honest limit on this fixture, measured 2026-08-09: ``_board()`` yields exactly ONE tier per
+    position, so ``cliff_bonuses`` returns 0.0 for all 133 players — ``alpha`` multiplies an
+    identically-zero map, which is the Tier 5 defect in miniature. The tie is therefore EASIER to
+    produce here than on the real board, where the cliff term is live (19 priced drops at the last
+    preflight). The real board's tie is established independently — 180 of 180 candidates at round
+    14, measured through ``recommend()`` itself — and holds there because ``cliff_bonuses`` is
+    computed from EMPTY-roster MLV (``engine/context.py``), which is 0 for a below-replacement
+    player however the board is tiered.
+    """
     mine = ["qb0", "rb0", "wr0", "wr1", "wr2", "wr3", "te0", "k0", "dst0"]
     picks = [
         DraftPick(overall=i + 1, round=i + 1, pick_in_round=1, team_id="t0", player_id=pid)
@@ -345,6 +355,9 @@ def test_ranking_does_not_depend_on_context_insertion_order() -> None:
     state = draft_state(len(picks) + 1, picks=picks)
     forward = recommend(state, context, params)
     backward = recommend(state, flipped, params)
+    # Anti-vacuity: two matching rankings prove nothing if the fixture stopped producing a tie.
+    tied = [p for p in forward.ranked if p.score == pytest.approx(0.0, abs=1e-9)]
+    assert len(tied) > 1, "fixture no longer produces a tie — the test would prove nothing"
     assert [p.player_id for p in forward.ranked] == [p.player_id for p in backward.ranked]
 
 

@@ -421,6 +421,12 @@ class ScoreAgent:
         # VOR then id, because once every starting slot is filled EVERY below-replacement candidate
         # has MLV exactly 0.0: on the real board this cap was selecting 180 of 425 players by dict
         # order, and a player never scored can never be picked (Tier 10).
+        #
+        # ⚠️ Unlike recommend.py, changing WHO is in this cap changes the SCORES of those who
+        # remain: `vona` below is a within-position best-OTHER-candidate proxy computed over
+        # `candidates`, so it moves when membership moves. recommend.py's VONA comes from
+        # `expected_best_available` over the whole of `available`, computed before its cut, so
+        # there the change is a pure re-rank plus membership. Here it is not confined to ties.
         candidates = sorted(available, key=lambda p: (-all_mlv[p], -vor[p], p))[: self._cap]
         mlv = {p: all_mlv[p] for p in candidates}
 
