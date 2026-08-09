@@ -121,14 +121,21 @@ def make_context(
         sigma = spec.get("sigma", 20.0)
         players[pid] = Player(player_id=pid, name=pid, position=pos)
         mu[pid], position[pid] = m, pos
+        # R1 reliability shrinkage is applied at PRECOMPUTE, so a faithful context carries both
+        # views: `mu` already shrunk (what `recommend()` scores) and `mu_raw` the blend it came
+        # from (what the calibration harness must re-shrink itself). A spec that names neither is
+        # an unshrunk player, where the two coincide — the case for every skill position.
+        reliability = float(spec.get("reliability", 1.0))
+        mu_raw = float(spec.get("mu_raw", m))
         projections[pid] = PlayerProjection(
             player_id=pid,
             position=pos,
             mu=m,
+            mu_raw=mu_raw,
             sigma=sigma,
             floor=m - Z_SCORE * sigma,
             ceiling=m + Z_SCORE * sigma,
-            reliability=1.0,
+            reliability=reliability,
             # Which $0 sources actually backed this mu ({"xep","ecr"} vs a bare {"ecr"} fallback).
             sources=dict(spec.get("sources", {})),
         )
