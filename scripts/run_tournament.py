@@ -5,8 +5,9 @@ Places our ScoreAgent (under the committed config) and the VBD-only / ADP-only b
 one of the 12 draft slots against a common opponent field, simulates each draft to completion, and
 scores each final roster on ALL FOUR objectives — championship probability and deterministic
 starting-lineup points on the season axis, plus the Tier 11 weekly pair (18 real weeks, real byes,
-a measured zero-production process and a measured same-team correlation, lineups set ex ante). Reports the per-agent mean, a one-sided Wilcoxon against each baseline, and
-a **verdict** naming the objectives our agent wins and loses on.
+a measured zero-production process and a measured same-team correlation, lineups set ex ante).
+Reports the per-agent mean, a one-sided Wilcoxon against each baseline, and a **verdict** naming
+the objectives our agent wins and loses on.
 
 Honesty caveat (ADR 0003): no peer-reviewed optimal live snake-draft solver exists — this offline
 tournament, not any vendor/literature claim, is how efficacy is judged. Needs ``engine-stretch``
