@@ -91,7 +91,29 @@ def sim_context_from_draft_context(dc: DraftContext) -> SimContext:
         # `centre_sigma=True` reads it, so carrying it changes nothing on its own — and every arm
         # can then share ONE context, which is what keeps the common random numbers common.
         sigma_median=median_sigma_by_position(sigma, dc.position),
+        # Calendar/roster facts for the week-axis objective (`engine.weekly`). No AGENT reads
+        # either, so carrying them cannot move a pick; they only give the objective a real bye
+        # calendar and the real same-team groupings. A player whose team never resolved is simply
+        # absent, which makes him independent rather than pooled with other unknowns.
+        bye_week=dict(dc.bye_week),
+        # Canonicalised through `team_norm` for the reason `league/schedule.py` documents: the two
+        # free nflverse feeds disagree (`load_ff_playerids` spells teams NOS/SFO/LAR while
+        # `load_teams`, which supplies the defenses, spells them NO/SF/LA). Joining raw would split
+        # a team's offense from its defense — measured on the live board as 41 distinct team
+        # strings collapsing to 32.
+        nfl_team=_canonical_teams(dc),
     )
+
+
+def _canonical_teams(dc: DraftContext) -> dict[str, str]:
+    from jaaffl.data.crosswalk import team_norm
+
+    out: dict[str, str] = {}
+    for pid, player in dc.players.items():
+        code = team_norm(player.nfl_team)
+        if code:
+            out[pid] = code
+    return out
 
 
 def cap_sim_pool(ctx: SimContext, cap: int, *, per_position: int = 20) -> SimContext:
@@ -371,11 +393,109 @@ def promotion_decision(
     }
 
 
-# The two E6 objective names. Exported because `scripts/run_tournament.py` formats championship
+# The E6 objective names. Exported because `scripts/run_tournament.py` formats championship
 # probabilities to 4 decimals and points to 1, and keying that on a string literal it does not own
 # would silently print win probabilities as "0.1" if the name here ever changed.
 WIN_PROBABILITY = "win probability"
 MEAN_LINEUP_VALUE = "mean lineup value"
+# Tier 11's pair, ADDED beside the two above rather than swapped for them: every Tier 9/10 number
+# was produced by those two, and replacing either would make them incomparable overnight.
+WEEKLY_WIN_PROBABILITY = "weekly win probability"
+WEEKLY_POINTS = "weekly points"
+
+
+class _WeeklyBlock:
+    """One cached ``WeeklyOutcomes`` per ``(ctx, seed)``, shared by both weekly objectives.
+
+    The same discipline :class:`WinProbabilityObjective` follows, for the same reason: a player must
+    realize the SAME season on every roster he appears on, or the 12-slot paired comparison measures
+    sampling noise instead of the parameter change. Sharing it between the two weekly objectives
+    also makes the second one free — the expensive step is the draw, not the scoring.
+    """
+
+    def __init__(self, *, n_draws: int) -> None:
+        self._n_draws = n_draws
+        self._cache: dict[tuple[int, int], tuple[SimContext, object, object]] = {}
+
+    def outcomes(self, ctx: SimContext, seed: int):
+        from jaaffl.engine.weekly import WeeklyModel
+
+        key = (id(ctx), seed)
+        cached = self._cache.get(key)
+        if cached is None or cached[0] is not ctx:
+            model = WeeklyModel.from_context(ctx)
+            cached = (ctx, model, model.sample(n_draws=self._n_draws, seed=seed))
+            self._cache[key] = cached
+        return cached[2]
+
+
+class WeeklyWinProbabilityObjective:
+    """``P(our roster posts the highest realized season total of the 12)`` under the WEEK axis.
+
+    Same ordinal objective as :class:`WinProbabilityObjective` and the same total-points
+    championship proxy — deliberately. A week axis makes head-to-head expressible for the first
+    time, and ``config/league.json`` specifies **no** playoff bracket and **no** head-to-head
+    schedule, so inventing one would breach its ``agent_usage_contract``. Declined on purpose.
+
+    What changes is everything underneath: 18 real weeks, real byes, a measured per-position
+    zero-production process, a measured same-team correlation, and lineups set **ex ante** each
+    week. So unlike ``win probability`` — which re-optimises the whole season with perfect hindsight
+    via ``roster_season_values`` — this prices a bench player by what he actually covers.
+    """
+
+    def __init__(self, *, n_draws: int = 400, block: _WeeklyBlock | None = None) -> None:
+        self._block = block or _WeeklyBlock(n_draws=n_draws)
+
+    def __call__(
+        self, rosters: Sequence[Sequence[str]], *, our_slot: int, ctx: SimContext, seed: int
+    ) -> float:
+        import numpy as np
+
+        from jaaffl.engine.weekly import weekly_lineup_totals
+
+        outcomes = self._block.outcomes(ctx, seed)
+        totals = np.stack([weekly_lineup_totals(roster, outcomes, ctx) for roster in rosters])
+        winners = totals == totals.max(axis=0)
+        return float(np.mean(winners[our_slot] / winners.sum(axis=0)))
+
+
+class WeeklyPointsObjective:
+    """Our roster's EXPECTED season total under the same weekly model — the points-scale view.
+
+    The counterpart to ``mean lineup value``, and the number that closes the bracketing Tier 9 and
+    Tier 10 both surfaced: that objective scores the optimal nine under fixed mu, so a bench player
+    is worth exactly **0.00** (8 of this league's 17 picks), while ``roster_season_values`` values
+    him with perfect hindsight of the realized season. This sits between them by construction —
+    a bench player is worth what he covers on byes and zero-production weeks, and nothing more.
+    """
+
+    def __init__(self, *, n_draws: int = 400, block: _WeeklyBlock | None = None) -> None:
+        self._block = block or _WeeklyBlock(n_draws=n_draws)
+
+    def __call__(
+        self, rosters: Sequence[Sequence[str]], *, our_slot: int, ctx: SimContext, seed: int
+    ) -> float:
+        from jaaffl.engine.weekly import weekly_lineup_totals
+
+        outcomes = self._block.outcomes(ctx, seed)
+        return float(weekly_lineup_totals(rosters[our_slot], outcomes, ctx).mean())
+
+
+def default_objectives(
+    *, draws: int = 400, weekly_draws: int = 400
+) -> dict[str, SimObjective | None]:
+    """All four E6 objectives, with the two weekly ones sharing ONE sampled block.
+
+    Built here rather than inline in :func:`run_tournament` so the CLI and any scratchpad runner
+    get the same set — a rule implemented twice is this project's signature defect.
+    """
+    block = _WeeklyBlock(n_draws=weekly_draws)
+    return {
+        WIN_PROBABILITY: WinProbabilityObjective(n_draws=draws),
+        MEAN_LINEUP_VALUE: None,
+        WEEKLY_WIN_PROBABILITY: WeeklyWinProbabilityObjective(block=block),
+        WEEKLY_POINTS: WeeklyPointsObjective(block=block),
+    }
 
 
 def tournament_verdict(objectives: Mapping[str, Mapping]) -> dict[str, dict]:
@@ -451,10 +571,7 @@ def run_tournament(
         raise ValueError("run_tournament needs at least one contender")
     if not seed_blocks or any(not block for block in seed_blocks):
         raise ValueError("run_tournament needs at least one non-empty seed block")
-    scored: Mapping[str, SimObjective | None] = objectives or {
-        WIN_PROBABILITY: WinProbabilityObjective(n_draws=draws),
-        MEAN_LINEUP_VALUE: None,
-    }
+    scored: Mapping[str, SimObjective | None] = objectives or default_objectives(draws=draws)
     # objective -> agent -> block -> per-slot scores
     raw: dict[str, dict[str, list[list[float]]]] = {name: {} for name in scored}
     for agent_name, agent in contenders.items():

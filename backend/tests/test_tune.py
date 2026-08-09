@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 
 from jaaffl.calibrate.tune import (
+    MEAN_LINEUP_VALUE,
+    WIN_PROBABILITY,
     WinProbabilityObjective,
     evaluate_params,
     objective_value,
@@ -182,7 +184,14 @@ def test_run_tournament_ranks_our_agent_against_baselines() -> None:
     )
     assert report["reference"] == "score"
     assert report["blocks"] == 1
-    assert set(report["objectives"]) == {"win probability", "mean lineup value"}
+    # All four by default since Tier 11: the weekly pair is ADDED beside the original two, so a
+    # caller that asks for nothing gets the season view AND the week-axis view.
+    assert set(report["objectives"]) == {
+        "win probability",
+        "mean lineup value",
+        "weekly win probability",
+        "weekly points",
+    }
     for objective in report["objectives"].values():
         assert set(objective["mean"]) == {"score", "vbd", "adp"}
         assert len(objective["per_slot"]["score"]) == 12
@@ -269,6 +278,12 @@ def test_sim_context_from_draft_context_maps_the_fields() -> None:
             "rb0": SimpleNamespace(sigma=40.0, mu_raw=210.0),
             "wr0": SimpleNamespace(sigma=35.0, mu_raw=185.0),
         },
+        # Calendar/roster facts the week-axis objective reads; no agent does.
+        bye_week={"rb0": 7},
+        players={
+            "rb0": Player(player_id="rb0", name="rb0", position=Position.RB, nfl_team="NOS"),
+            "wr0": Player(player_id="wr0", name="wr0", position=Position.WR, nfl_team="NO"),
+        },
     )
     sc = sim_context_from_draft_context(dc)
     assert sc.value == {"rb0": 210.0, "wr0": 185.0}  # mu_raw, NOT dc.mu
@@ -276,6 +291,10 @@ def test_sim_context_from_draft_context_maps_the_fields() -> None:
     assert sc.sigma == {"rb0": 40.0, "wr0": 35.0}
     assert sc.cliff_bonus == {"rb0": 4.0}
     assert sc.roster_size == sum(s.count for s in settings.roster_slots)
+    assert sc.bye_week == {"rb0": 7}
+    # Both spellings canonicalise to ONE team, which is what keeps a defense grouped with the
+    # offense it plays alongside (`load_ff_playerids` says NOS, `load_teams` says NO).
+    assert sc.nfl_team == {"rb0": "NO", "wr0": "NO"}
 
 
 def _shrunk_draft_context():
@@ -410,6 +429,60 @@ def test_sim_context_baselines_are_unmoved_by_carrying_raw_mu() -> None:
     )
     for pos, baseline in dc.baselines.items():
         assert recomputed[pos] == pytest.approx(baseline), pos
+
+
+def test_the_weekly_objectives_are_added_beside_the_existing_two_not_swapped_for_them() -> None:
+    """Every Tier 9 and Tier 10 number was produced by ``win probability`` and ``mean lineup
+    value``. Replacing either would make those numbers incomparable overnight, so the weekly pair
+    sits BESIDE them and the tournament reports all four."""
+    from jaaffl.calibrate.tune import (
+        WEEKLY_POINTS,
+        WEEKLY_WIN_PROBABILITY,
+        default_objectives,
+        run_tournament,
+    )
+
+    report = run_tournament(
+        _sigma_ctx(),
+        contenders={"score": ScoreAgent(EngineParams()), "vbd": VbdOnlyAgent()},
+        opponents=[VbdOnlyAgent(), AdpNoiseAgent()],
+        seed_blocks=[[1, 2]],
+        objectives=default_objectives(draws=16, weekly_draws=16),
+    )
+    assert set(report["objectives"]) == {
+        WIN_PROBABILITY,
+        MEAN_LINEUP_VALUE,
+        WEEKLY_WIN_PROBABILITY,
+        WEEKLY_POINTS,
+    }
+
+
+def test_the_weekly_objective_prices_a_bench_player_above_zero() -> None:
+    """The bracketing Tier 9 surfaced and Tier 10 could only re-surface.
+
+    ``mean_lineup_value_objective`` scores the optimal nine under fixed mu, so a 10th player is
+    worth exactly **0.00** — 8 of this league's 17 picks. Under the weekly objective he covers byes
+    and zero-production weeks, so he is worth strictly more, and WITHOUT the perfect hindsight
+    ``roster_season_values`` uses at the other end of the bracket.
+    """
+    from jaaffl.calibrate.tune import WeeklyPointsObjective, mean_lineup_value_objective
+
+    ctx = _sigma_ctx()
+    # `_small_settings` starts QB + RB + WR + WR/RB, and on this pool every RB outranks every WR,
+    # so the flex takes rb1: these four fill all four starting slots and rb2 cracks none of them.
+    # (The first draft of this test used a roster that did NOT fill the flex, so the "bench" player
+    # walked straight into the lineup and the old scorer paid him +40 — not a bench player at all.)
+    nine = ["qb0", "rb0", "rb1", "wr0"]
+    ten = [*nine, "rb2"]
+    weekly = WeeklyPointsObjective(n_draws=400)
+    season_gain = mean_lineup_value_objective(
+        [ten], our_slot=0, ctx=ctx, seed=1
+    ) - mean_lineup_value_objective([nine], our_slot=0, ctx=ctx, seed=1)
+    weekly_gain = weekly([ten], our_slot=0, ctx=ctx, seed=1) - weekly(
+        [nine], our_slot=0, ctx=ctx, seed=1
+    )
+    assert season_gain == pytest.approx(0.0), "the bench player must be invisible to the old scorer"
+    assert weekly_gain > 0.5, f"the weekly objective priced the bench player at {weekly_gain:.3f}"
 
 
 def test_run_study_actually_uses_the_objective_it_is_given() -> None:

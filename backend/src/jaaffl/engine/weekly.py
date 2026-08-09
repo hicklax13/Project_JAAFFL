@@ -22,9 +22,9 @@ under the owner-verified JAAFFL map — never chosen by feel.
 yields ``E[sum_w] = mu`` and ``Var[sum_w] = sigma^2``; correlation changes only the JOINT. That is
 what makes a difference between this objective and the season objective attributable to STRUCTURE
 (weeks, byes, absence, correlation, ex-ante lineups) rather than to a changed scale — the trap
-Tier 9 fell into when the fixture and the real board turned out to be measuring different things.
-Verified on the real board 2026-08-09: **0 of 305** players hit ``s^2 < 0``, and the production SD
-lands at 0.68-1.17x (median 1.07) of ``sigma / sqrt(n)``.
+Tier 9 fell into when the fixture and the real board turned out to measure different things.
+Verified on the real board 2026-08-09: **0 of 305** players hit ``s^2 < 0``, and the production
+SD lands at 0.68-1.17x (median 1.07) of ``sigma / sqrt(n)``.
 
 **``sigma_week = sigma_season / sqrt(n)`` is not an invention.** ``league/xep.py`` builds season
 sigma as ``pstdev(weekly residuals) * sqrt(GAMES_HORIZON)``, so this is that transform inverted.
