@@ -184,6 +184,43 @@ def evaluate_agent(
     return per_slot
 
 
+def evaluate_agent_objectives(
+    agent: DraftAgent,
+    ctx: SimContext,
+    *,
+    opponents: Sequence[DraftAgent],
+    seeds: Sequence[int],
+    teams: int = 12,
+    objectives: Mapping[str, SimObjective | None],
+) -> dict[str, list[float]]:
+    """Per-slot mean score under EVERY named objective, from ONE simulated draft per (slot, seed).
+
+    :func:`evaluate_agent` scores a single objective, so E6 — which reports two — ran the whole
+    tournament twice over the same seeds and threw the first set of rosters away. Two objectives on
+    one draft is not an optimisation, it is what makes replicate blocks affordable: five disjoint
+    blocks at the old cost is exactly the standard Tier 6 set for E2 and E6 never met.
+
+    A ``None`` objective means :func:`mean_lineup_value_objective`, matching
+    :func:`evaluate_agent`'s default, so a caller can pass the E6 pair as
+    ``{"win probability": WinProbabilityObjective(...), "mean lineup value": None}``.
+    """
+    scored: dict[str, SimObjective] = {
+        name: objective or mean_lineup_value_objective for name, objective in objectives.items()
+    }
+    per_slot: dict[str, list[float]] = {name: [] for name in scored}
+    for slot in range(teams):
+        totals: dict[str, list[float]] = {name: [] for name in scored}
+        for seed in seeds:
+            rosters = simulate_draft(
+                ctx, our_slot=slot, our_agent=agent, opponents=opponents, seed=seed, teams=teams
+            )
+            for name, objective in scored.items():
+                totals[name].append(objective(rosters, our_slot=slot, ctx=ctx, seed=seed))
+        for name, values in totals.items():
+            per_slot[name].append(mean(values))
+    return per_slot
+
+
 def evaluate_params(
     params: EngineParams,
     ctx: SimContext,
@@ -263,6 +300,13 @@ def promotion_decision(
     an extreme-order statistic, so requiring it to be non-negative as a point estimate demands that
     the worst of twelve noisy estimates land above zero — which a real, positive effect fails most
     of the time. ``min_slot_diff`` is still reported either way; only its authority changes.
+
+    ⚠️ ``slot_noise`` is deliberately ONE BLOCK's sd, not the standard error of the pooled mean
+    (``sd/sqrt(R)``), so at R=5 the band is ~2.24x wider than a test at the pooled scale. That is
+    the permissive direction for a NON-REGRESSION leg — it makes the gate slower to call a slot
+    "significantly worse" — which is the error this leg should prefer, given it was rejecting real
+    effects five to ten times inside the noise. Every caller (E2, E6, the risk-term arms) passes the
+    same quantity, so the three gates stay comparable.
     """
     diffs = [t - b for t, b in zip(tuned_per_slot, baseline_per_slot, strict=True)]
     min_diff = min(diffs)
@@ -291,44 +335,143 @@ def promotion_decision(
     }
 
 
+# The two E6 objective names. Exported because `scripts/run_tournament.py` formats championship
+# probabilities to 4 decimals and points to 1, and keying that on a string literal it does not own
+# would silently print win probabilities as "0.1" if the name here ever changed.
+WIN_PROBABILITY = "win probability"
+MEAN_LINEUP_VALUE = "mean lineup value"
+
+
+def tournament_verdict(objectives: Mapping[str, Mapping]) -> dict[str, dict]:
+    """Per baseline, which objectives the reference agent beats it on and which it loses on.
+
+    **Fail-closed:** an objective that did not measure a given baseline at all counts as a LOSS for
+    that baseline, not as a neutral. This is a safety gate, and "we never checked" must never read
+    as "we passed". :func:`run_tournament` always measures every baseline under every objective, so
+    the case is unreachable from there; it matters only to a direct caller.
+
+    E6 reported each objective in its own paragraph and never combined them, so an agent that
+    scores MORE points than plain VBD while winning the championship 5.5x LESS often produced two
+    unremarkable-looking lines and no alarm. A split decision is the single most informative thing
+    a two-objective tournament can say — Tier 5 found ``kappa`` buying championship odds by giving
+    up points, and Tier 9 found the shipped ``lambda_slot_override`` doing the reverse — so it is
+    computed here rather than left to a reader.
+
+    Objective names are sorted so the output is stable across runs.
+    """
+    baselines: set[str] = set()
+    for report in objectives.values():
+        baselines.update(report["vs_baselines"])
+    verdict: dict[str, dict] = {}
+    for baseline in sorted(baselines):
+        beats_on = sorted(
+            name
+            for name, report in objectives.items()
+            if report["vs_baselines"].get(baseline, {}).get("beats")
+        )
+        loses_on = sorted(name for name in objectives if name not in beats_on)
+        verdict[baseline] = {
+            "beats_on": beats_on,
+            "loses_on": loses_on,
+            "split": bool(beats_on and loses_on),
+            "beats_all": not loses_on,
+        }
+    return verdict
+
+
 def run_tournament(
     ctx: SimContext,
     *,
     contenders: Mapping[str, DraftAgent],
     opponents: Sequence[DraftAgent],
-    seeds: Sequence[int],
+    seed_blocks: Sequence[Sequence[int]],
     teams: int = 12,
     reference: str | None = None,
-    objective: SimObjective | None = None,
+    objectives: Mapping[str, SimObjective | None] | None = None,
+    draws: int = 400,
 ) -> dict:
-    """E6 efficacy proof (design §9.3 / §3.9): evaluate each named contender across all 12 slots vs
-    a common opponent field, then compare each other contender to the ``reference`` (default: the
-    first — our agent) via the one-sided Wilcoxon gate. The project's OWN validation (our agent vs
-    VBD-only and ADP-only baselines), never a vendor/literature claim. ``beats`` = the reference is
-    significantly >= that baseline AND non-negative at every slot."""
-    per_slot = {
-        name: evaluate_agent(
-            agent, ctx, opponents=opponents, seeds=seeds, teams=teams, objective=objective
-        )
-        for name, agent in contenders.items()
+    """E6 efficacy proof (design §9.3 / §3.9): every named contender at all 12 slots against a
+    common field, compared to ``reference`` (default: the first — our agent) on EVERY objective.
+    The project's OWN validation, never a vendor/literature claim.
+
+    ``seed_blocks`` are DISJOINT seed blocks, not a flat seed list. Pooling R blocks of S seeds is
+    exactly an R*S-seed evaluation AND yields the per-slot sampling SD of the paired difference,
+    which is fed to :func:`promotion_decision` as ``slot_noise``. Before Tier 9 this took a flat
+    ``seeds`` and passed no noise, so ``beats`` used the strict point-estimate min-slot leg that
+    Tier 6 measured as "not discriminating, it was sampling" — on a single block, which is the
+    standard E2 has met since Tier 6 and E6 never has. **Every E6 number this project published
+    before Tier 9 came from one block.**
+
+    Every objective is scored from ONE simulated draft per (slot, seed), and the report carries a
+    :func:`tournament_verdict`: an agent can beat a baseline on points while losing to it on
+    championship probability, and E6 used to print those as two unrelated paragraphs.
+
+    ``draws`` sizes the DEFAULT :class:`WinProbabilityObjective` only. Supplying ``objectives``
+    replaces that default wholesale, so ``draws`` is then unused — build the objective with the
+    draw count you want. Blocks should be EQUAL length: pooling is a mean of per-block means, which
+    equals the mean over all seeds only when the blocks are the same size.
+    """
+    if not contenders:
+        raise ValueError("run_tournament needs at least one contender")
+    if not seed_blocks or any(not block for block in seed_blocks):
+        raise ValueError("run_tournament needs at least one non-empty seed block")
+    scored: Mapping[str, SimObjective | None] = objectives or {
+        WIN_PROBABILITY: WinProbabilityObjective(n_draws=draws),
+        MEAN_LINEUP_VALUE: None,
     }
+    # objective -> agent -> block -> per-slot scores
+    raw: dict[str, dict[str, list[list[float]]]] = {name: {} for name in scored}
+    for agent_name, agent in contenders.items():
+        for name in scored:
+            raw[name][agent_name] = []
+        for block in seed_blocks:
+            block_scores = evaluate_agent_objectives(
+                agent, ctx, opponents=opponents, seeds=block, teams=teams, objectives=scored
+            )
+            for name, values in block_scores.items():
+                raw[name][agent_name].append(values)
+
     ref = reference or next(iter(contenders))
-    vs_baselines = {}
-    for name, values in per_slot.items():
-        if name == ref:
-            continue
-        decision = promotion_decision(per_slot[ref], values)
-        vs_baselines[name] = {
-            "mean_diff": decision["mean_diff"],
-            "min_slot_diff": decision["min_slot_diff"],
-            "p_value": decision["p_value"],
-            "beats": decision["promote"],
+    report: dict[str, dict] = {}
+    for name in scored:
+        pooled = {
+            agent_name: pooled_per_slot(blocks)[0] for agent_name, blocks in raw[name].items()
+        }
+        ref_blocks = raw[name][ref]
+        vs_baselines: dict[str, dict] = {}
+        for agent_name, blocks in raw[name].items():
+            if agent_name == ref:
+                continue
+            # The noise that matters is the sd of the PAIRED difference, per baseline — not one
+            # number for the objective. Pooling it across baselines would average away the very
+            # heterogeneity the second leg exists to test against.
+            diffs = [
+                [r - b for r, b in zip(ref_block, block, strict=True)]
+                for ref_block, block in zip(ref_blocks, blocks, strict=True)
+            ]
+            _, slot_noise = pooled_per_slot(diffs)
+            decision = promotion_decision(
+                pooled[ref],
+                pooled[agent_name],
+                slot_noise=slot_noise if len(seed_blocks) > 1 else None,
+            )
+            vs_baselines[agent_name] = {
+                "mean_diff": decision["mean_diff"],
+                "min_slot_diff": decision["min_slot_diff"],
+                "p_value": decision["p_value"],
+                "beats": decision["promote"],
+                "slot_noise": slot_noise,
+            }
+        report[name] = {
+            "per_slot": pooled,
+            "mean": {agent_name: mean(values) for agent_name, values in pooled.items()},
+            "vs_baselines": vs_baselines,
         }
     return {
-        "per_slot": per_slot,
-        "mean": {name: mean(values) for name, values in per_slot.items()},
         "reference": ref,
-        "vs_baselines": vs_baselines,
+        "blocks": len(seed_blocks),
+        "objectives": report,
+        "verdict": tournament_verdict(report),
     }
 
 

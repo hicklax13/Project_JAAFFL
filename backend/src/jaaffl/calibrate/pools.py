@@ -189,3 +189,45 @@ def demo_sim_context() -> SimContext:
         roster_capacity=roster_capacity(settings),
         sigma_median=median_sigma_by_position(sigma, position),
     )
+
+
+def real_sim_context(cap: int = 300, *, per_position: int = 20) -> SimContext:
+    """A precompute-backed :class:`SimContext` — real projections + FFC ADP. **NETWORK + slow.**
+
+    Lives here rather than in a script because **three** calibration CLIs need it — E2
+    (``tune_engine_params.py``), E6 (``run_tournament.py``) and the Tier 8 risk-term arms
+    (``measure_risk_term.py``) — and the one thing this project has learned five times over is that
+    a rule implemented twice diverges silently. Two private copies already existed, and the second
+    lived in **the one CLI that can write** ``config/engine.json``: had its cap or per-position
+    keep-back drifted, E2 would have tuned on one real pool while E6 validated on another, and no
+    test compares them. Every heavy import is function-local, so importing this module stays free —
+    pinned by ``tests/test_calibrate_pools.py``, which asserts in a clean interpreter that importing
+    this does not pull ``nflreadpy``.
+
+    Capped by :func:`~jaaffl.calibrate.tune.cap_sim_pool`, which keeps the top ``per_position`` of
+    each position as well as the top ``cap`` by value — a plain value cap drops K and DST.
+    """
+    import sys
+
+    from jaaffl.calibrate.tune import cap_sim_pool, sim_context_from_draft_context
+    from jaaffl.config import get_settings
+    from jaaffl.data import Crosswalk, Warehouse
+    from jaaffl.engine.precompute import build_registry_context_source
+    from jaaffl.providers.nflverse import NflreadpyProvider
+
+    settings = get_settings()
+    if not settings.jaaffl_season:
+        raise SystemExit("[pools] set jaaffl_season to build the real pool")
+    warehouse = Warehouse(settings.jaaffl_data_dir)
+    crosswalk = Crosswalk(warehouse.app_sqlite)
+    print("[pools] building the real DraftContext ...", file=sys.stderr)
+    NflreadpyProvider(crosswalk=crosswalk).seed_crosswalk()
+    source = build_registry_context_source(
+        settings, warehouse=warehouse, crosswalk=crosswalk, season=settings.jaaffl_season
+    )
+    dc = source(settings.jaaffl_league_id)
+    if dc is None:
+        raise SystemExit("[pools] precompute returned no context")
+    ctx = sim_context_from_draft_context(dc)
+    print(f"[pools] real pool: {len(ctx.value)} players -> top {cap}", file=sys.stderr)
+    return cap_sim_pool(ctx, cap, per_position=per_position)

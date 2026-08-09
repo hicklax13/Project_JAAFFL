@@ -165,7 +165,7 @@ def test_evaluate_agent_scores_any_agent_across_slots() -> None:
 
 def test_run_tournament_ranks_our_agent_against_baselines() -> None:
     """E6 (efficacy): our ScoreAgent vs VBD-only and ADP-only baselines, each at every slot vs a
-    common field, compared per-slot. Structure + Wilcoxon, not a fixture-pool win claim."""
+    common field. Structure + Wilcoxon on BOTH objectives, not a fixture-pool win claim."""
     from jaaffl.calibrate.tune import run_tournament
 
     contenders = {
@@ -177,13 +177,39 @@ def test_run_tournament_ranks_our_agent_against_baselines() -> None:
         _small_ctx(),
         contenders=contenders,
         opponents=[VbdOnlyAgent(), AdpNoiseAgent()],
-        seeds=[1, 2],
+        seed_blocks=[[1, 2]],
+        draws=8,
     )
-    assert set(report["mean"]) == {"score", "vbd", "adp"}
     assert report["reference"] == "score"
-    assert set(report["vs_baselines"]) == {"vbd", "adp"}
-    for comparison in report["vs_baselines"].values():
-        assert {"p_value", "mean_diff", "min_slot_diff", "beats"} <= comparison.keys()
+    assert report["blocks"] == 1
+    assert set(report["objectives"]) == {"win probability", "mean lineup value"}
+    for objective in report["objectives"].values():
+        assert set(objective["mean"]) == {"score", "vbd", "adp"}
+        assert len(objective["per_slot"]["score"]) == 12
+        assert set(objective["vs_baselines"]) == {"vbd", "adp"}
+        for comparison in objective["vs_baselines"].values():
+            assert {"p_value", "mean_diff", "min_slot_diff", "beats"} <= comparison.keys()
+    assert set(report["verdict"]) == {"vbd", "adp"}
+
+
+def test_run_tournament_pools_disjoint_seed_blocks() -> None:
+    """Every E6 number this project has published came from ONE seed block, Tier 8's 5.5x
+    championship inversion included. Tier 6 proved a single block samples its own noise and gave
+    E2 --replicates; E6 never got them, so its gate has always used the leg Tier 6 discredited."""
+    from jaaffl.calibrate.tune import run_tournament
+
+    report = run_tournament(
+        _small_ctx(),
+        contenders={"score": ScoreAgent(EngineParams()), "vbd": VbdOnlyAgent()},
+        opponents=[VbdOnlyAgent(), AdpNoiseAgent()],
+        seed_blocks=[[1, 2], [3, 4]],
+        draws=8,
+    )
+    assert report["blocks"] == 2
+    for objective in report["objectives"].values():
+        for comparison in objective["vs_baselines"].values():
+            assert len(comparison["slot_noise"]) == 12
+            assert all(sd >= 0.0 for sd in comparison["slot_noise"])
 
 
 def test_cap_sim_pool_keeps_low_value_positions() -> None:
@@ -345,3 +371,189 @@ def test_run_study_does_not_spend_a_search_dimension_on_the_inert_modifier_cap()
 
     assert tuned.caps["modifier_abs_max"] == 4.25, "an inert knob must be carried, not searched"
     assert tuned.caps["mu_refinement_pct"] == 0.15
+
+
+def test_evaluate_agent_objectives_simulates_each_draft_once(monkeypatch) -> None:
+    """E6 scored the SAME drafts once per objective. Two objectives meant two full tournaments,
+    which is why --replicates never looked affordable. One draft, every objective."""
+    import jaaffl.calibrate.tune as tune_mod
+    from jaaffl.calibrate.tune import evaluate_agent_objectives, mean_lineup_value_objective
+
+    calls = 0
+    real = tune_mod.simulate_draft
+
+    def counting(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(tune_mod, "simulate_draft", counting)
+    scores = evaluate_agent_objectives(
+        VbdOnlyAgent(),
+        _small_ctx(),
+        opponents=[VbdOnlyAgent()],
+        seeds=[1, 2],
+        objectives={"a": mean_lineup_value_objective, "b": mean_lineup_value_objective},
+    )
+    assert calls == 12 * 2  # slots x seeds -- NOT x objectives
+    assert set(scores) == {"a", "b"}
+    assert len(scores["a"]) == 12
+
+
+def test_evaluate_agent_objectives_agrees_with_evaluate_agent() -> None:
+    """The one-draft path must be numerically identical to the per-objective path it replaces."""
+    from jaaffl.calibrate.tune import (
+        evaluate_agent,
+        evaluate_agent_objectives,
+        mean_lineup_value_objective,
+    )
+
+    ctx = _small_ctx()
+    single = evaluate_agent(VbdOnlyAgent(), ctx, opponents=[VbdOnlyAgent()], seeds=[1, 2])
+    many = evaluate_agent_objectives(
+        VbdOnlyAgent(),
+        ctx,
+        opponents=[VbdOnlyAgent()],
+        seeds=[1, 2],
+        objectives={"pts": mean_lineup_value_objective},
+    )
+    assert many["pts"] == single
+
+
+def test_tournament_verdict_flags_a_split_decision() -> None:
+    """The defect that let Tier 9's finding sit unexamined for a tier: E6 printed
+    '+44.3 points p=0.0017' and '-0.0805 win prob p=1.0000' eight lines apart and never said
+    the two disagree. A split is the headline, not a footnote."""
+    from jaaffl.calibrate.tune import tournament_verdict
+
+    report = {
+        "win probability": {"vs_baselines": {"vbd_only": {"beats": False}}},
+        "mean lineup value": {"vs_baselines": {"vbd_only": {"beats": True}}},
+    }
+    verdict = tournament_verdict(report)
+    assert verdict["vbd_only"]["split"] is True
+    assert verdict["vbd_only"]["beats_all"] is False
+    assert verdict["vbd_only"]["beats_on"] == ["mean lineup value"]
+    assert verdict["vbd_only"]["loses_on"] == ["win probability"]
+
+
+def test_tournament_verdict_reports_a_clean_sweep() -> None:
+    from jaaffl.calibrate.tune import tournament_verdict
+
+    report = {
+        "win probability": {"vs_baselines": {"vbd_only": {"beats": True}}},
+        "mean lineup value": {"vs_baselines": {"vbd_only": {"beats": True}}},
+    }
+    verdict = tournament_verdict(report)
+    assert verdict["vbd_only"]["beats_all"] is True
+    assert verdict["vbd_only"]["split"] is False
+    assert verdict["vbd_only"]["loses_on"] == []
+
+
+def _load_e6_script():
+    """Import scripts/run_tournament.py by path -- it is not an installed package."""
+    import importlib.util
+
+    path = _REPO_ROOT / "scripts" / "run_tournament.py"
+    spec = importlib.util.spec_from_file_location("e6_script", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_e6_cli_exposes_replicates_and_a_real_pool() -> None:
+    """E6 accepted only --smoke/--seeds/--draws, so every E6 number ever published is a single
+    seed block -- the standard E2 has met since Tier 6."""
+    args = (
+        _load_e6_script()
+        .build_parser()
+        .parse_args(["--smoke", "--seeds", "8", "--replicates", "5"])
+    )
+    assert args.replicates == 5
+    assert args.seeds == 8
+    assert hasattr(args, "real")
+    assert hasattr(args, "pool_cap")
+
+
+def test_e6_cli_runs_multiple_blocks_end_to_end(capsys) -> None:
+    """The smallest possible real run: the whole script path, two disjoint blocks. Asserts the
+    VERDICT block prints -- tournament_verdict is unit-tested, but the branch that turns a split
+    into a line a human reads is the part that was missing, so it needs its own cover."""
+    module = _load_e6_script()
+    assert module.main(["--smoke", "--seeds", "1", "--draws", "8", "--replicates", "2"]) == 0
+    out = capsys.readouterr().out
+    assert "[E6] VERDICT:" in out
+    assert "2 blocks x 1 seeds" in out
+    assert any(marker in out for marker in ("SPLIT vs", "BEATS", "does NOT beat"))
+
+
+def test_run_tournament_feeds_the_measured_noise_to_the_gate(monkeypatch) -> None:
+    """Mutation-proof. Setting ``slot_noise=None`` inside run_tournament left the whole suite
+    green, because the report carries the noise whether or not the GATE ever sees it. "The noise
+    is in the dict" is not the property that matters; "the noise reached promotion_decision" is —
+    that second leg is the one Tier 6 proved was sampling its own noise."""
+    import jaaffl.calibrate.tune as tune_mod
+
+    seen: list = []
+    real = tune_mod.promotion_decision
+
+    def spy(tuned, baseline, **kwargs):
+        seen.append(kwargs.get("slot_noise"))
+        return real(tuned, baseline, **kwargs)
+
+    monkeypatch.setattr(tune_mod, "promotion_decision", spy)
+    kwargs = {
+        "contenders": {"score": ScoreAgent(EngineParams()), "vbd": VbdOnlyAgent()},
+        "opponents": [VbdOnlyAgent(), AdpNoiseAgent()],
+        "draws": 8,
+    }
+
+    report = tune_mod.run_tournament(_small_ctx(), seed_blocks=[[1, 2], [3, 4]], **kwargs)
+    assert seen, "promotion_decision was never called"
+    for objective in report["objectives"].values():
+        for comparison in objective["vs_baselines"].values():
+            assert comparison["slot_noise"] in seen  # the reported noise IS the gated noise
+    assert all(noise is not None and len(noise) == 12 for noise in seen)
+
+    seen.clear()
+    tune_mod.run_tournament(_small_ctx(), seed_blocks=[[1, 2]], **kwargs)
+    assert seen and all(noise is None for noise in seen), (
+        "a single block cannot estimate its own noise, so the strict leg must be kept"
+    )
+
+
+def test_run_tournament_pools_every_block_not_just_the_first() -> None:
+    """Mutation-proof. Replacing the pooled mean with ``blocks[0]`` — discarding 4 of 5 replicate
+    blocks — also left the suite green. The pooled per-slot score must be the mean of the blocks."""
+    from jaaffl.calibrate.tune import MEAN_LINEUP_VALUE, run_tournament
+
+    ctx = _small_ctx()
+    kwargs = {
+        "contenders": {"score": ScoreAgent(EngineParams()), "vbd": VbdOnlyAgent()},
+        "opponents": [VbdOnlyAgent(), AdpNoiseAgent()],
+        "draws": 8,
+    }
+    first = run_tournament(ctx, seed_blocks=[[1, 2]], **kwargs)
+    second = run_tournament(ctx, seed_blocks=[[3, 4]], **kwargs)
+    both = run_tournament(ctx, seed_blocks=[[1, 2], [3, 4]], **kwargs)
+
+    a = first["objectives"][MEAN_LINEUP_VALUE]["per_slot"]["score"]
+    b = second["objectives"][MEAN_LINEUP_VALUE]["per_slot"]["score"]
+    pooled = both["objectives"][MEAN_LINEUP_VALUE]["per_slot"]["score"]
+    assert a != b, "the two blocks must differ, or this test proves nothing"
+    assert pooled == pytest.approx([(x + y) / 2 for x, y in zip(a, b, strict=True)])
+
+
+def test_run_tournament_rejects_degenerate_inputs() -> None:
+    """`--seeds 0` reaches here, and an empty block used to die in statistics.mean."""
+    from jaaffl.calibrate.tune import run_tournament
+
+    contenders = {"score": ScoreAgent(EngineParams())}
+    opponents = [VbdOnlyAgent()]
+    with pytest.raises(ValueError):
+        run_tournament(_small_ctx(), contenders=contenders, opponents=opponents, seed_blocks=[])
+    with pytest.raises(ValueError):
+        run_tournament(_small_ctx(), contenders=contenders, opponents=opponents, seed_blocks=[[]])
+    with pytest.raises(ValueError):
+        run_tournament(_small_ctx(), contenders={}, opponents=opponents, seed_blocks=[[1]])

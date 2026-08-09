@@ -14,8 +14,15 @@ the thing that matters.
   **0 of 60**, while doubling ``lambda_schedule`` and zeroing ``alpha`` each changed **60 of 60**.
   So Tier 7's closing instruction — get E2/E6 evidence with ``--replicates >= 3`` before touching
   ``lambda_slot_override`` — was impossible to satisfy.
+* **Tier 9** — E6 itself, i.e. the GATE rather than the pool or the agent.
+  ``scripts/run_tournament.py`` had no ``--replicates``, so every E6 number this project has
+  published (including Tier 8's 5.5x championship inversion) came from a SINGLE seed block, and
+  ``run_tournament`` passed no ``slot_noise`` so its ``beats`` gate used the strict min-slot leg
+  Tier 6 measured as "not discriminating, it was sampling". The engine defect that hid behind it —
+  ``lambda_slot_override`` paying **+18.69** for a zero-MLV tight end in **round 3**, not round 15,
+  because a one-slot position can never be ``NORMAL`` — was sitting in the numbers for a whole tier.
 
-This test asks the only question that catches all four: change the knob, does any pick move?
+This test asks the only question that catches all five: change the knob, does any pick move?
 """
 
 from __future__ import annotations
@@ -67,6 +74,27 @@ def _mutate(base: EngineParams, **changes: object) -> EngineParams:
                 "lambda_slot_override": {
                     "last_startable_slot_floor": -2.0,
                     "surplus_stash_ceiling": 2.0,
+                }
+            },
+        ),
+        # Tier 9: the two halves are also measured SEPARATELY — surplus alone buys +0.0060 win
+        # probability, floor alone +0.0566 but −6.9 points, both together +0.1003 — so the
+        # "not separable" finding rests on arms the combined case above cannot keep visible.
+        (
+            "lambda_slot_override.surplus_stash_ceiling",
+            {
+                "lambda_slot_override": {
+                    "last_startable_slot_floor": 0.4,
+                    "surplus_stash_ceiling": 0.0,
+                }
+            },
+        ),
+        (
+            "lambda_slot_override.last_startable_slot_floor",
+            {
+                "lambda_slot_override": {
+                    "last_startable_slot_floor": 0.0,
+                    "surplus_stash_ceiling": -0.4,
                 }
             },
         ),
