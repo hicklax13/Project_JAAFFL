@@ -476,7 +476,84 @@ def test_e6_cli_exposes_replicates_and_a_real_pool() -> None:
     assert hasattr(args, "pool_cap")
 
 
-def test_e6_cli_runs_multiple_blocks_end_to_end() -> None:
-    """The smallest possible real run: the whole script path, two disjoint blocks."""
+def test_e6_cli_runs_multiple_blocks_end_to_end(capsys) -> None:
+    """The smallest possible real run: the whole script path, two disjoint blocks. Asserts the
+    VERDICT block prints -- tournament_verdict is unit-tested, but the branch that turns a split
+    into a line a human reads is the part that was missing, so it needs its own cover."""
     module = _load_e6_script()
     assert module.main(["--smoke", "--seeds", "1", "--draws", "8", "--replicates", "2"]) == 0
+    out = capsys.readouterr().out
+    assert "[E6] VERDICT:" in out
+    assert "2 blocks x 1 seeds" in out
+    assert any(marker in out for marker in ("SPLIT vs", "BEATS", "does NOT beat"))
+
+
+def test_run_tournament_feeds_the_measured_noise_to_the_gate(monkeypatch) -> None:
+    """Mutation-proof. Setting ``slot_noise=None`` inside run_tournament left the whole suite
+    green, because the report carries the noise whether or not the GATE ever sees it. "The noise
+    is in the dict" is not the property that matters; "the noise reached promotion_decision" is —
+    that second leg is the one Tier 6 proved was sampling its own noise."""
+    import jaaffl.calibrate.tune as tune_mod
+
+    seen: list = []
+    real = tune_mod.promotion_decision
+
+    def spy(tuned, baseline, **kwargs):
+        seen.append(kwargs.get("slot_noise"))
+        return real(tuned, baseline, **kwargs)
+
+    monkeypatch.setattr(tune_mod, "promotion_decision", spy)
+    kwargs = {
+        "contenders": {"score": ScoreAgent(EngineParams()), "vbd": VbdOnlyAgent()},
+        "opponents": [VbdOnlyAgent(), AdpNoiseAgent()],
+        "draws": 8,
+    }
+
+    report = tune_mod.run_tournament(_small_ctx(), seed_blocks=[[1, 2], [3, 4]], **kwargs)
+    assert seen, "promotion_decision was never called"
+    for objective in report["objectives"].values():
+        for comparison in objective["vs_baselines"].values():
+            assert comparison["slot_noise"] in seen  # the reported noise IS the gated noise
+    assert all(noise is not None and len(noise) == 12 for noise in seen)
+
+    seen.clear()
+    tune_mod.run_tournament(_small_ctx(), seed_blocks=[[1, 2]], **kwargs)
+    assert seen and all(noise is None for noise in seen), (
+        "a single block cannot estimate its own noise, so the strict leg must be kept"
+    )
+
+
+def test_run_tournament_pools_every_block_not_just_the_first() -> None:
+    """Mutation-proof. Replacing the pooled mean with ``blocks[0]`` — discarding 4 of 5 replicate
+    blocks — also left the suite green. The pooled per-slot score must be the mean of the blocks."""
+    from jaaffl.calibrate.tune import MEAN_LINEUP_VALUE, run_tournament
+
+    ctx = _small_ctx()
+    kwargs = {
+        "contenders": {"score": ScoreAgent(EngineParams()), "vbd": VbdOnlyAgent()},
+        "opponents": [VbdOnlyAgent(), AdpNoiseAgent()],
+        "draws": 8,
+    }
+    first = run_tournament(ctx, seed_blocks=[[1, 2]], **kwargs)
+    second = run_tournament(ctx, seed_blocks=[[3, 4]], **kwargs)
+    both = run_tournament(ctx, seed_blocks=[[1, 2], [3, 4]], **kwargs)
+
+    a = first["objectives"][MEAN_LINEUP_VALUE]["per_slot"]["score"]
+    b = second["objectives"][MEAN_LINEUP_VALUE]["per_slot"]["score"]
+    pooled = both["objectives"][MEAN_LINEUP_VALUE]["per_slot"]["score"]
+    assert a != b, "the two blocks must differ, or this test proves nothing"
+    assert pooled == pytest.approx([(x + y) / 2 for x, y in zip(a, b, strict=True)])
+
+
+def test_run_tournament_rejects_degenerate_inputs() -> None:
+    """`--seeds 0` reaches here, and an empty block used to die in statistics.mean."""
+    from jaaffl.calibrate.tune import run_tournament
+
+    contenders = {"score": ScoreAgent(EngineParams())}
+    opponents = [VbdOnlyAgent()]
+    with pytest.raises(ValueError):
+        run_tournament(_small_ctx(), contenders=contenders, opponents=opponents, seed_blocks=[])
+    with pytest.raises(ValueError):
+        run_tournament(_small_ctx(), contenders=contenders, opponents=opponents, seed_blocks=[[]])
+    with pytest.raises(ValueError):
+        run_tournament(_small_ctx(), contenders={}, opponents=opponents, seed_blocks=[[1]])

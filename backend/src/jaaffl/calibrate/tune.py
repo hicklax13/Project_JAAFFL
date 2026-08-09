@@ -300,6 +300,13 @@ def promotion_decision(
     an extreme-order statistic, so requiring it to be non-negative as a point estimate demands that
     the worst of twelve noisy estimates land above zero — which a real, positive effect fails most
     of the time. ``min_slot_diff`` is still reported either way; only its authority changes.
+
+    ⚠️ ``slot_noise`` is deliberately ONE BLOCK's sd, not the standard error of the pooled mean
+    (``sd/sqrt(R)``), so at R=5 the band is ~2.24x wider than a test at the pooled scale. That is
+    the permissive direction for a NON-REGRESSION leg — it makes the gate slower to call a slot
+    "significantly worse" — which is the error this leg should prefer, given it was rejecting real
+    effects five to ten times inside the noise. Every caller (E2, E6, the risk-term arms) passes the
+    same quantity, so the three gates stay comparable.
     """
     diffs = [t - b for t, b in zip(tuned_per_slot, baseline_per_slot, strict=True)]
     min_diff = min(diffs)
@@ -328,8 +335,20 @@ def promotion_decision(
     }
 
 
+# The two E6 objective names. Exported because `scripts/run_tournament.py` formats championship
+# probabilities to 4 decimals and points to 1, and keying that on a string literal it does not own
+# would silently print win probabilities as "0.1" if the name here ever changed.
+WIN_PROBABILITY = "win probability"
+MEAN_LINEUP_VALUE = "mean lineup value"
+
+
 def tournament_verdict(objectives: Mapping[str, Mapping]) -> dict[str, dict]:
     """Per baseline, which objectives the reference agent beats it on and which it loses on.
+
+    **Fail-closed:** an objective that did not measure a given baseline at all counts as a LOSS for
+    that baseline, not as a neutral. This is a safety gate, and "we never checked" must never read
+    as "we passed". :func:`run_tournament` always measures every baseline under every objective, so
+    the case is unreachable from there; it matters only to a direct caller.
 
     E6 reported each objective in its own paragraph and never combined them, so an agent that
     scores MORE points than plain VBD while winning the championship 5.5x LESS often produced two
@@ -386,10 +405,19 @@ def run_tournament(
     Every objective is scored from ONE simulated draft per (slot, seed), and the report carries a
     :func:`tournament_verdict`: an agent can beat a baseline on points while losing to it on
     championship probability, and E6 used to print those as two unrelated paragraphs.
+
+    ``draws`` sizes the DEFAULT :class:`WinProbabilityObjective` only. Supplying ``objectives``
+    replaces that default wholesale, so ``draws`` is then unused — build the objective with the
+    draw count you want. Blocks should be EQUAL length: pooling is a mean of per-block means, which
+    equals the mean over all seeds only when the blocks are the same size.
     """
+    if not contenders:
+        raise ValueError("run_tournament needs at least one contender")
+    if not seed_blocks or any(not block for block in seed_blocks):
+        raise ValueError("run_tournament needs at least one non-empty seed block")
     scored: Mapping[str, SimObjective | None] = objectives or {
-        "win probability": WinProbabilityObjective(n_draws=draws),
-        "mean lineup value": None,
+        WIN_PROBABILITY: WinProbabilityObjective(n_draws=draws),
+        MEAN_LINEUP_VALUE: None,
     }
     # objective -> agent -> block -> per-slot scores
     raw: dict[str, dict[str, list[list[float]]]] = {name: {} for name in scored}

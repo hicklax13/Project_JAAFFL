@@ -22,21 +22,22 @@ import argparse
 import sys
 from pathlib import Path
 
-from jaaffl.calibrate.pools import committed_engine_params, demo_sim_context
+from jaaffl.calibrate.pools import (
+    committed_engine_params,
+    demo_sim_context,
+    real_sim_context,
+)
 from jaaffl.calibrate.tune import (
     WinProbabilityObjective,
-    cap_sim_pool,
     evaluate_params,
     pooled_per_slot,
     promotion_decision,
     run_study,
-    sim_context_from_draft_context,
 )
-from jaaffl.config import EngineParams, get_settings
+from jaaffl.config import EngineParams
 from jaaffl.engine.simulate import (
     AdpNoiseAgent,
     NeedBasedAgent,
-    SimContext,
     SoftmaxVbdAgent,
     VbdOnlyAgent,
 )
@@ -44,42 +45,11 @@ from jaaffl.engine.simulate import (
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _cap_pool(ctx: SimContext, cap: int) -> SimContext:
-    """Trim to the draftable pool, keeping K/DST (needed for reliability + K/DST slots)."""
-    return cap_sim_pool(ctx, cap)
-
-
-def _real_context(cap: int) -> SimContext:
-    """Build a precompute-backed SimContext (real projections + FFC ADP). NETWORK + slow."""
-    from jaaffl.data import Crosswalk, Warehouse
-    from jaaffl.engine.precompute import build_registry_context_source
-    from jaaffl.providers.nflverse import NflreadpyProvider
-
-    settings = get_settings()
-    if not settings.jaaffl_season:
-        raise SystemExit("[E2] set jaaffl_season for --real")
-    warehouse = Warehouse(settings.jaaffl_data_dir)
-    crosswalk = Crosswalk(warehouse.app_sqlite)
-    print(
-        "[E2] seeding nflverse universe + building the real DraftContext ...",
-        file=sys.stderr,
-    )
-    NflreadpyProvider(crosswalk=crosswalk).seed_crosswalk()
-    source = build_registry_context_source(
-        settings,
-        warehouse=warehouse,
-        crosswalk=crosswalk,
-        season=settings.jaaffl_season,
-    )
-    dc = source(settings.jaaffl_league_id)
-    if dc is None:
-        raise SystemExit("[E2] precompute returned no context (empty universe/projections)")
-    ctx = sim_context_from_draft_context(dc)
-    print(
-        f"[E2] real pool: {len(ctx.value)} players -> capped to top {cap}",
-        file=sys.stderr,
-    )
-    return _cap_pool(ctx, cap)
+# E2 carried its OWN `_real_context` until Tier 9 — a third copy of the same loader, in the one CLI
+# that can WRITE `config/engine.json`. Nothing had diverged yet, but "a rule implemented twice
+# diverges silently" applies hardest here: had E2's cap or per-position keep-back drifted from
+# E6's, the study would have tuned on one real pool while the tournament validated on another, and
+# no test compares them. All three now call `pools.real_sim_context`.
 
 
 def _write_engine_params(config_path: Path, tuned: EngineParams) -> None:
@@ -137,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     real = args.real and not args.smoke
-    ctx = _real_context(args.pool_cap) if real else demo_sim_context()
+    ctx = real_sim_context(args.pool_cap) if real else demo_sim_context()
     # The vector the ENGINE runs, not bare EngineParams() — whose empty lambda_schedule silently
     # made every previous E2 baseline a RISK-FREE agent, so the gate never saw the shipped lambda.
     baseline = committed_engine_params()

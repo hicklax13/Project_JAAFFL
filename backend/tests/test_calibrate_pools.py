@@ -13,9 +13,9 @@ opponent-field) cells. Three independent reasons, none visible from a passing te
 * and the value curve was steep enough (a 240-point range over ~148 players) that the MLV gradient
   swamped what little the strategic terms could contribute.
 
-So E2 `--smoke` was running an Optuna study over a **constant function**, and E6 — which only ever
-runs `--smoke` (`run_tournament.py` errors without it) — was comparing an agent whose strategic
-terms provably contributed nothing, i.e. measuring MLV vs VBD.
+So E2 `--smoke` was running an Optuna study over a **constant function**, and E6 — which at the time
+could only run `--smoke` (`run_tournament.py` errored without it; Tier 9 gave it `--real`) — was
+comparing an agent whose strategic terms provably contributed nothing, i.e. measuring MLV vs VBD.
 """
 
 from __future__ import annotations
@@ -192,10 +192,28 @@ def test_demo_pool_is_sensitive_to_every_strategic_term(term: str, mutated: Engi
     ), f"the fixture pool cannot measure {term}"
 
 
-def test_real_sim_context_is_importable_without_touching_the_network() -> None:
-    """The --real pool loader lived in scripts/measure_risk_term.py, so E6 would have had to copy
-    it. One rule implemented twice diverges -- Tier 8 removed exactly that from the risk rule.
-    Importing must not pull nflverse or open the warehouse; only calling it may."""
-    from jaaffl.calibrate.pools import real_sim_context
+def test_real_sim_context_import_does_not_pull_the_network_data_stack() -> None:
+    """The --real pool loader lived in BOTH scripts/measure_risk_term.py and
+    scripts/tune_engine_params.py -- two private copies, the second inside the one CLI that can
+    WRITE config/engine.json. One rule implemented twice diverges silently, which is the defect
+    Tier 8 removed from the risk rule.
 
-    assert callable(real_sim_context)
+    Moving it into an importable module is only safe if importing it stays cheap. `assert callable`
+    would pass with every import hoisted to module scope, so this measures the property instead, in
+    a clean interpreter: `nflreadpy` (which pulls polars and reaches the network on use) must NOT be
+    imported merely by importing the loader.
+    """
+    import subprocess
+    import sys
+
+    probe = (
+        "import sys; from jaaffl.calibrate.pools import real_sim_context; "
+        "assert callable(real_sim_context); "
+        "print('nflreadpy' in sys.modules)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == "False", (
+        f"importing real_sim_context pulled nflreadpy: {result.stdout!r} {result.stderr!r}"
+    )

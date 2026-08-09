@@ -29,7 +29,7 @@ from __future__ import annotations
 import argparse
 
 from jaaffl.calibrate.pools import committed_engine_params, demo_sim_context, real_sim_context
-from jaaffl.calibrate.tune import run_tournament
+from jaaffl.calibrate.tune import WIN_PROBABILITY, run_tournament
 from jaaffl.engine.simulate import (
     AdpNoiseAgent,
     NeedBasedAgent,
@@ -87,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
         f"x 12 slots · {args.draws} sampled seasons/draft"
     )
     for label, objective in report["objectives"].items():
-        digits = 4 if label == "win probability" else 1
+        digits = 4 if label == WIN_PROBABILITY else 1
         print(f"[E6] {label} (per agent, across 12 slots):")
         for name, value in sorted(objective["mean"].items(), key=lambda kv: -kv[1]):
             print(f"[E6]   {name:9s} {value:>9.{digits}f}")

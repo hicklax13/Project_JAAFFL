@@ -194,10 +194,15 @@ def demo_sim_context() -> SimContext:
 def real_sim_context(cap: int = 300, *, per_position: int = 20) -> SimContext:
     """A precompute-backed :class:`SimContext` — real projections + FFC ADP. **NETWORK + slow.**
 
-    Lives here rather than in a script because two calibration CLIs need it (E6 and the Tier 8
-    risk-term arms), and the one thing this project has learned five times over is that a rule
-    implemented twice diverges silently. Every heavy import is function-local, so importing this
-    module stays free.
+    Lives here rather than in a script because **three** calibration CLIs need it — E2
+    (``tune_engine_params.py``), E6 (``run_tournament.py``) and the Tier 8 risk-term arms
+    (``measure_risk_term.py``) — and the one thing this project has learned five times over is that
+    a rule implemented twice diverges silently. Two private copies already existed, and the second
+    lived in **the one CLI that can write** ``config/engine.json``: had its cap or per-position
+    keep-back drifted, E2 would have tuned on one real pool while E6 validated on another, and no
+    test compares them. Every heavy import is function-local, so importing this module stays free —
+    pinned by ``tests/test_calibrate_pools.py``, which asserts in a clean interpreter that importing
+    this does not pull ``nflreadpy``.
 
     Capped by :func:`~jaaffl.calibrate.tune.cap_sim_pool`, which keeps the top ``per_position`` of
     each position as well as the top ``cap`` by value — a plain value cap drops K and DST.

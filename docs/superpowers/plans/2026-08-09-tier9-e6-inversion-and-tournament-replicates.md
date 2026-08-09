@@ -639,8 +639,15 @@ git commit -m "fix(calibrate): E6 pools disjoint seed blocks and gates on measur
 
 ### Task 4: `real_sim_context` — one `--real` loader, not two
 
-`scripts/measure_risk_term.py::_real_context` is the only precompute-backed `SimContext` builder.
-E6 needs it too. Copying it would be the exact defect Tier 8 removed from the risk rule.
+`scripts/measure_risk_term.py::_real_context` is a precompute-backed `SimContext` builder. E6 needs
+it too. Copying it would be the exact defect Tier 8 removed from the risk rule.
+
+⚠️ **This task's premise was incomplete, and code review caught it.** There were **two** private
+copies, not one: `scripts/tune_engine_params.py::_real_context` has carried its own since before
+Tier 9 — inside the one CLI that can **write** `config/engine.json`. Nothing had diverged yet, but
+had E2's cap or per-position keep-back drifted from E6's, the study would have tuned on one real
+pool while the tournament validated on another, and no test compares them. All three CLIs now call
+`pools.real_sim_context`.
 
 **Files:**
 
