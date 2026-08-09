@@ -35,43 +35,19 @@ import json
 import sys
 from pathlib import Path
 
-from jaaffl.calibrate.pools import committed_engine_params, demo_sim_context
+from jaaffl.calibrate.pools import committed_engine_params, demo_sim_context, real_sim_context
 from jaaffl.calibrate.tune import (
     WinProbabilityObjective,
-    cap_sim_pool,
     evaluate_agent,
     pooled_per_slot,
     promotion_decision,
-    sim_context_from_draft_context,
 )
-from jaaffl.config import EngineParams, get_settings
-from jaaffl.engine.simulate import AdpNoiseAgent, NeedBasedAgent, ScoreAgent, SimContext
+from jaaffl.config import EngineParams
+from jaaffl.engine.simulate import AdpNoiseAgent, NeedBasedAgent, ScoreAgent
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def _real_context(cap: int) -> SimContext:
-    """A precompute-backed SimContext (real projections + FFC ADP). NETWORK + slow."""
-    from jaaffl.data import Crosswalk, Warehouse
-    from jaaffl.engine.precompute import build_registry_context_source
-    from jaaffl.providers.nflverse import NflreadpyProvider
-
-    settings = get_settings()
-    if not settings.jaaffl_season:
-        raise SystemExit("[risk] set jaaffl_season for --real")
-    warehouse = Warehouse(settings.jaaffl_data_dir)
-    crosswalk = Crosswalk(warehouse.app_sqlite)
-    print("[risk] building the real DraftContext ...", file=sys.stderr)
-    NflreadpyProvider(crosswalk=crosswalk).seed_crosswalk()
-    source = build_registry_context_source(
-        settings, warehouse=warehouse, crosswalk=crosswalk, season=settings.jaaffl_season
-    )
-    dc = source(settings.jaaffl_league_id)
-    if dc is None:
-        raise SystemExit("[risk] precompute returned no context")
-    ctx = sim_context_from_draft_context(dc)
-    print(f"[risk] real pool: {len(ctx.value)} players -> capped to top {cap}", file=sys.stderr)
-    return cap_sim_pool(ctx, cap)
+# The `--real` pool loader used to live here as a private `_real_context`. It now lives in
+# `jaaffl.calibrate.pools.real_sim_context`, because E6 needs the same pool and a rule implemented
+# twice is the exact defect Tier 8 removed from the risk rule.
 
 
 def _override_off(base: EngineParams) -> EngineParams:
@@ -97,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", type=Path, default=None, help="Write the full table as JSON.")
     args = ap.parse_args(argv)
 
-    ctx = _real_context(args.pool_cap) if (args.real and not args.smoke) else demo_sim_context()
+    ctx = real_sim_context(args.pool_cap) if (args.real and not args.smoke) else demo_sim_context()
     base = committed_engine_params()
     off = _override_off(base)
 

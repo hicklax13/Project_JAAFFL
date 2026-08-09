@@ -190,3 +190,12 @@ def test_demo_pool_is_sensitive_to_every_strategic_term(term: str, mutated: Engi
     assert any(
         _roster(shipped, slot, seed) != _roster(mutated, slot, seed) for slot, seed in _CELLS
     ), f"the fixture pool cannot measure {term}"
+
+
+def test_real_sim_context_is_importable_without_touching_the_network() -> None:
+    """The --real pool loader lived in scripts/measure_risk_term.py, so E6 would have had to copy
+    it. One rule implemented twice diverges -- Tier 8 removed exactly that from the risk rule.
+    Importing must not pull nflverse or open the warehouse; only calling it may."""
+    from jaaffl.calibrate.pools import real_sim_context
+
+    assert callable(real_sim_context)
