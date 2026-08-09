@@ -14,6 +14,7 @@ import pytest
 
 from jaaffl.config import EngineParams
 from jaaffl.domain import LeagueSettings, Position, RosterSlot
+from jaaffl.engine.optimize import expand_starting_slots, roster_capacity
 from jaaffl.engine.simulate import (
     AdpNoiseAgent,
     NeedBasedAgent,
@@ -505,3 +506,65 @@ def test_the_tier8_experiment_levers_are_inert_by_default() -> None:
     assert walk() == walk(centre_sigma=False, gate_surplus_stash=False)
     # And each lever must be capable of changing something, or measuring it would be theatre.
     assert walk() != walk(centre_sigma=True)
+
+
+# --- Tier 10: the pick must be a decision, not an accident of the pool's order ---------------
+
+# The starting nine, all far ABOVE the 150.0 replacement line.
+_TIED_ROSTER = ["qb0", "rb0", "wr0", "wr1", "wr2", "wr3", "te0", "k0", "dst0"]
+
+# lambda_slot_override defaults to {0.4, -0.4}; zeroed here because that is the config under which
+# the tie is total — a filled slot makes every position SURPLUS, so the surplus ceiling is the only
+# lambda any candidate can receive.
+_TIED_PARAMS = EngineParams(
+    candidate_cap=180,
+    lambda_slot_override={"last_startable_slot_floor": 0.0, "surplus_stash_ceiling": 0.0},
+)
+
+
+def _tied_ctx() -> SimContext:
+    """A board whose starting nine is filled by players above replacement and whose ENTIRE
+    remaining pool sits below it — so ``marginal_lineup_value`` floors every candidate to exactly
+    0.0 and no term in the score can separate any two of them."""
+    value = {pid: 300.0 - 10.0 * i for i, pid in enumerate(_TIED_ROSTER)}
+    value.update({f"wr{i}": 140.0 - 3.0 * i for i in range(4, 14)})
+    value.update({f"rb{i}": 130.0 - 4.0 * i for i in range(1, 11)})
+    value.update({f"te{i}": 120.0 - 5.0 * i for i in range(1, 6)})
+    # The JOINT-BEST pair, identical in position AND value, so VOR ties at the top and only the id
+    # component of the candidate ordering can settle them. Real boards are full of these — every
+    # kicker on the 2026 board carries the identical sigma, and mu ties are common down the tail.
+    # Both still sit below the 150.0 replacement line, so MLV floors them to 0.0 like everyone else.
+    value.update({"wr90": 145.0, "wr91": 145.0})
+    position = {pid: Position(pid.rstrip("0123456789").upper()) for pid in value}
+    settings = _settings()
+    return SimContext(
+        value=value,
+        position=position,
+        baselines=dict.fromkeys(Position, 150.0),
+        slots=expand_starting_slots(settings),
+        roster_size=17,
+        # Deliberately NOT correlated with value, so a sigma-driven tiebreak cannot pass by luck.
+        sigma={pid: 20.0 + 3.0 * ((i * 7) % 11) for i, pid in enumerate(sorted(value))},
+        roster_capacity=roster_capacity(settings),
+    )
+
+
+def test_score_agent_pick_does_not_depend_on_pool_order() -> None:
+    """The defect Tier 10 found: once the starting nine is full every candidate scores EXACTLY
+    0.0, ``min()`` returns the first of the tied set, and the pick became a function of the order
+    the pool arrived in. Measured on the real board, 45.8% of our picks moved when the identical
+    pool was merely reversed."""
+    ctx = _tied_ctx()
+    agent = ScoreAgent(_TIED_PARAMS)
+    pool = sorted(set(ctx.value) - set(_TIED_ROSTER))
+    assert agent.pick(pool, _TIED_ROSTER, ctx) == agent.pick(pool[::-1], _TIED_ROSTER, ctx)
+
+
+def test_score_agent_breaks_exact_ties_toward_value_over_replacement() -> None:
+    """Order-independence alone would be satisfied by any arbitrary-but-stable key — sorting on
+    player id would pass it while leaving the pick valueless. The pick must go to the player the
+    board actually rates highest."""
+    ctx = _tied_ctx()
+    pool = sorted(set(ctx.value) - set(_TIED_ROSTER))
+    best = max(pool, key=lambda p: ctx.value[p] - ctx.baselines[ctx.position[p]])
+    assert ScoreAgent(_TIED_PARAMS).pick(pool, _TIED_ROSTER, ctx) == best
