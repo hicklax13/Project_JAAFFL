@@ -465,8 +465,10 @@ def _load_e6_script():
 def test_e6_cli_exposes_replicates_and_a_real_pool() -> None:
     """E6 accepted only --smoke/--seeds/--draws, so every E6 number ever published is a single
     seed block -- the standard E2 has met since Tier 6."""
-    args = _load_e6_script().build_parser().parse_args(
-        ["--smoke", "--seeds", "8", "--replicates", "5"]
+    args = (
+        _load_e6_script()
+        .build_parser()
+        .parse_args(["--smoke", "--seeds", "8", "--replicates", "5"])
     )
     assert args.replicates == 5
     assert args.seeds == 8

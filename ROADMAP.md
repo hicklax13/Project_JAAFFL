@@ -13,6 +13,215 @@ order — later stages assume the earlier contracts exist.
 
 Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` done
 
+## 📍 Status — 2026-08-09 · Tier 9 (the engine loses to VBD because of a term that fires in round 3)
+
+> **Tier 9 of the audit is merged** (PR #61). Tier 8 left the most serious number in the project on
+> the table: our agent scores MORE points than plain VBD and wins the championship **5.5× less
+> often**. Tier 9 reproduces it digit-for-digit, finds the mechanism, finds that the instrument
+> which reported it could never have chased it — and then, on the first real-board E6 this project
+> has ever run, finds the truth is **worse**: there the engine loses to plain VBD on **both**
+> objectives, and fixing the coefficient responsible closes most of the gap but **not all of it**.
+
+### The gap is variance, and the field is innocent
+
+Decomposing what `win_probability` actually consumes — fixture pool, 12 slots × 8 seeds, 800
+sampled seasons:
+
+| agent      | p(win)     | realized season mean | realized **sd** | E[field max] | deterministic points | slots filled |
+| ---------- | ---------- | -------------------- | --------------- | ------------ | -------------------- | ------------ |
+| ours       | **0.0180** | 1583.1               | **116.3**       | 1920.8       | **1562.1**           | 8.00 / 8     |
+| `vbd_only` | **0.0984** | 1609.8               | **169.8**       | 1911.9       | 1517.7               | 7.66 / 8     |
+| `adp_only` | 0.0026     | 1334.0               | 158.3           | 1913.1       | 1157.8               | 5.00 / 8     |
+
+`E[field max]` is the same in all three arms — a 9-point spread against a 337-point gap — so **"our
+picks leave a stronger field behind" is refuted.** Our roster simply carries 31% less spread against
+a bar every team must clear from ~2σ below. The two objectives also disagree about the identical
+rosters: deterministic points say we are +44.3 ahead, realized season mean says we are 26.7 behind.
+
+### 🔴 THE FINDING — `lambda_slot_override` is not an endgame term. It fires in round 3.
+
+`slot_state_for` classifies a position by its **open startable slots**: `0 → SURPLUS`,
+`1 → LAST_OPEN_STARTABLE`, `≥2 → NORMAL`. On this league's nine slots that is degenerate — verified
+directly against the real `resolve_league_settings("cbs-local")`:
+
+```
+pick 1, empty roster: open_startable = {QB:1, RB:2, WR:4, TE:1, K:1, DST:1}
+  QB   last_open_startable   λ(R1)=+0.40   risk on median σ 106.3 = -42.52
+  RB   normal                λ(R1)=+0.30   risk on median σ  59.0 = -17.70
+  TE   last_open_startable   λ(R1)=+0.40   risk on median σ  29.2 = -11.68
+```
+
+**A position with exactly one starting slot can never be `NORMAL`.** QB, TE, K and DST are
+`LAST_OPEN_STARTABLE` from pick 1 and `SURPLUS` forever after they are filled; they never touch the
+phase schedule at all. `lambda_schedule` — the knob five tiers have tuned — is reachable only for RB
+and WR, and only until their slots fill.
+
+Traced pick-by-pick (fixture, seat 5, seed 1, committed config):
+
+```
+R3  roster={WR:1, TE:1}  TE te14  μ=173.6  MLV=+0.00  λ=-0.40  σ=46.72  risk=+18.69  score=+21.33  <- TAKEN
+R4  roster={WR:1, TE:2}  TE te19  μ=162.6  MLV=+0.00  λ=-0.40  σ=46.72  risk=+18.69  score=+21.33  <- TAKEN
+```
+
+Picks **three and four** go to the 15th- and 20th-ranked tight ends — both below TE replacement
+(176.9), both MLV exactly `0.00`, neither able to crack the starting nine. The surplus ceiling pays
+**+18.69** for saturated σ against a value signal of zero, while the RB/WR alternatives (MLV +14 to
++42) sit in `NORMAL` and are _charged_ for theirs. The engine ends up holding **2.92 tight ends
+against a roster capacity of 3** — the worst possible stash, since a surplus TE can displace only
+our own starting TE and TE carries the lowest σ of any skill position.
+
+**Tier 8 measured this term correctly and described its mechanism wrongly**, as an endgame defect
+(`engine/risk.py`'s warning, and the Tier 8 block below). Direction, magnitude and significance
+stand; the timing does not. `recommend.py` computes the identical `lambda_weight(...) · σ`, so this
+is the shipped hot path, not a simulator artifact.
+
+### The fix, and the control that keeps it honest
+
+Fixture pool, **5 disjoint blocks × 8 seeds × 12 slots, 800 draws**, every arm the shipped
+`ScoreAgent` under a different `lambda_slot_override`, all sharing ONE `SimContext` so the sampled
+seasons stay common random numbers:
+
+| arm                  | win prob   | Δ vs ours   | p          | points     | Δ vs ours | p          | roster sd | season μ   |
+| -------------------- | ---------- | ----------- | ---------- | ---------- | --------- | ---------- | --------- | ---------- |
+| **ours (committed)** | 0.0159     | —           | —          | 1560.8     | —         | —          | 118.0     | 1580.0     |
+| **`override_off`**   | **0.1162** | **+0.1003** | **0.0002** | **1583.6** | **+22.8** | **0.0002** | 174.7     | **1667.0** |
+| `surplus_off`        | 0.0219     | +0.0060     | 0.0007     | 1570.7     | +9.9      | 0.0002     | 115.8     | 1597.2     |
+| `floor_off`          | 0.0724     | +0.0566     | 0.0002     | 1553.9     | −6.9      | 0.9451     | **198.2** | 1578.7     |
+| `vbd_only`           | 0.0802     | +0.0643     | 0.0002     | 1483.6     | −77.2     | 1.0000     | 163.0     | 1581.4     |
+
+On this pool `override_off` beats `vbd_only` on both legs — win **+0.0360** (p = 0.0005), points
+**+100.0** (p = 0.0002) — while the committed config loses the win leg by −0.0643 (p = 1.0000).
+**On the real board that is not true**, and the real board is the one that counts; see below.
+
+**The refuting control came out the right way.** The obvious alternative account — "the objective
+just loves variance, so any high-σ arm wins" — is **refuted by `floor_off`**, which carries the
+_highest_ roster sd of any arm (198.2 > 174.7) and wins _less_, while losing points (p = 0.9451).
+`override_off` wins because it raises realized season mean too: 1667.0 against `floor_off`'s 1578.7.
+
+**The halves are not separable either.** +0.0060 and +0.0566 alone; +0.1003 together. Zeroing one
+half leaves the other still assigning a sign opposite to the phase λ, so the term stays
+non-common-mode. Roster mix says the same: committed `TE 2.92 · RB 1.30`, `override_off`
+`TE 1.00 · RB 3.72` — depth moves to the position with two startable slots and the highest σ.
+
+### 🔴 THE REAL BOARD — the first precompute-backed E6, and it is worse than the fixture showed
+
+E6 had never been run on anything but the fixture. It has now: 581 players capped to 300, 5 disjoint
+blocks × 8 seeds × 12 slots, 800 sampled seasons, field `[SoftmaxVbd, NeedBased]`.
+
+| agent                | win prob   | points     |
+| -------------------- | ---------- | ---------- |
+| `vbd_only`           | **0.1066** | 1661.7     |
+| `override_off`       | 0.0683     | **1713.5** |
+| **ours (committed)** | **0.0072** | **1459.9** |
+| `adp_only`           | 0.0026     | 1186.6     |
+
+| comparison                   | win prob             | points              | verdict        |
+| ---------------------------- | -------------------- | ------------------- | -------------- |
+| ours vs `vbd_only`           | −0.0994 (p = 1.0000) | −201.8 (p = 1.0000) | **loses BOTH** |
+| `override_off` vs ours       | +0.0611 (p = 0.0002) | +253.7 (p = 0.0002) | **beats BOTH** |
+| `override_off` vs `vbd_only` | −0.0383 (p = 0.9998) | +51.9 (p = 0.0005)  | **SPLIT**      |
+
+**On the real board the shipped engine does not merely trade points for championships — it loses to
+plain VBD on BOTH objectives.** The fixture's consolation "+44.3 points" does not exist there; the
+engine is **201.8 points behind** as well. Tier 4's headline is not inverted on this board, it is
+simply gone.
+
+**Two things follow, and the second is the one to carry forward.**
+
+1. **The config change is confirmed, independently.** `override_off` beats the committed config on
+   both objectives by a wide margin, and Tier 8's real-board magnitude (+0.0745 win / +242.73
+   points, against a `[NeedBased, AdpNoise]` field) **replicates under a different opponent field**
+   here (+0.0611 / +253.7). Same board, different opponents, same answer.
+2. **`lambda_slot_override` is not the whole deficit.** Even with it off the engine still trails
+   plain VBD on championship probability by **−0.0383**, and sits at 0.0683 against a 12-team fair
+   share of 0.0833. Something else is costing roughly half a fair share, and it is unidentified.
+   **That is Tier 10's question, and nothing in this tier answers it.**
+
+⚠️ **And the fixture pool gave the OPPOSITE verdict on the decisive comparison.** It said
+`override_off` beats `vbd_only` on both legs; the real board says it does not. A fixture conclusion
+about the engine-vs-baseline question is therefore not evidence about the real board — the pools
+agree on the direction of the knob and disagree on whether the knob is sufficient.
+
+### ⚠️ A Tier 8 open item is closed: the code alternative is measured, and it loses
+
+Tier 8 listed "letting all three fall through to the phase schedule" as an unmeasured arm. Measured
+here **on the fixture pool**, same design: win 0.0842 (+0.0683 vs ours, p = 0.0002), points 1585.6
+(+24.7, p = 0.0002) — but against `vbd_only` only **+0.0040** on win probability at **p = 0.2119**,
+where `override_off` gets +0.0360 at p = 0.0005. Zeroing the config is better on the leg that
+matters, because `override_off` removes the early-round σ tax on single-slot positions entirely
+where fall-through keeps it at the phase rate. **Tier 9 therefore ships no engine behaviour
+change**, and the recommendation stays exactly where Tier 8 left it: with the owner.
+
+⚠️ Honest limit on that: the fall-through arm was measured on the **fixture only**, and the fixture
+is now known to disagree with the real board about engine-vs-`vbd_only` comparisons. What is
+established is that fall-through does not beat `override_off`; it is not established what it does on
+the real board.
+
+### The instrument, again — E6 has never been replicated
+
+Fifth instance of this project's recurring defect, and the first in the **gate** rather than the
+pool or the agent:
+
+1. `scripts/run_tournament.py` accepted `--smoke --seeds --draws` and nothing else, so **every E6
+   number ever published — Tier 8's inversion included — is a single seed block.** Tier 6 set the
+   ≥5-block standard after proving the min-slot leg "was not discriminating, it was sampling"; E2
+   got `--replicates`, E6 never did.
+2. `run_tournament` passed **no `slot_noise`**, so its `beats` gate used exactly that discredited
+   leg.
+3. The two objectives were printed as unrelated paragraphs with **no combined verdict.** Tier 8's
+   output said `+44.3 points p=0.0017` and `−0.0805 win prob p=1.0000` eight lines apart and nothing
+   anywhere said _these disagree_.
+
+E6 also re-simulated every draft once per objective, which is exactly why replicates looked
+unaffordable. All fixed: one draft scores every objective, blocks are pooled, the gate reads
+measured noise, and a `SPLIT` verdict prints whenever the reference wins one objective and loses
+another. `tests/test_harness_fidelity.py` now pins each **half** of `lambda_slot_override`
+separately (60/60 rosters move for each), because the "not separable" finding rests on those arms.
+
+**And the noise it now reports is a finding in itself.** On the repaired E6, the per-slot sd of the
+paired win-probability difference against `vbd_only` is **median 0.0219, max 0.0560** over 5 blocks.
+E2 has been gating decisions at 0.001–0.009. **The E6 win-probability leg is an order of magnitude
+noisier than the E2 leg**, so single-block E6 figures were even weaker evidence than assumed.
+
+### ⚠️ Surfaced, not fixed: `mean_lineup_value_objective` is bench-blind
+
+It scores the optimal nine under fixed μ, so a bench player is worth exactly **0** — 8 of 17 picks
+in this league. `roster_season_values` re-optimises the lineup with **perfect hindsight** of the
+realized season, which is an upper bound on option value. On identical rosters the two disagree by
+78 points about ours vs `vbd_only`. They **bracket** bench value; neither is right. Changing the
+objective would supersede every number in the project a fourth time and belongs in the tier that
+also gives it a week axis.
+
+### What Tier 9 did NOT do
+
+- **No engine behaviour changed.** `engine/risk.py`, `engine/recommend.py` and `engine/simulate.py`
+  are untouched. `config/engine.json` and `config/league.json` are untouched. The
+  `lambda_slot_override` recommendation is still **OPEN** with the owner
+  (`docs/owner-manual-todo.md` §1); verified 2026-08-09, the file still reads `0.4 / −0.4`.
+- **The residual deficit is NOT explained.** With `lambda_slot_override` off, the engine still
+  trails `vbd_only` on real-board championship probability by **−0.0383** and sits below a 12-team
+  fair share. Tier 9 identifies one cause and measures it on two pools; it does not claim that cause
+  is the only one, and it did not look for the second. Anyone quoting "the override was the problem"
+  is quoting half a sentence.
+- **E2 was not re-run.** Tier 8's tuned vector bought +0.0017 against a knob worth +0.0745 that
+  `run_study` cannot search, so re-running the study before that knob is settled would measure noise
+  around a decision nobody has made.
+- **No week axis.** `sample_season_outcomes` still draws one independent season total per player, so
+  `bye_stack`, `handcuff_synergy` and `sos` remain unmeasurable and unimplemented.
+- **The perfect-hindsight lineup re-optimisation is recorded, not changed.**
+- **A simulator is not a fact about drafting.** These numbers show the shipped coefficient is
+  catastrophic against these bots on these pools. They do not show what it does on draft night, and
+  the opponents are still behavioural agents rather than the eleven people in the room.
+
+### ⚠️ What is superseded
+
+- Tier 8's **"endgame"** framing of `lambda_slot_override`: the mechanism is corrected to round 3
+  onward. Its direction, significance and recommendation are confirmed, now on a second pool.
+- Tier 8's "the remove-the-branches variant is unmeasured": measured, and refuted as an improvement.
+- **Every pre-Tier-9 E6 number.** All were single-block, and the CLI now uses the 1001+ disjoint-block
+  seed scheme E2 and `measure_risk_term.py` use, so old and new E6 figures are not comparable. The
+  Tier 8 block's E6 table below is the last of the old kind.
+
 ## 📍 Status — 2026-08-07 · Tier 8 (the endgame defect was never in the engine, and the harness could not see the knob)
 
 > **Tier 8 of the audit is merged** (PR #60). Tier 7 handed it a residual: the engine takes a second

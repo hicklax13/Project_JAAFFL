@@ -271,6 +271,70 @@ total of the 12)` over seasons sampled from `N(μ, σ)` — against a disjoint s
   measured on five seed blocks rather than one, and it points the same way on both measures rather
   than trading one for the other. **If you change one thing before draft night, change this.**
 
+  ### 🔴 STILL OPEN — Tier 9 tested the same setting a second way, and it is worse than we thought
+
+  **This decision is still waiting on you.** As of 2026-08-09 `config/engine.json` still reads
+  `0.4 / -0.4`; nothing has been changed, and nothing will be without you saying so.
+
+  Tier 9 re-tested it on a completely different measurement — the **efficacy tournament**, which
+  races the engine against a "just take the best available player" baseline at all twelve draft
+  seats — and ran that tournament **on your real player board for the first time**. Every number
+  below is the real board, not a practice fixture:
+
+  | measure                      | engine as shipped | with the setting off | plain best-available |
+  | ---------------------------- | ----------------- | -------------------- | -------------------- |
+  | **championship probability** | **0.0072**        | **0.0683**           | **0.1066**           |
+  | **projected points**         | **1460**          | **1714**             | **1662**             |
+
+  Read that table twice, because it says two things and they pull in opposite directions.
+
+  **The bad news first: as shipped, your engine is beaten by a plain best-available draft on _both_
+  measures.** Not a trade — worse at winning the title _and_ worse on points, by 202. In a 12-team
+  league an average team wins 0.0833 of the time; your engine as shipped wins **0.0072**, about one
+  twelfth of its fair share.
+
+  **The good news: turning this one setting off recovers most of it.** Championship odds go from
+  0.0072 to 0.0683 and points from 1460 to 1714 — better on both, at p = 0.0002 on each. It becomes
+  the **best points-scorer in the field**, ahead of best-available by 52.
+
+  ⚠️ **But be clear about what it does not do.** Even with the setting off, the engine still wins
+  the title _less often_ than a plain best-available draft (0.0683 vs 0.1066). So this change is a
+  large, well-measured improvement and it is **not** a clean win over the naive baseline. Something
+  else is costing you roughly half a fair share and nobody has found it yet — that is the next
+  tier's job. An earlier draft of this note said the setting-off engine beat the baseline outright;
+  that was measured on the practice fixture and **the real board disagrees.** The real board wins.
+
+  **And the reason is worse than Tier 8 described.** Tier 8 called this a late-round problem. It is
+  not — it starts in **round 3**. Walking a draft with your real settings, the engine spent picks
+  **three and four** on the 15th- and 20th-best tight ends, both of them worse than a freely
+  available replacement, both scored by its own value model at exactly **zero**. It took them
+  because this setting pays a bonus for unpredictability that has nothing to do with whether the
+  player can ever enter your lineup. It ends up holding **three tight ends** — the maximum your
+  roster can hold — when it can only ever start one.
+
+  The mechanism, in one line: the setting keys off _how many starting slots a position has left
+  open_, and any position with a **single** starting slot (QB, TE, K, DST — four of your six) is
+  therefore permanently in one of the two override states and never in the normal one. Your
+  round-by-round risk schedule only ever applies to running backs and receivers.
+
+  **The change is still the same two lines**, and it is still entirely your call:
+
+  ```
+  "lambda_slot_override": {
+    "last_startable_slot_floor": 0.0,
+    "surplus_stash_ceiling": 0.0
+  },
+  ```
+
+  Tier 9 also tested the obvious code alternative — leaving the setting in place but making it
+  behave like the normal round-by-round schedule — and it is **worse** than simply turning it off.
+  So there is no cleverer fix waiting; this is the decision.
+
+  **Nothing has been changed, again.** `config/engine.json` is yours. A simulator is still not a
+  fact about drafting — the other eleven teams are bots, not the people in your room. What is now
+  measured, on your real board and on a practice board, under three different opponent line-ups, is
+  that this setting costs the engine on **both** measures every time it is tested.
+
 ## 1b. ⛔ READ BEFORE DRAFT NIGHT — the engine goes blind in the late rounds `[NEW — Tier 6]`
 
 **You must fill QB, K and DST yourself. The engine will not tell you to.**
@@ -358,6 +422,16 @@ this never described your actual draft. Once the practice opponents were made to
 rules, the problem vanished — for every version of the engine we tried.
 
 **This is the third tier in a row to blame the engine for it, and the first to test the assumption.**
+
+⚠️ **TIER 9 CORRECTION (2026-08-09) — the same setting is also spending your EARLY picks.**
+Everything above treats the uncertainty bonus as a late-round quirk. It is not. Measured on
+2026-08-09, with your committed settings, the engine spends **round 3 and round 4** on tight ends it
+can never start — its own value model scores them at exactly zero — because that bonus outbids the
+running backs and receivers it should be taking. So the fix is not a late-round tidy-up; it is worth
+about **five times your championship odds**, and it is the decision sitting in §1 above.
+
+This does **not** change the rule below. Rounds 1–9 are still where the engine's value signal is
+strongest, and glancing at your empty slots from round 14 is still free.
 
 **Your 30-second rule, updated:**
 

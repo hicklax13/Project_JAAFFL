@@ -1305,11 +1305,30 @@ already put the same change on the table; Tier 9 adds the E6 evidence.
    },
 ```
 
-| evidence                                   | win probability    | expected points    | both legs? |
-| ------------------------------------------ | ------------------ | ------------------ | ---------- |
-| Tier 8, **real** board, 5 blocks × 8 seeds | +0.0745 (p=0.0002) | +242.73 (p=0.0002) | YES        |
-| Tier 9, **fixture** E6, 5 blocks × 8 seeds | +0.1003 (p=0.0002) | +22.8 (p=0.0002)   | YES        |
-| Tier 9, fixture E6, vs `vbd_only`          | +0.0360 (p=0.0005) | +100.0 (p=0.0002)  | YES        |
+**Zeroing it vs. the committed config** — three measurements, two pools, three opponent fields:
 
-Different pools; the magnitudes are not comparable to each other, only the direction and the
-significance are. A simulator is not a fact about drafting.
+| evidence                                                | win probability    | expected points    | both legs? |
+| ------------------------------------------------------- | ------------------ | ------------------ | ---------- |
+| Tier 8, **real** board, field `[NeedBased, AdpNoise]`   | +0.0745 (p=0.0002) | +242.73 (p=0.0002) | YES        |
+| Tier 9, **real** E6, field `[SoftmaxVbd, NeedBased]`    | +0.0611 (p=0.0002) | +253.7 (p=0.0002)  | YES        |
+| Tier 9, **fixture** E6, field `[SoftmaxVbd, NeedBased]` | +0.1003 (p=0.0002) | +22.8 (p=0.0002)   | YES        |
+
+The first two are the same board under **different opponents** and agree closely — that is
+replication, not repetition.
+
+⚠️ **What it does NOT establish** — measured after this plan was written, and it revises the
+conclusion the plan anticipated:
+
+| comparison, **real** board     | win probability      | expected points     | verdict    |
+| ------------------------------ | -------------------- | ------------------- | ---------- |
+| `override_off` vs `vbd_only`   | −0.0383 (p = 0.9998) | +51.9 (p = 0.0005)  | **SPLIT**  |
+| ours (committed) vs `vbd_only` | −0.0994 (p = 1.0000) | −201.8 (p = 1.0000) | loses both |
+
+On the real board the setting-off engine is the best **points** scorer in the field and still wins
+the title **less often than plain VBD**. The fixture E6 said it beat `vbd_only` on both legs; the
+real board disagrees, so **the fixture is not evidence about the engine-vs-baseline question.** The
+change is still clearly right relative to what ships today — it is just not sufficient, and the
+residual −0.0383 is unexplained and belongs to Tier 10.
+
+A simulator is not a fact about drafting: the opponents are behavioural agents, not the eleven
+people in the room.
