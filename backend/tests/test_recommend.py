@@ -6,6 +6,7 @@ The load-bearing invariant is that every RecommendedPick's ``score`` reconstruct
 
 from __future__ import annotations
 
+import dataclasses
 import time
 
 import pytest
@@ -309,3 +310,53 @@ def test_projection_provenance_is_absent_rather_than_faked_when_unknown() -> Non
     specs = [{"pid": "p", "pos": Position.WR, "mu": 200.0, "sigma": 20.0, "adp": 1.0}]
     rec = recommend(draft_state(1), make_context(specs), engine_params(), limit=1)
     assert rec.ranked[0].projection_sources is None
+
+
+# --- Tier 10: the live ranking must be a decision, not context.mu insertion order -------------
+
+
+def _full_lineup() -> tuple[list[DraftPick], object]:
+    """A pick log filling OUR nine starting slots, and the params under which the remaining
+    below-replacement candidates all score exactly 0.0 — a filled slot makes every position
+    SURPLUS, so the surplus ceiling is the only lambda any candidate can receive."""
+    mine = ["qb0", "rb0", "wr0", "wr1", "wr2", "wr3", "te0", "k0", "dst0"]
+    picks = [
+        DraftPick(overall=i + 1, round=i + 1, pick_in_round=1, team_id="t0", player_id=pid)
+        for i, pid in enumerate(mine)
+    ]
+    params = engine_params(
+        lambda_slot_override={"last_startable_slot_floor": 0.0, "surplus_stash_ceiling": 0.0}
+    )
+    return picks, params
+
+
+def test_ranking_does_not_depend_on_context_insertion_order() -> None:
+    """Tier 10: with the starting nine full, MLV is 0, kappa*max(0,VONA) clamps to 0, the cliff is
+    0 below replacement and lambda is 0 for a SURPLUS position — every below-replacement candidate
+    scores EXACTLY 0.0. `picks.sort` is stable, so the ranking WAS `context.mu` insertion order.
+    Measured on the real board: 180 of 180 candidates tied at round 14, and the engine's #1 was
+    81.4 projected points worse than the best player it tied with.
+
+    Only `mu`'s insertion order is varied — not the specs — so nothing else can explain a diff.
+    """
+    picks, params = _full_lineup()
+    context = make_context(_board(), params=params)
+    flipped = dataclasses.replace(context, mu=dict(reversed(list(context.mu.items()))))
+    state = draft_state(len(picks) + 1, picks=picks)
+    forward = recommend(state, context, params)
+    backward = recommend(state, flipped, params)
+    assert [p.player_id for p in forward.ranked] == [p.player_id for p in backward.ranked]
+
+
+def test_tied_scores_rank_by_value_over_replacement() -> None:
+    """Order-independence alone would be satisfied by sorting on player id — arbitrary but stable.
+    Within the block the score cannot separate, the engine must prefer the player the board rates
+    higher."""
+    picks, params = _full_lineup()
+    context = make_context(_board(), params=params)
+    state = draft_state(len(picks) + 1, picks=picks)
+    rec = recommend(state, context, params)
+    zero = [p for p in rec.ranked if p.score == pytest.approx(0.0, abs=1e-9)]
+    assert len(zero) > 1, "fixture no longer produces a tie — the test would prove nothing"
+    vor = [p.projected_points - p.components.replacement_baseline for p in zero]
+    assert vor == sorted(vor, reverse=True)
