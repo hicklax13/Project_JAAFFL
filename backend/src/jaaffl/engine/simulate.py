@@ -19,7 +19,12 @@ from typing import TYPE_CHECKING, Protocol
 
 from jaaffl.config import EngineParams
 from jaaffl.domain import Position
-from jaaffl.engine.optimize import StartingSlot, lineup_value, marginal_lineup_value
+from jaaffl.engine.optimize import (
+    StartingSlot,
+    lineup_value,
+    marginal_lineup_value,
+    value_over_replacement,
+)
 from jaaffl.engine.risk import (
     has_open_non_puntable_slot,
     is_punted,
@@ -204,7 +209,8 @@ def _unfilled_positions(roster: Sequence[str], ctx: SimContext) -> set[Position]
 
 
 def _vbd(pid: str, ctx: SimContext) -> float:
-    return ctx.value[pid] - ctx.baselines.get(ctx.position[pid], 0.0)
+    """Value over replacement, from the shared rule — the behavioural agents' whole ranking."""
+    return value_over_replacement(pid, ctx.value, ctx.position, ctx.baselines)
 
 
 def _rosterable(available: Sequence[str], my_roster: Sequence[str], ctx: SimContext) -> list[str]:
@@ -407,9 +413,21 @@ class ScoreAgent:
             )
             for p in available
         }
+        # VOR on the SAME `value` mapping MLV was computed from (reliability-shrunk), so the
+        # tiebreak and the term it breaks ties for agree about what a player is worth.
+        vor = {p: value_over_replacement(p, value, ctx.position, ctx.baselines) for p in available}
         # Cap by MLV, as recommend.py does — not by raw value, which hides K/DST behind deep bench
-        # skill players whose marginal contribution to the starting nine is zero.
-        candidates = sorted(available, key=lambda p: all_mlv[p], reverse=True)[: self._cap]
+        # skill players whose marginal contribution to the starting nine is zero. Ties broken by
+        # VOR then id, because once every starting slot is filled EVERY below-replacement candidate
+        # has MLV exactly 0.0: on the real board this cap was selecting 180 of 425 players by dict
+        # order, and a player never scored can never be picked (Tier 10).
+        #
+        # ⚠️ Unlike recommend.py, changing WHO is in this cap changes the SCORES of those who
+        # remain: `vona` below is a within-position best-OTHER-candidate proxy computed over
+        # `candidates`, so it moves when membership moves. recommend.py's VONA comes from
+        # `expected_best_available` over the whole of `available`, computed before its cut, so
+        # there the change is a pure re-rank plus membership. Here it is not confined to ties.
+        candidates = sorted(available, key=lambda p: (-all_mlv[p], -vor[p], p))[: self._cap]
         mlv = {p: all_mlv[p] for p in candidates}
 
         # The SHIPPED slot/punt rule, from the one module recommend.py also reads. Until Tier 8
@@ -451,7 +469,11 @@ class ScoreAgent:
                 + params.alpha * ctx.cliff_bonus.get(pid, 0.0)
             )
 
-        # Ranked exactly as recommend.py ranks: non-punted first, then score descending.
+        # Ranked exactly as recommend.py ranks: non-punted first, then score descending. `min`
+        # returns the FIRST minimal element, so among candidates the score cannot separate this
+        # inherits the `candidates` order above — which Tier 10 made a total order by VOR then id.
+        # A tiebreak repeated here would be blind: measured by mutation, removing it moves zero
+        # picks, and this project deletes code its own tests cannot see.
         return min(
             candidates,
             key=lambda pid: (

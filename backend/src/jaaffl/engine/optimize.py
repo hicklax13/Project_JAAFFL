@@ -253,6 +253,36 @@ def marginal_lineup_value(
     return with_candidate - base_value
 
 
+def value_over_replacement(
+    player_id: str,
+    mu: Mapping[str, float],
+    position: Mapping[str, Position],
+    baselines: Mapping[Position, float],
+) -> float:
+    """``μ − replacement`` — the value MLV degenerates to before the lineup floors it at zero.
+
+    **Not a new signal.** This module's reduction guarantee already states "empty roster ⇒
+    MLV_p = μ_p − baseline(pos(p)) (classic VOR)". Once a starting slot is spoken for,
+    :func:`marginal_lineup_value` clamps every below-replacement candidate to exactly 0.0, and the
+    ordering VOR still carries is discarded — a −38 receiver and a −120 receiver both score 0.
+
+    That discard is the whole of Tier 10's defect. Measured on the real board with
+    ``lambda_slot_override`` zeroed, **180 of 180** candidates at round 14 shared the score
+    ``0.000000``: MLV is 0, ``κ·max(0, VONA)`` clamps to 0 because ``expected_best_available`` is
+    never negative, ``α·cliff_bonus`` is legitimately 0 below replacement, and ``λ`` is 0 for a
+    SURPLUS position. Python's sort is stable, so the ranking became ``context.mu`` **insertion
+    order** — for 8 of this league's 17 picks. The engine's top recommendation was 81.4 projected
+    points worse than the best player it was tied with.
+
+    Used ONLY as a deterministic secondary sort key, by ``recommend`` and ``ScoreAgent`` alike. It
+    is a **tiebreak, never a term**: nothing adds it to a score, so no ``ScoreComponents``
+    decomposition changes and no comparison where scores already differ can move. It lives here,
+    beside the function it un-floors, because this project's signature defect is a rule implemented
+    twice — ``engine/risk.py`` exists for exactly that reason.
+    """
+    return mu[player_id] - baselines.get(position[player_id], 0.0)
+
+
 def optimize_roster(
     player_values: dict[str, float],
     player_positions: dict[str, str],

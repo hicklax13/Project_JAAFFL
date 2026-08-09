@@ -22,7 +22,20 @@ the thing that matters.
   ``lambda_slot_override`` paying **+18.69** for a zero-MLV tight end in **round 3**, not round 15,
   because a one-slot position can never be ``NORMAL`` — was sitting in the numbers for a whole tier.
 
+* **Tier 10** — the OBJECTIVE, and the ranking underneath it. ``mean_lineup_value_objective``
+  scores the optimal nine under fixed ``mu``, so it prices a bench player at exactly **0** — 8 of
+  this league's 17 picks. It therefore could not see that once the starting nine is full every
+  remaining candidate scores exactly ``0.0`` (MLV 0, ``kappa*max(0,VONA)`` clamped because
+  ``expected_best_available`` is never negative, cliff 0 below replacement, ``lambda`` 0 for a
+  SURPLUS position) and the ranking degenerated to ``context.mu`` insertion order. Measured on the
+  real board: **180 of 180** candidates tied at round 14 and the #1 recommendation was **81.4**
+  projected points worse than the best player it tied with. Under ``override_off`` that objective
+  reported the engine as the BEST points-scorer in the field while it drafted half its roster in
+  dictionary order.
+
 This test asks the only question that catches all five: change the knob, does any pick move?
+Tier 10 adds the sixth question, which no knob can ask: change nothing but the ORDER the pool
+arrives in — does any pick move?
 """
 
 from __future__ import annotations
@@ -124,4 +137,49 @@ def test_the_harness_can_see_every_knob_it_tunes(knob: str, changes: dict) -> No
     assert moved > 0, (
         f"{knob} cannot change a single pick across {len(before)} simulated drafts — "
         "the harness is blind to it, so no measurement of it means anything"
+    )
+
+
+class _ReversedPool:
+    """The SHIPPED agent, handed the same pool in the opposite order. No scoring logic here."""
+
+    def __init__(self, inner: ScoreAgent) -> None:
+        self._inner = inner
+
+    def pick(self, available, my_roster, ctx, rng=None) -> str:
+        return self._inner.pick(list(available)[::-1], my_roster, ctx, rng)
+
+
+def test_the_harness_measures_a_decision_not_an_ordering() -> None:
+    """Every knob above can be measurable and the measurement still be worthless if the PICK is
+    decided by the order the pool arrives in.
+
+    Measured on the real board 2026-08-09, presenting the identical pool reversed moved **23.5%**
+    of our picks under the committed config and **45.8%** with ``lambda_slot_override`` zeroed,
+    because once the starting nine is full every candidate scores exactly 0.0 and ``min()`` returns
+    whichever one happened to come first. The bench that produced averaged **-121.6** VBD per
+    player against plain VBD's -38.0, and that gap was the whole of the residual Tier 9 could not
+    explain.
+    """
+    base = committed_engine_params()
+    ctx = demo_sim_context()
+    moved = 0
+    for slot in range(TEAMS):
+        for seed in SEEDS:
+            rosters = [
+                simulate_draft(
+                    ctx,
+                    our_slot=slot,
+                    our_agent=agent,
+                    opponents=[NeedBasedAgent(), AdpNoiseAgent()],
+                    seed=seed,
+                    teams=TEAMS,
+                )[slot]
+                for agent in (ScoreAgent(base), _ReversedPool(ScoreAgent(base)))
+            ]
+            moved += rosters[0] != rosters[1]
+    assert moved == 0, (
+        f"{moved} of {TEAMS * len(SEEDS)} simulated rosters change when the pool is merely "
+        "REVERSED — the agent is ranking by list order, so every number measured from it is an "
+        "artifact of how the pool was enumerated"
     )

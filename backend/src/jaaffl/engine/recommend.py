@@ -34,7 +34,7 @@ from jaaffl.engine.opponents import (
     pick_probabilities,
     run_pressure_by_position,
 )
-from jaaffl.engine.optimize import lineup_value, marginal_lineup_value
+from jaaffl.engine.optimize import lineup_value, marginal_lineup_value, value_over_replacement
 from jaaffl.engine.risk import (
     SlotState,
     has_open_non_puntable_slot,
@@ -273,8 +273,25 @@ def recommend(
                 ranked_pos, mlv, survival_vona, replacement=baselines.get(pos, 0.0)
             )
 
-    # 5) Candidate pool: top-K available by MLV (bounded hot path).
-    candidates = sorted(available, key=lambda p: mlv[p], reverse=True)[: params.candidate_cap]
+    # 5) Candidate pool: top-K available by MLV (bounded hot path), as a TOTAL order — ties broken
+    # by the value MLV floors away, then by id, never by dict order on this ANALYTIC path (Tier 10;
+    # the opt-in MC-VONA rollout in `simulate.mc_expected_best_available` still breaks ADP ties by
+    # pool index, and is off by default). MLV is exactly 0.00
+    # for every candidate who cannot improve the optimal nine, which is not merely the
+    # below-replacement tail: with a strong lineup already seated it includes players far ABOVE
+    # replacement. Their whole score collapses with it — `κ·max(0, VONA)` clamps because
+    # `expected_best_available` is never negative, `α·cliff_bonus` is legitimately 0 below
+    # replacement, and a SURPLUS position takes `lambda_slot_override`'s ceiling. Measured on the
+    # real board at round 14 with that override zeroed: 180 of 180 candidates shared the score
+    # 0.000000, this cap was choosing 180 of 425 players by `context.mu` insertion order, and the
+    # #1 recommendation was 81.4 projected points worse than the best player it tied with.
+    # `picks.sort` below is stable, so it inherits this order among equal scores — which is what
+    # makes the ranking a decision rather than an accident of how precompute filled a dict.
+    vor = {
+        pid: value_over_replacement(pid, context.mu, context.position, baselines)
+        for pid in available
+    }
+    candidates = sorted(available, key=lambda p: (-mlv[p], -vor[p], p))[: params.candidate_cap]
 
     # Slot-state accounting for my current roster (drives the λ override + punt guard). The
     # puntable positions come from the config (punt_guard.stream_round keys) — one source of truth,
