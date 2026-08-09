@@ -33,9 +33,16 @@ the thing that matters.
   reported the engine as the BEST points-scorer in the field while it drafted half its roster in
   dictionary order.
 
+* **Tier 11** — the OBJECTIVE again, in a different way, and this time pre-empted rather than
+  discovered. Tier 11 adds a week axis, so before quoting any number from it the same question has
+  to be asked of the new objective: can it SEE a bye conflict? a same-team stack? a handcuff? Two
+  of those three come out yes and one comes out **no**, and the no is a measurement rather than an
+  omission — see ``test_the_weekly_objective_cannot_see_a_handcuff``.
+
 This test asks the only question that catches all five: change the knob, does any pick move?
 Tier 10 adds the sixth question, which no knob can ask: change nothing but the ORDER the pool
-arrives in — does any pick move?
+arrives in — does any pick move? Tier 11 adds the seventh, asked of the objective rather than the
+agent: change the ROSTER in a way the term would care about — does the objective's number move?
 """
 
 from __future__ import annotations
@@ -44,6 +51,7 @@ import pytest
 
 from jaaffl.calibrate.pools import committed_engine_params, demo_sim_context
 from jaaffl.config import EngineParams
+from jaaffl.domain import Position
 from jaaffl.engine.simulate import (
     AdpNoiseAgent,
     NeedBasedAgent,
@@ -183,3 +191,200 @@ def test_the_harness_measures_a_decision_not_an_ordering() -> None:
         "REVERSED — the agent is ranking by list order, so every number measured from it is an "
         "artifact of how the pool was enumerated"
     )
+
+
+# ---------------------------------------------------------------------------------------------
+# Tier 11: the same question, asked of the OBJECTIVE. Each of the three modifiers
+# `recommend._positional_modifiers` has declared for six tiers gets a verdict, and the verdict is
+# a test rather than a paragraph.
+# ---------------------------------------------------------------------------------------------
+
+_WEEKLY_DRAWS = 4000
+
+
+def _weekly_ctx(**overrides):
+    """The fixture pool with the REAL board's mu/sigma ratios, plus explicit byes/teams.
+
+    The demo pool cannot carry a weekly model faithfully: its synthetic value curve is far steeper
+    against the same real sigma anchors (median mu/sigma at WR 3.9 against the real board's 2.4), so
+    the absence process eats almost all of its receivers' production variance. Measured 2026-08-09,
+    8 of its 178 players degenerate to zero weekly variance where 0 of 305 do on the real board.
+    """
+    import dataclasses
+
+    ratios = {
+        Position.QB: 1.59,
+        Position.RB: 2.06,
+        Position.WR: 2.41,
+        Position.TE: 2.21,
+        Position.K: 4.04,
+        Position.DST: 4.29,
+    }
+    ctx = demo_sim_context()
+    return dataclasses.replace(
+        ctx,
+        sigma={pid: ctx.value[pid] / ratios[ctx.position[pid]] for pid in ctx.value},
+        **overrides,
+    )
+
+
+def _weekly_points(roster, ctx, *, seed: int = 21) -> float:
+    from jaaffl.engine.weekly import WeeklyModel, weekly_lineup_totals
+
+    model = WeeklyModel.from_context(ctx)
+    assert not model.degenerate, "a degenerate player has no weekly variance and no correlation"
+    outcomes = model.sample(n_draws=_WEEKLY_DRAWS, seed=seed)
+    return float(weekly_lineup_totals(roster, outcomes, ctx).mean())
+
+
+def test_the_weekly_objective_can_see_a_bye_conflict() -> None:
+    """``bye_stack`` — VERDICT: **MEASURABLE**.
+
+    Two rosters with IDENTICAL season marginals; one stacks all three starting receivers on the
+    same bye week. If the objective cannot separate them it has no week axis, whatever the code
+    says. ``mean_lineup_value_objective`` scores both identically by construction, because it never
+    asks what week it is — which is asserted here so the comparison is not vacuous.
+    """
+    from jaaffl.calibrate.tune import mean_lineup_value_objective
+
+    roster = ["qb0", "rb0", "rb1", "wr0", "wr1", "wr2", "te0", "k0", "dst0", "wr3"]
+    spread = _weekly_ctx(bye_week={"wr0": 5, "wr1": 8, "wr2": 11, "wr3": 14})
+    stacked = _weekly_ctx(bye_week={"wr0": 5, "wr1": 5, "wr2": 5, "wr3": 14})
+
+    season_spread = mean_lineup_value_objective([roster], our_slot=0, ctx=spread, seed=1)
+    season_stacked = mean_lineup_value_objective([roster], our_slot=0, ctx=stacked, seed=1)
+    assert season_spread == pytest.approx(season_stacked), (
+        "the season objective must be blind to this, or the comparison below proves nothing"
+    )
+    assert _weekly_points(roster, spread) > _weekly_points(roster, stacked) + 1.0
+
+
+def test_the_weekly_objective_can_see_a_same_team_stack() -> None:
+    """A quarterback paired with his own receivers — VERDICT: **MEASURABLE**.
+
+    Not one of the three declared modifiers, but the mechanism the measured correlation exists to
+    carry, so it is pinned here too. Two rosters with identical marginals; one puts the QB and three
+    receivers on the same team. Correlation is the only thing that can separate them, and it
+    separates them on VARIANCE rather than mean — which is why a championship objective can see it
+    and a points objective cannot.
+    """
+    import numpy as np
+
+    from jaaffl.engine.weekly import WeeklyModel, weekly_lineup_totals
+
+    roster = ["qb0", "rb0", "rb1", "wr0", "wr1", "wr2", "te0", "k0", "dst0"]
+    spread = {"qb0": "KC", "wr0": "SF", "wr1": "BUF", "wr2": "DAL"}
+    stacked = {"qb0": "KC", "wr0": "KC", "wr1": "KC", "wr2": "KC"}
+    sds = []
+    for team in (spread, stacked):
+        ctx = _weekly_ctx(nfl_team=team)
+        model = WeeklyModel.from_context(ctx)
+        totals = weekly_lineup_totals(roster, model.sample(n_draws=_WEEKLY_DRAWS, seed=31), ctx)
+        sds.append(float(np.std(totals)))
+    assert sds[1] > sds[0] * 1.02, (
+        f"stacking a QB with his own receivers moved the season SD from {sds[0]:.1f} to "
+        f"{sds[1]:.1f} — the measured same-team correlation is not reaching the objective"
+    )
+
+
+def test_the_weekly_objective_cannot_see_a_handcuff() -> None:
+    """``handcuff_synergy`` — VERDICT: **NOT MEASURABLE**, and the reason is measured, not assumed.
+
+    A handcuff is a REGIME effect. Measured on nflverse ff_opportunity 2023-2025, the second running
+    back on a team scores **x1.96 / x1.61 / x2.38** as much in the weeks the first is absent
+    (+4.31 / +2.83 / +7.05 points per week, each 4-7 standard errors clear of the present-week
+    mean). The mechanism is real and large.
+
+    But the UNCONDITIONAL same-team RB x RB correlation is **-0.0211 (se 0.0156, not significant)**,
+    and a jointly-Gaussian model calibrated to that implies a conditional lift of
+    ``-rho * phi(c)/Phi(c) ~= +0.03`` standard deviations. So no correlation table, however careful,
+    can carry a handcuff: the two are different objects, and adding a week axis did not change that.
+
+    Consequence: a bench RB behind OUR OWN starter is worth exactly what any other bench RB of equal
+    mu is worth, so ``handcuff_synergy`` stays unimplemented — this project does not ship a
+    coefficient its own harness cannot price.
+
+    This test pins the NEGATIVE so a later tier cannot quietly implement the modifier on the
+    assumption that the week axis fixed it. Making it measurable needs a workload-transfer process
+    (production redistributed to a group's survivors when a member is absent), which is named in
+    ``ROADMAP.md`` and deliberately NOT built here on a guess.
+    """
+    from jaaffl.engine.weekly import WeeklyModel
+
+    # Tested on the MECHANISM rather than through a roster's total, deliberately. Comparing two
+    # bench backs costs a Monte-Carlo standard error of a few points and the effect being looked for
+    # is smaller than that, so a roster-level null would be "no resolution" dressed up as "no
+    # effect". The statistic below is the one measured on the real data, over 10^5 player-weeks.
+    ctx = _weekly_ctx(
+        nfl_team={"rb0": "SF", "rb1": "SF", "rb2": "SF"},
+        # Byes, because under the honest bye-only information set they are the ONLY thing a
+        # bench player can cover — without them the "he is worth something" leg is vacuous.
+        bye_week={"rb0": 5, "rb1": 9, "wr0": 7, "wr1": 11, "wr2": 13, "qb0": 6, "te0": 10},
+    )
+    model = WeeklyModel.from_context(ctx)
+    outcomes = model.sample(n_draws=_WEEKLY_DRAWS, seed=41)
+    starter, backup = outcomes.index["rb0"], outcomes.index["rb1"]
+
+    starter_out = ~outcomes.available[:, :, starter]
+    backup_in = outcomes.available[:, :, backup]
+    when_starter_out = outcomes.weekly[:, :, backup][starter_out & backup_in]
+    when_starter_in = outcomes.weekly[:, :, backup][~starter_out & backup_in]
+
+    assert when_starter_out.size > 1000 and when_starter_in.size > 1000
+    ratio = float(when_starter_out.mean() / when_starter_in.mean())
+    assert ratio == pytest.approx(1.0, abs=0.05), (
+        f"the backup scores {ratio:.2f}x as much when the starter is out; this model draws absence "
+        "independently, so a ratio away from 1.0 means a workload-transfer process was added and "
+        "the verdict in this docstring needs re-measuring against the real x1.6-x2.4"
+    )
+
+    # ...and a bench player IS worth something here, so the null above is about the HANDCUFF and not
+    # about the objective pricing every bench player at nothing.
+    #
+    # A BACKUP QUARTERBACK, deliberately. Under the honest bye-only information set a bench player's
+    # entire value is bye coverage, and qb1 is the only man who can fill the single QB slot in
+    # qb0's bye week — so he is worth something for a reason that is easy to state. Two earlier
+    # drafts of this leg were wrong: one used a "bench" back who walked straight into the flex
+    # (measuring the value gradient), and the next used a third RB whom the per-week ranking
+    # correctly never starts (measuring zero). The season-objective guard rules out the first.
+    from jaaffl.calibrate.tune import mean_lineup_value_objective
+
+    nine = ["qb0", "rb0", "rb1", "wr0", "wr1", "wr2", "te0", "k0", "dst0"]
+    ten = [*nine, "qb1"]
+    season_gain = mean_lineup_value_objective(
+        [ten], our_slot=0, ctx=ctx, seed=1
+    ) - mean_lineup_value_objective([nine], our_slot=0, ctx=ctx, seed=1)
+    assert season_gain == pytest.approx(0.0), (
+        f"qb1 improves the starting nine by {season_gain:.2f}, so he is not a bench player and "
+        "this assertion would be measuring the value gradient"
+    )
+    assert _weekly_points(ten, ctx) - _weekly_points(nine, ctx) > 5.0
+
+
+def test_the_weekly_objective_cannot_see_strength_of_schedule() -> None:
+    """``sos`` — VERDICT: **NOT MEASURABLE**, and nothing in this tier changed that.
+
+    A week axis is necessary for strength of schedule and nowhere near sufficient: pricing it needs
+    a per-opponent defensive-strength signal, and neither the board (``DraftContext``) nor the
+    weekly model carries one. ``WeeklyModel`` knows a player's team only in order to group his
+    correlation, and knows nothing at all about who he plays in week 7.
+
+    Pinned as a structural fact rather than a measurement: there is no opponent axis to attach a
+    coefficient to, so a tuned ``sos`` would be tuned to noise — Tier 4's defect exactly.
+
+    Checked by scanning the FIELD NAMES of both the model and the context rather than probing two
+    spellings, so any opponent/defense/schedule data arriving on either side trips it.
+    """
+    import dataclasses
+
+    from jaaffl.engine.weekly import WeeklyModel
+
+    ctx = _weekly_ctx()
+    names = {f.name for f in dataclasses.fields(WeeklyModel)} | {
+        f.name for f in dataclasses.fields(ctx)
+    }
+    smells = {n for n in names if any(w in n for w in ("opponent", "defense", "schedule", "sos"))}
+    assert not smells, f"opponent-quality data appeared ({smells}); re-measure the sos verdict"
+    # ...and the one team-ish field that DOES exist is used only to group correlation.
+    assert "nfl_team" in names
+    WeeklyModel.from_context(ctx)

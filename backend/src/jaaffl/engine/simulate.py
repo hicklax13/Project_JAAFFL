@@ -65,6 +65,13 @@ class SimContext:
     # and therefore inert: supplied, it centres the risk term (see ``risk.risk_penalty``). It is
     # deliberately NOT ``sigma`` — the objective must keep sampling seasons from the true sigma.
     sigma_median: Mapping[Position, float] = field(default_factory=dict)
+    # Two CALENDAR/ROSTER facts the week-axis objective needs and no agent reads: the week a
+    # player's NFL team does not play, and which team that is (for the measured same-team weekly
+    # correlation). Both empty by default, which makes ``engine.weekly`` degrade to "no byes, every
+    # player independent" rather than guessing — the same posture ``bye_week`` already takes on
+    # ``DraftContext``, where an unresolved team means no chip rather than a wrong one.
+    bye_week: Mapping[str, int] = field(default_factory=dict)
+    nfl_team: Mapping[str, str] = field(default_factory=dict)
 
 
 def optimal_lineup_value(roster: Sequence[str], ctx: SimContext) -> float:

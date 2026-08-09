@@ -63,6 +63,50 @@ def test_reliability_shrinkage_pulls_kicker_toward_baseline() -> None:
     assert baseline < proj["k0"].mu < 150.0  # strictly shrunk, not collapsed
 
 
+def test_mu_raw_is_the_blend_before_the_reliability_shrink() -> None:
+    """``mu_raw`` is the same blend ``mu`` is derived from, BEFORE R1 pulls it toward replacement.
+
+    The calibration harness needs it because :class:`~jaaffl.engine.simulate.ScoreAgent` re-applies
+    R1 itself with the params under test — handed the already-shrunk ``mu`` it shrinks twice, which
+    is exactly the defect Tier 11 fixes. Carried rather than inverted: inverting divides by
+    ``reliability``, which a config may legitimately set to 0.
+    """
+    source = {f"k{i}": 150.0 - 3.0 * i for i in range(20)}
+    position = {f"k{i}": Position.K for i in range(20)}
+    proj = _assemble({"cbs": source}, position, sigma_floor={Position.K: 5.0})
+    players = {pid: Player(player_id=pid, name=pid, position=Position.K) for pid in source}
+    baseline = replacement_values(jaaffl_settings(), source, players, flex_split=(8, 4))[Position.K]
+
+    assert proj["k0"].mu_raw == pytest.approx(150.0)  # the blend itself, untouched by R1
+    assert proj["k0"].mu == pytest.approx(baseline + 0.4 * (proj["k0"].mu_raw - baseline))
+    assert proj["k0"].mu_raw > proj["k0"].mu  # an above-replacement kicker is pulled DOWN
+
+
+def test_mu_raw_equals_mu_wherever_reliability_is_one() -> None:
+    """No shrink → the two views coincide, so nothing outside K/DST can observe a difference."""
+    source = {f"wr{i}": 200.0 - 4.0 * i for i in range(50)}
+    proj = _assemble(
+        {"cbs": source}, {f"wr{i}": Position.WR for i in range(50)}, sigma_floor={Position.WR: 20.0}
+    )
+    for player in proj.values():
+        assert player.reliability == pytest.approx(1.0)
+        assert player.mu == pytest.approx(player.mu_raw)
+
+
+def test_mu_raw_carries_the_situation_nudge_but_not_the_shrink() -> None:
+    """R4 happens BEFORE R1, so the nudge belongs in ``mu_raw`` and the shrink does not.
+
+    Pinned separately because the two refinements are applied in the same loop: a fix that captured
+    the pre-NUDGE blend instead of the pre-SHRINK one would satisfy the kicker test above (K here
+    has no situation signal) and still hand the harness the wrong number for every flagged player.
+    """
+    source = {f"k{i}": 150.0 - 3.0 * i for i in range(20)}
+    position = {f"k{i}": Position.K for i in range(20)}
+    sit = {"k0": SituationSignal(mu_delta_pct=0.10, flag="new team")}
+    proj = _assemble({"cbs": source}, position, sigma_floor={Position.K: 5.0}, situation=sit)
+    assert proj["k0"].mu_raw == pytest.approx(150.0 * 1.10)
+
+
 def test_skill_position_projection_is_not_shrunk() -> None:
     source = {f"wr{i}": 200.0 - 4.0 * i for i in range(50)}
     proj = _assemble(

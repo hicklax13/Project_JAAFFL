@@ -53,6 +53,17 @@ class PlayerProjection:
     player_id: str
     position: Position
     mu: float  # E[season league points], post-shrinkage/situation
+    # μ BEFORE the R1 reliability shrink and AFTER the R4 situation nudge — i.e. the exact quantity
+    # the shrink is applied TO. Equal to ``mu`` wherever ``reliability == 1.0``, which is every
+    # position but K and DST, so nothing outside the calibration path can observe a difference.
+    #
+    # It exists because the E2/E6 harness re-applies R1 itself: ``calibrate.tune`` hands
+    # ``SimContext.value`` to ``simulate.ScoreAgent``, whose ``_effective_value`` shrinks by
+    # ``params.reliability_shrinkage``. Copying the already-shrunk ``mu`` there compressed K and DST
+    # by ``0.4**2`` while ``recommend()`` used ``0.4`` — measured on the real board 2026-08-09 as a
+    # 2.50x (exactly ``1 / 0.4``) distortion of median value-over-replacement. CARRIED rather than
+    # inverted: the inverse divides by ``reliability``, which a config may legitimately set to 0.
+    mu_raw: float
     sigma: float  # season-points SD (σ̂ scale)
     floor: float  # μ − z·σ
     ceiling: float  # μ + z·σ
@@ -130,6 +141,7 @@ def assemble_projections(
             player_id=pid,
             position=pos,
             mu=mu,
+            mu_raw=adj,
             sigma=sigma,
             floor=mu - Z_SCORE * sigma,
             ceiling=mu + Z_SCORE * sigma,

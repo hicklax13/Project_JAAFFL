@@ -3,9 +3,11 @@
 
 Places our ScoreAgent (under the committed config) and the VBD-only / ADP-only baselines at every
 one of the 12 draft slots against a common opponent field, simulates each draft to completion, and
-scores each final roster on BOTH objectives — championship probability and deterministic
-starting-lineup points. Reports the per-agent mean, a one-sided Wilcoxon against each baseline, and
-a **verdict** naming the objectives our agent wins and loses on.
+scores each final roster on ALL FOUR objectives — championship probability and deterministic
+starting-lineup points on the season axis, plus the Tier 11 weekly pair (18 real weeks, real byes,
+a measured zero-production process and a measured same-team correlation, lineups set ex ante).
+Reports the per-agent mean, a one-sided Wilcoxon against each baseline, and a **verdict** naming
+the objectives our agent wins and loses on.
 
 Honesty caveat (ADR 0003): no peer-reviewed optimal live snake-draft solver exists — this offline
 tournament, not any vendor/literature claim, is how efficacy is judged. Needs ``engine-stretch``
@@ -29,7 +31,7 @@ from __future__ import annotations
 import argparse
 
 from jaaffl.calibrate.pools import committed_engine_params, demo_sim_context, real_sim_context
-from jaaffl.calibrate.tune import WIN_PROBABILITY, run_tournament
+from jaaffl.calibrate.tune import WEEKLY_WIN_PROBABILITY, WIN_PROBABILITY, run_tournament
 from jaaffl.engine.simulate import (
     AdpNoiseAgent,
     NeedBasedAgent,
@@ -87,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         f"x 12 slots · {args.draws} sampled seasons/draft"
     )
     for label, objective in report["objectives"].items():
-        digits = 4 if label == WIN_PROBABILITY else 1
+        digits = 4 if label in (WIN_PROBABILITY, WEEKLY_WIN_PROBABILITY) else 1
         print(f"[E6] {label} (per agent, across 12 slots):")
         for name, value in sorted(objective["mean"].items(), key=lambda kv: -kv[1]):
             print(f"[E6]   {name:9s} {value:>9.{digits}f}")
