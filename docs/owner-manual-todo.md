@@ -389,6 +389,55 @@ total of the 12)` over seasons sampled from `N(μ, σ)` — against a disjoint s
   measured, on your real board and on a practice board, under three different opponent line-ups, is
   that this setting costs the engine on **both** measures every time it is tested.
 
+  ### ⚠️ TIER 11 UPDATE — the measuring stick itself was skewed, and the numbers above move
+
+  **The decision does not change. The scoreboard does.** Tier 11 found that the practice harness —
+  the thing that produces every number on this page — was applying your kicker/defense reliability
+  discount **twice**, so it rated a kicker 2.5× closer to "freely available" than your real engine
+  does. That affected the practice **opponents** and the **scorekeeper**, not really your engine's
+  own picks. Corrected, and re-measured on your real board with the same five independent seed
+  blocks:
+
+  | measure                      | engine as shipped | with the setting off | plain best-available |
+  | ---------------------------- | ----------------- | -------------------- | -------------------- |
+  | **championship probability** | 0.0063            | **0.1109**           | **0.1206**           |
+  | **projected points**         | 1453              | **1739**             | 1703                 |
+
+  **What still holds, unchanged.** Turning the setting off is worth going from **0.0063 to 0.1109**
+  championship probability and **+286 points** — the largest effect in this project, and it is if
+  anything larger than yesterday's version of the same table. **If you change one thing before draft
+  night, this is still it.**
+
+  ⚠️ **What moved, and you should hear it plainly.** Yesterday this page said the setting-off engine
+  was _level with_ best-available on championship odds and slightly ahead (0.1161 vs 0.1066). On the
+  corrected scoreboard it is **level and slightly behind** (0.1109 vs 0.1206). It is still a tie —
+  the gap is smaller than the measurement's own noise, both yesterday and today — but the point
+  estimate has crossed to the other side of zero, and this project has a habit of quoting the
+  friendly half of a tie. It still **beats** best-available on points (+36, solidly measured), and
+  it still sits above a 12-team average (0.0833). It is **not** a win over the naive baseline.
+
+  **And a second scorekeeper now disagrees with the first.** Tier 11 also built a week-by-week
+  scorekeeper — real bye weeks, real injury/no-show rates, and the fact that a quarterback and his
+  own receivers have good weeks together — because the old one had no concept of a week at all and
+  therefore valued your entire bench at exactly **zero**. On that scorekeeper the setting-off engine
+  comes out **ahead** of best-available on championship odds (0.1192 vs 0.1086), and by enough to
+  clear the significance bar.
+
+  ⚠️ **That would be the first time this engine has ever beaten the naive baseline on championship
+  odds, and it is deliberately NOT being claimed.** The scorekeeper that says so is one day old and
+  was built in the same tier that is reporting the result. Every tier of this audit has found the
+  previous tier's headline wrong, and "we built a new ruler and the new ruler says we win" is exactly
+  the shape of the findings that had to be withdrawn. It needs an independent re-run before it means
+  anything.
+
+  What both scorekeepers **do** agree on: the setting-off engine beats best-available on **points**
+  (+36 and +35, both solidly measured), and turning the setting off is worth an enormous amount
+  against your current config on every measure tried. That is the decision on your desk, and it is
+  unaffected by which scorekeeper is right.
+
+  **Nothing has been changed.** `config/engine.json` is yours; verified again 2026-08-09, it still
+  reads `0.4 / −0.4`.
+
 ## 1b. ⛔ READ BEFORE DRAFT NIGHT — the engine goes blind in the late rounds `[NEW — Tier 6]`
 
 **You must fill QB, K and DST yourself. The engine will not tell you to.**

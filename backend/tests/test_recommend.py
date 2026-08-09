@@ -271,6 +271,19 @@ def test_the_analytic_hot_path_never_imports_the_simulator() -> None:
     assert "jaaffl.engine.simulate" not in sys.modules
 
 
+def test_the_analytic_hot_path_never_imports_the_weekly_model() -> None:
+    """Same claim for Tier 11's ``engine.weekly``. It is a CALIBRATION object — it allocates a
+    ``(draws, weeks, players)`` array and exists to score finished rosters, never to rank a pick —
+    so the live recommendation must not pay for it existing. ``calibrate.tune`` imports it inside
+    the objective methods for exactly this reason."""
+    import sys
+
+    sys.modules.pop("jaaffl.engine.weekly", None)
+    ctx = make_context(_board())
+    recommend(draft_state(3), ctx, ctx.params, limit=5)
+    assert "jaaffl.engine.weekly" not in sys.modules
+
+
 def test_ranked_picks_carry_their_projection_provenance() -> None:
     """`PlayerProjection.sources` records exactly which $0 sources backed each player's mu, and
     after Tier 1 the live board still has ~70 players with ECR ONLY — no real projection, mu still

@@ -60,17 +60,17 @@ The chain (all four links read directly):
 3. `calibrate/tune.py:44` — `value=dict(dc.mu)`, so `SimContext.value` is already shrunk.
 4. `engine/simulate.py:383` — `ScoreAgent._effective_value` shrinks it **again**.
 
-| check                                                | result                                                            |
-| ---------------------------------------------------- | ----------------------------------------------------------------- |
-| median VOR, live `ctx.value` vs harness `_effective_value` | DST 2.50× · K 2.50× · QB/RB/TE/WR 1.00×                     |
-| `max ¦eff − (b + r·r_pre·(raw − b))¦` over 300 players | **1.4e−14** — the double application is an exact identity        |
-| baselines recomputed from un-shrunk μ vs `dc.baselines` | **identical to 4 dp at every position** (the shrink is a fixed point of the replacement rank) |
-| the fixture (`demo_sim_context`)                     | `value` is RAW, so `_effective_value` shrinks it **once** — correct |
+| check                                                      | result                                                                                        |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| median VOR, live `ctx.value` vs harness `_effective_value` | DST 2.50× · K 2.50× · QB/RB/TE/WR 1.00×                                                       |
+| `max ¦eff − (b + r·r_pre·(raw − b))¦` over 300 players     | **1.4e−14** — the double application is an exact identity                                     |
+| baselines recomputed from un-shrunk μ vs `dc.baselines`    | **identical to 4 dp at every position** (the shrink is a fixed point of the replacement rank) |
+| the fixture (`demo_sim_context`)                           | `value` is RAW, so `_effective_value` shrinks it **once** — correct                           |
 
 **2.50 is exactly `1 / 0.4`.** The effective compression on the real path is `0.4² = 0.16`.
 
 ⚠️ **Sharpen the Tier 10 note, because the ratio alone does not diagnose anything.** The same 2.50×
-appears on the fixture pool — where it is *correct*, being the signature of shrinking raw μ once. The
+appears on the fixture pool — where it is _correct_, being the signature of shrinking raw μ once. The
 diagnostic is not the ratio, it is the **question of what `SimContext.value` already contains**:
 raw on the fixture, shrunk on the real board. That is why no test can see this — there is no
 `recommend()` on the fixture path to disagree with.
@@ -80,7 +80,7 @@ their sum:
 
 1. **our decisions** — `ScoreAgent` scores μ shrunk twice; `recommend()` scores it shrunk once;
 2. **the opponents** — `VbdOnlyAgent` / `NeedBasedAgent` / `SoftmaxVbdAgent` all rank by
-   `value_over_replacement(pid, ctx.value, …)`, so on the real board every simulated *opponent*
+   `value_over_replacement(pid, ctx.value, …)`, so on the real board every simulated _opponent_
    ranks K and DST through **our** engine's risk adjustment;
 3. **the objective** — `optimal_lineup_value` and `sample_season_outcomes` both read `ctx.value`, so
    the objective scores shrunk μ. `ScoreAgent`'s own docstring states the intended contract: "our
@@ -88,7 +88,7 @@ their sum:
    lever." On the real board that contract does not hold.
 
 **And E2's search range is silently mis-scaled.** `run_study` samples `reliability_k`/`reliability_dst`
-over `[0.1, 1.0]`, but precompute has already baked in the *committed* 0.4, so the effective factor
+over `[0.1, 1.0]`, but precompute has already baked in the _committed_ 0.4, so the effective factor
 the agent uses spans `[0.04, 0.40]` and **can never reach 1.0** (no shrinkage). Every E2 study run on
 `--real` searched a range it does not have.
 
@@ -101,10 +101,10 @@ fix would be invisible and the tier would have to say so. It does not:
 
 Real board, 12 slots × 5 seeds = 60 simulated rosters, corrected context vs current:
 
-| opponent field             | ours (committed)       | `override_off`         |
-| -------------------------- | ---------------------- | ---------------------- |
-| `[SoftmaxVbd, NeedBased]` (E6) | **60/60** rosters, 377 picks | **60/60** rosters, 421 picks |
-| `[NeedBased, AdpNoise]` (fidelity) | **0/60**, 0 picks | **5/60**, 25 picks   |
+| opponent field                     | ours (committed)             | `override_off`               |
+| ---------------------------------- | ---------------------------- | ---------------------------- |
+| `[SoftmaxVbd, NeedBased]` (E6)     | **60/60** rosters, 377 picks | **60/60** rosters, 421 picks |
+| `[NeedBased, AdpNoise]` (fidelity) | **0/60**, 0 picks            | **5/60**, 25 picks           |
 
 ⚠️ **Do not quote the 60/60 as the size of the effect.** `SoftmaxVbdAgent` is stochastic and draws
 from `rng.choice`, so the moment the candidate weights change at all the rng stream diverges and
@@ -133,19 +133,19 @@ records.
 
 **1 — the same-team correlation table (pooled; per-season in the last column):**
 
-| pair    | ρ          | se     | n      | 2023 / 2024 / 2025     |
-| ------- | ---------- | ------ | ------ | ---------------------- |
-| QB×WR   | **+0.1793** | 0.0117 | 8996  | +0.153 / +0.197 / +0.194 |
-| QB×TE   | **+0.1496** | 0.0151 | 4795  | +0.141 / +0.132 / +0.176 |
-| QB×QB   | **−0.2825** | 0.0442 | 507   | −0.082 / −0.391 / −0.439 |
-| QB×RB   | +0.0277    | 0.0134 | 5808  | +0.054 / +0.021 / +0.004 |
-| RB×TE   | +0.0176    | 0.0096 | 10820 | +0.040 / +0.012 / +0.001 |
-| RB×RB   | −0.0211    | 0.0156 | 4706  | −0.027 / −0.037 / +0.005 |
-| RB×WR   | −0.0104    | 0.0069 | 20328 | −0.020 / −0.003 / −0.007 |
-| WR×WR   | −0.0092    | 0.0088 | 12884 | −0.005 / −0.007 / −0.017 |
-| TE×TE   | −0.0075    | 0.0180 | 3000  | −0.011 / −0.018 / +0.005 |
-| TE×WR   | +0.0019    | 0.0075 | 16740 | −0.001 / +0.003 / +0.003 |
-| **control: DIFFERENT team, same week** | **+0.0008** | 0.0076 | 17266 | — |
+| pair                                   | ρ           | se     | n     | 2023 / 2024 / 2025       |
+| -------------------------------------- | ----------- | ------ | ----- | ------------------------ |
+| QB×WR                                  | **+0.1793** | 0.0117 | 8996  | +0.153 / +0.197 / +0.194 |
+| QB×TE                                  | **+0.1496** | 0.0151 | 4795  | +0.141 / +0.132 / +0.176 |
+| QB×QB                                  | **−0.2825** | 0.0442 | 507   | −0.082 / −0.391 / −0.439 |
+| QB×RB                                  | +0.0277     | 0.0134 | 5808  | +0.054 / +0.021 / +0.004 |
+| RB×TE                                  | +0.0176     | 0.0096 | 10820 | +0.040 / +0.012 / +0.001 |
+| RB×RB                                  | −0.0211     | 0.0156 | 4706  | −0.027 / −0.037 / +0.005 |
+| RB×WR                                  | −0.0104     | 0.0069 | 20328 | −0.020 / −0.003 / −0.007 |
+| WR×WR                                  | −0.0092     | 0.0088 | 12884 | −0.005 / −0.007 / −0.017 |
+| TE×TE                                  | −0.0075     | 0.0180 | 3000  | −0.011 / −0.018 / +0.005 |
+| TE×WR                                  | +0.0019     | 0.0075 | 16740 | −0.001 / +0.003 / +0.003 |
+| **control: DIFFERENT team, same week** | **+0.0008** | 0.0076 | 17266 | —                        |
 
 The control lands on zero, which is what says the decomposition is sound rather than picking up a
 league-wide week effect. **The entire same-team structure is the quarterback** — QB×(WR¦TE) ≈ +0.17,
@@ -162,7 +162,7 @@ wrong: it would give WR×WR the same +0.17 the data says is −0.009.
 | TE       | 0.2885                  | 3785         |
 | **all**  | **0.2225**              | 17543        |
 
-Call it *zero production*, not *injury*: `ff_opportunity` has a row only where there was opportunity,
+Call it _zero production_, not _injury_: `ff_opportunity` has a row only where there was opportunity,
 so a healthy receiver with no targets counts here. For a lineup the two are the same event.
 
 **3 — the handcuff, sized. This is the measurement that refutes the obvious design.** Top-2 RBs by
@@ -174,7 +174,7 @@ season points on each team, 32 pairs per season:
 | 2024   | 4.67 (se 0.24, n=459)         | 7.50 (se 1.06, n=26)         | **×1.61** |
 | 2025   | 5.10 (se 0.25, n=451)         | 12.15 (se 1.60, n=22)        | **×2.38** |
 
-The handcuff mechanism is **real and large**. But it is a **regime** effect, and the *unconditional*
+The handcuff mechanism is **real and large**. But it is a **regime** effect, and the _unconditional_
 RB×RB correlation is **−0.0211 (se 0.0156, not significant)**. A jointly-Gaussian model calibrated to
 ρ = −0.02 implies a conditional lift of `−ρ·φ(c)/Φ(c) ≈ +0.03` sd — essentially nothing. **So adding
 weekly correlation, however carefully measured, does NOT make `handcuff_synergy` measurable.** That
@@ -182,11 +182,11 @@ verdict is a measurement, not an opinion, and the plan does not build a transfer
 
 ### Feasibility, checked before committing to the design
 
-| risk                                                     | measured                                                    |
-| -------------------------------------------------------- | ----------------------------------------------------------- |
-| is the measured correlation matrix PSD for real rosters?  | 32 multi-player teams, **worst minimum eigenvalue 0.1698**, 0 needing repair |
-| does marginal preservation have a solution for everyone?  | **0 of 300** players hit `s² < 0`; production sd is 0.65–1.17× (median 1.07) of `σ/√n` |
-| is a vectorised ex-ante weekly lineup affordable?         | **2.53 ms** per roster-scoring at 400 draws × 18 weeks → **≈1 min** for a 4-arm, 5-block tournament |
+| risk                                                     | measured                                                                                            |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| is the measured correlation matrix PSD for real rosters? | 32 multi-player teams, **worst minimum eigenvalue 0.1698**, 0 needing repair                        |
+| does marginal preservation have a solution for everyone? | **0 of 300** players hit `s² < 0`; production sd is 0.65–1.17× (median 1.07) of `σ/√n`              |
+| is a vectorised ex-ante weekly lineup affordable?        | **2.53 ms** per roster-scoring at 400 draws × 18 weeks → **≈1 min** for a 4-arm, 5-block tournament |
 
 The board itself supports it: **296 of 300** players carry a real bye (weeks 5–14); all 300 resolve
 to one of 32 teams through `team_norm`; 28 teams hold ≥2 RBs and 33 hold ≥2 WRs.
@@ -217,7 +217,7 @@ to one of 32 teams through `team_norm`; 28 teams hold ≥2 RBs and 33 hold ≥2 
 - **The absence process reallocates the board's σ; it does not add to it.** `league/xep.py` measures
   weekly residuals only over weeks a player appeared, so the shipped σ **excludes** missed-game
   variance and is therefore too small. This tier does not change σ — that would supersede everything
-  a fifth time — it only gets the *structure* of the existing σ right. Recorded as an open item.
+  a fifth time — it only gets the _structure_ of the existing σ right. Recorded as an open item.
 - **K and DST get no correlation and no absence.** `ff_opportunity` covers skill positions only, so
   there is nothing measured to use, and fabricating one is the defect this project keeps finding.
 - **`cliff_bonus` stays on the live path's shrunk-μ basis.** It is a `DraftContext` artifact the live
@@ -232,18 +232,18 @@ to one of 32 teams through `team_norm`; 28 teams hold ≥2 RBs and 33 hold ≥2 
 
 ## File structure
 
-| File                                        | Responsibility                              | Change                              |
-| ------------------------------------------- | ------------------------------------------- | ----------------------------------- |
-| `backend/src/jaaffl/engine/projections.py`  | the projection blend + R1/R4                | add `PlayerProjection.mu_raw`       |
-| `backend/src/jaaffl/calibrate/tune.py`      | DraftContext → SimContext; E2/E6 plumbing   | read `mu_raw`; register 2 objectives |
-| `backend/src/jaaffl/engine/weekly.py`       | **NEW** — the weekly correlated outcome model + ex-ante lineup | create      |
-| `backend/src/jaaffl/engine/simulate.py`     | E2/E6 agents + season objective             | docstring only (no behaviour change) |
-| `backend/tests/test_projections.py`         | projection unit cover                       | add 2 tests                         |
-| `backend/tests/test_tune.py`                | harness plumbing cover                      | add 2 tests                         |
-| `backend/tests/test_weekly.py`              | **NEW** — the weekly model's own guards     | create                              |
-| `backend/tests/test_harness_fidelity.py`    | the harness must see what it measures       | add 2 tests + docstring             |
-| `backend/tests/test_calibrate_pools.py`     | pool sensitivity                            | update 1 docstring                  |
-| `ROADMAP.md`, `docs/owner-manual-todo.md`   | the corrected record                        | modify                              |
+| File                                       | Responsibility                                                 | Change                               |
+| ------------------------------------------ | -------------------------------------------------------------- | ------------------------------------ |
+| `backend/src/jaaffl/engine/projections.py` | the projection blend + R1/R4                                   | add `PlayerProjection.mu_raw`        |
+| `backend/src/jaaffl/calibrate/tune.py`     | DraftContext → SimContext; E2/E6 plumbing                      | read `mu_raw`; register 2 objectives |
+| `backend/src/jaaffl/engine/weekly.py`      | **NEW** — the weekly correlated outcome model + ex-ante lineup | create                               |
+| `backend/src/jaaffl/engine/simulate.py`    | E2/E6 agents + season objective                                | docstring only (no behaviour change) |
+| `backend/tests/test_projections.py`        | projection unit cover                                          | add 2 tests                          |
+| `backend/tests/test_tune.py`               | harness plumbing cover                                         | add 2 tests                          |
+| `backend/tests/test_weekly.py`             | **NEW** — the weekly model's own guards                        | create                               |
+| `backend/tests/test_harness_fidelity.py`   | the harness must see what it measures                          | add 2 tests + docstring              |
+| `backend/tests/test_calibrate_pools.py`    | pool sensitivity                                               | update 1 docstring                   |
+| `ROADMAP.md`, `docs/owner-manual-todo.md`  | the corrected record                                           | modify                               |
 
 ---
 
@@ -491,13 +491,13 @@ class _WithContext:
         return self._inner.pick(available, my_roster, self._ctx, rng)
 ```
 
-| arm                | our agent sees | opponents see | objective scores |
-| ------------------ | -------------- | ------------- | ---------------- |
-| `pre`              | shrunk         | shrunk        | shrunk           |
-| `ours_only`        | **raw**        | shrunk        | shrunk           |
-| `opponents_only`   | shrunk         | **raw**       | shrunk           |
-| `objective_only`   | shrunk         | shrunk        | **raw**          |
-| `post` (the fix)   | **raw**        | **raw**       | **raw**          |
+| arm              | our agent sees | opponents see | objective scores |
+| ---------------- | -------------- | ------------- | ---------------- |
+| `pre`            | shrunk         | shrunk        | shrunk           |
+| `ours_only`      | **raw**        | shrunk        | shrunk           |
+| `opponents_only` | shrunk         | **raw**       | shrunk           |
+| `objective_only` | shrunk         | shrunk        | **raw**          |
+| `post` (the fix) | **raw**        | **raw**       | **raw**          |
 
 - [ ] **Step 3: Record BOTH objectives, both pools, and say plainly whether the headline moved**
 

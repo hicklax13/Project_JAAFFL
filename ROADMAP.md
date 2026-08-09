@@ -13,6 +13,290 @@ order — later stages assume the earlier contracts exist.
 
 Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` done
 
+## 📍 Status — 2026-08-09 · Tier 11 (the measuring stick was distorted, and it had no week axis)
+
+> **Tier 11 of the audit is merged** (PR #63). Two findings, and the second one corrects a claim
+> Tier 9 and Tier 10 both made. **(A)** The calibration harness applied `reliability_shrinkage`
+> **twice** on the `--real` path, so every real-board number this project has published came from a
+> harness that compressed K and DST by `0.4² = 0.16` where the live engine uses `0.4`. **(B)** With
+> a week axis built, `mean_lineup_value_objective` and `roster_season_values` turn out **not to
+> bracket bench value at all** — the honest, hindsight-free weekly number lands _above_ the
+> supposed upper bound.
+
+### The control first — Tier 10's headline reproduces digit for digit
+
+Real board (581 players capped to 300), 5 disjoint blocks × 8 seeds × 12 slots, 800 sampled
+seasons, field `[SoftmaxVbd, NeedBased]`, on shipped code before any Tier 11 change:
+
+| arm                        | Tier 10 published | Tier 11 reproduction |
+| -------------------------- | ----------------- | -------------------- |
+| `override_off`+fix, win    | 0.1161            | **0.1161**           |
+| `override_off`+fix, points | 1716.7            | **1716.7**           |
+| `vbd_only`, win            | 0.1066            | **0.1066**           |
+| `vbd_only`, points         | 1661.7            | **1661.7**           |
+| ours (committed)+fix, win  | 0.0071            | **0.0071**           |
+| ours (committed)+fix, pts  | 1450.1            | **1450.1**           |
+
+and the gate reproduces too: `+0.0095 (p = 0.1167)` on win, `+55.0 (p = 0.0002)` on points. Every
+Tier 11 number rests on that control.
+
+### 🔴 FINDING A — the harness shrank μ twice, and the fixture structurally could not see it
+
+Four links, all read directly: `engine/projections.py:123` applies R1 into `PlayerProjection.mu` →
+`engine/context.py:112` copies it into `DraftContext.mu`, **which is exactly what `recommend()`
+scores** → `calibrate/tune.py` copied _that_ into `SimContext.value` → `ScoreAgent._effective_value`
+shrank it **again**.
+
+| check                                                      | result                                                            |
+| ---------------------------------------------------------- | ----------------------------------------------------------------- |
+| median VOR, live `ctx.value` vs harness `_effective_value` | DST **2.50×** · K **2.50×** · QB/RB/TE/WR 1.00×                   |
+| `max ¦eff − (b + r·r_pre·(raw − b))¦` over 300 players     | **1.4e−14** — the double application is an exact identity         |
+| baselines recomputed from un-shrunk μ vs `dc.baselines`    | identical at all six positions (R1 is a fixed point of that rank) |
+| the fixture (`demo_sim_context`)                           | `value` is RAW there, so it shrinks **once** — correct            |
+
+⚠️ **The 2.50× ratio is not the diagnostic, and Tier 10's note should be read with that in mind.**
+The same 2.50× appears on the fixture pool, where it is _correct_ — it is simply the signature of
+shrinking raw μ once. The question that separates them is what `SimContext.value` already contains:
+raw on the fixture, already-shrunk on the real board. That is why no test could see it. There is no
+`recommend()` on the fixture path to disagree with.
+
+**Three consumers were wrong, not one**, because all three read `ctx.value`: our agent's decisions,
+the OBJECTIVE (`optimal_lineup_value` and `sample_season_outcomes`), and **every behavioural
+opponent** (`VbdOnlyAgent`/`NeedBasedAgent`/`SoftmaxVbdAgent` all rank by
+`value_over_replacement(pid, ctx.value, …)`) — so on the real board every simulated rival ranked K
+and DST through _our_ engine's risk adjustment. It also mis-scaled E2: `run_study` samples
+`reliability_k`/`reliability_dst` over `[0.1, 1.0]`, but with the committed 0.4 already baked in the
+effective factor spanned `[0.04, 0.40]` and **could never reach 1.0**.
+
+**Measurability first, and the obvious refutation was tested.**
+`test_reliability_shrinkage_is_subsumed_by_the_punt_guard` measured (Tier 8, fixture) that shrinkage
+moves **0 of 60** rosters, because the punt guard demotes K/DST absolutely. If that held on the real
+board the fix would be invisible. Measured, 12 slots × 5 seeds:
+
+| opponent field                     | ours (committed)             | `override_off`               |
+| ---------------------------------- | ---------------------------- | ---------------------------- |
+| `[SoftmaxVbd, NeedBased]` (E6)     | **60/60** rosters, 377 picks | **60/60** rosters, 421 picks |
+| `[NeedBased, AdpNoise]` (fidelity) | **0/60**                     | **5/60**, 25 picks           |
+
+⚠️ Do **not** quote the 60/60 as an effect size. `SoftmaxVbdAgent` is stochastic, so any change to
+the candidate weights diverges its rng stream and every later pick differs — that field says
+"something changed", not "how much". The clean instrument is the deterministic-ish field: **0/60
+under the committed config, 5/60 with the override zeroed**, which replicates Tier 8 exactly.
+
+### ⚠️ The correction re-prices the real board, and it moves Tier 10's headline
+
+Same design, 5 blocks × 8 seeds × 12 slots, 800 draws. The pre-fix pool is 300 players and the
+post-fix pool is **305** — `cap_sim_pool` caps _by value_, so un-shrinking reorders the cut (the
+pre-fix pool carried 17 extra K/DST; the post-fix one carries 22 extra skill players).
+
+| `override_off` vs `vbd_only` | A      | B      | A−B         | min slot | p          | beats?  |
+| ---------------------------- | ------ | ------ | ----------- | -------- | ---------- | ------- |
+| **PRE**, championship        | 0.1161 | 0.1066 | +0.0095     | −0.0241  | 0.1167     | no      |
+| **POST**, championship       | 0.1109 | 0.1206 | **−0.0097** | −0.0492  | 0.9451     | no      |
+| **PRE**, points              | 1716.7 | 1661.7 | +55.0       | +1.3     | **0.0002** | **YES** |
+| **POST**, points             | 1738.5 | 1702.7 | **+35.7**   | +6.8     | **0.0002** | **YES** |
+
+**State it precisely.** Tier 10's verdict — _beats `vbd_only` on points, level with it on
+championship probability_ — **survives**, but the championship point estimate crosses zero, from
++0.0095 to −0.0097, against per-slot paired noise of ~0.018. Neither figure is significant, so the
+honest reading is unchanged (a statistical tie) while the direction of the tie flips. The points win
+survives at p = 0.0002 and shrinks from +55.0 to +35.7. **Anyone quoting "+0.0095 ahead" is quoting
+a superseded number.**
+
+**The channel decomposition, on ONE fixed pool** — the correction applied to one consumer at a time,
+via a context-substituting wrapper so no engine code changes:
+
+| arm               | championship | p          | points | p          |
+| ----------------- | ------------ | ---------- | ------ | ---------- |
+| all shrunk (pre)  | 0.1153       | —          | 1716.7 | —          |
+| **ours raw only** | **+0.0002**  | 0.4463     | +0.5   | 0.0005     |
+| **opponents raw** | **+0.0121**  | **0.0002** | +13.3  | **0.0002** |
+| **objective raw** | **−0.0080**  | 1.0000     | +13.5  | **0.0002** |
+| all raw (post)    | −0.0044      | 0.9919     | +21.8  | **0.0002** |
+
+🔴 **The channel everybody would have blamed contributes nothing.** Our own agent's decisions move
+**+0.0002 (p = 0.4463)** — the punt guard dominates K/DST regardless of μ, exactly as Tier 8
+measured. The distortion mattered through the **opponents** and the **objective**, which pull in
+opposite directions on championship probability and the same direction on points. The pool
+composition change is worth about −0.0008 on its own, so this is the values, not the membership.
+
+### 🔴 FINDING B — the two objectives never bracketed bench value
+
+Tier 9 and Tier 10 both recorded that `mean_lineup_value_objective` (bench = 0) and
+`roster_season_values` (perfect hindsight) **bracket** the value of a bench, so the truth lies
+between. With a week axis built, that is measurable, and it is **wrong**. Nine drafted `override_off`
+rosters on the real board, 800 draws, asking what the 8 bench players are worth:
+
+| objective                                         | weekly substitution? | hindsight?  | the bench is worth |
+| ------------------------------------------------- | -------------------- | ----------- | ------------------ |
+| `mean_lineup_value_objective`                     | no                   | no          | **0.00**           |
+| `roster_season_values` (inside `win probability`) | no                   | yes, season | **147.76**         |
+| **weekly ex ante (this tier)**                    | **yes**              | **no**      | **225.08**         |
+| weekly with hindsight                             | yes                  | yes         | **1042.82**        |
+
+The honest, **hindsight-free** number sits **above** the supposed upper bound. The two prior
+objectives differ along the _hindsight_ axis, while what actually creates bench value is **weekly
+substitution** — and `roster_season_values` re-optimises **one lineup for the whole season**, so it
+cannot express a bye or a missed game at all. The real bracket is `[225.08, 1042.82]`; the old one
+was `[0, 147.76]`, entirely below the truth.
+
+### The week axis, and every parameter in it measured
+
+`engine/weekly.py`: 18 real weeks (`league/xep.py`'s `MAX_FANTASY_WEEK`), real byes, a measured
+per-position zero-production process, a measured same-team correlation applied by per-team Cholesky,
+and lineups set **ex ante** — the best legal nine by μ among the players available that week, scored
+on what they realized. **No hindsight anywhere**, which is why it is a lower bound and is labelled
+as one. Every player's season `(μ, σ)` is preserved exactly, so a difference between this objective
+and the season objective is attributable to structure and never to scale.
+
+Measured from nflverse `ff_opportunity`, seasons **2023 + 2024 + 2025**, scored under the JAAFFL map:
+
+| same-team ρ, conditional on both playing | ρ           | se     | n     | per season               |
+| ---------------------------------------- | ----------- | ------ | ----- | ------------------------ |
+| **QB × WR**                              | **+0.2681** | 0.0148 | 5374  | +0.228 / +0.274 / +0.309 |
+| **QB × TE**                              | **+0.2323** | 0.0208 | 2603  | +0.252 / +0.204 / +0.241 |
+| QB × RB                                  | +0.0523     | 0.0162 | 3815  | +0.080 / +0.046 / +0.030 |
+| RB × RB                                  | +0.0327     | 0.0194 | 2845  | not significant          |
+| WR × WR                                  | +0.0101     | 0.0119 | 6699  | not significant          |
+| **control — DIFFERENT team, same week**  | **−0.0128** | 0.0088 | 13085 | —                        |
+
+🔴 **The entire same-team structure is the quarterback**, and that refutes the obvious model. A
+single shared "team factor" per team would give WR × WR the same **+0.27** it gives QB × WR, where
+the data says **+0.010**. Zero-production rates: QB 0.173 · RB 0.173 · WR 0.234 · TE 0.289; K and
+DST get nothing, because `ff_opportunity` covers skill positions only and fabricating a rate is the
+defect this project keeps finding.
+
+**The out-of-sample check, and it is the reason to trust the model.** The ABSENCE-AWARE correlation
+(zeros included — what a lineup records) was measured separately and is an input nowhere:
+QB × WR **+0.1793**. The model is never told it. On the real board the absence attenuation over 66
+same-team QB/WR pairs is **0.737**, so `0.2681 × 0.737 = 0.1975` — two independent estimates of the
+same quantity agreeing to 0.02.
+
+### ⚠️ The two championship objectives DISAGREE in sign, and this tier does not claim the friendly one
+
+Same four arms, post-fix pool, 5 blocks × 8 seeds × 12 slots, 800 draws, field
+`[SoftmaxVbd, NeedBased]`, `override_off` vs `vbd_only`:
+
+| objective                 | A          | B      | A−B         | min slot | p          | beats?  |
+| ------------------------- | ---------- | ------ | ----------- | -------- | ---------- | ------- |
+| championship (season)     | 0.1109     | 0.1206 | −0.0097     | −0.0492  | 0.9451     | no      |
+| points (season)           | 1738.5     | 1702.7 | **+35.7**   | +6.8     | **0.0002** | **YES** |
+| **championship (weekly)** | **0.1192** | 0.1086 | **+0.0107** | −0.0189  | **0.0046** | **YES** |
+| **points (weekly)**       | **1972.3** | 1937.7 | **+34.7**   | −3.5     | **0.0005** | **YES** |
+
+🔴 **The weekly objective reports the first significant championship win over plain VBD this project
+has ever measured. It is NOT being claimed.** The instrument that produces it is one tier old, was
+built in this tier, and has never been validated against a real season outcome. A brand-new measure
+that flatters the engine for the first time in eleven tiers is exactly the shape of every finding
+Tiers 6–10 had to retract. The established results are the ones both objectives agree on: **the
+points leg is a win under either** (+35.7 and +34.7, p ≤ 0.0005), and the championship comparison is
+**not settled**.
+
+**Two things argue the weekly objective is measuring something real rather than being kind to us.**
+It is _harsher_ on the committed config than the season objective is — `ours(committed)` scores
+**0.0030** on it against 0.0063 on the season one — so it is not a pro-engine instrument, it is a
+pro-good-bench one. And the σ-order control from Tier 10 is **exactly inert on all four objectives**
+(+0.0000, +0.0, +0.0000, +0.0), which independently re-confirms on a new objective that the pick no
+longer depends on the order the pool arrives in.
+
+**Which is believed, and why it does not matter yet.** The weekly model is the better description of
+a fantasy season — `roster_season_values` re-optimises **one lineup for the whole year** and cannot
+express a bye or a missed game at all. But both effects sit inside the E6 leg's own noise band
+(per-slot paired sd ~0.018–0.020), and the correct action from either is the same: no claim of
+championship superiority over `vbd_only` is supported. A second, independent replication of the
+weekly result belongs to the next tier.
+
+### Measurability verdicts on the three modifiers — deliverable, and each one is a test
+
+`recommend._positional_modifiers` has declared `bye_stack`, `handcuff_synergy` and `sos` for six
+tiers with nothing able to price them. With the week axis:
+
+- **`bye_stack` — MEASURABLE.** Two rosters with identical season marginals, one stacking three
+  starting receivers on one bye week: the season objective scores them identically (asserted, so the
+  comparison is not vacuous) and the weekly one separates them. A QB-and-his-own-receivers stack is
+  measurable too, on **variance** — which is why a championship objective sees it and a points one
+  does not.
+- 🔴 **`handcuff_synergy` — NOT MEASURABLE, and the reason is measured.** RB2 scores **×1.96 /
+  ×1.61 / ×2.38** as much in the weeks RB1 is absent (+4.31 / +2.83 / +7.05 points per week, each
+  4–7 se clear). The mechanism is real and large. But the _unconditional_ same-team RB × RB
+  correlation is **−0.0211 (se 0.0156, ns)**, and a jointly-Gaussian model calibrated to that
+  implies a conditional lift of ~**+0.03 sd**. A correlation table cannot carry a regime effect, so
+  adding weekly correlation did **not** make the handcuff measurable. Making it measurable needs a
+  **workload-transfer process** (production redistributed to a group's survivors when a member is
+  absent) — named here, and deliberately not built on a guess.
+- **`sos` — NOT MEASURABLE**, structurally: neither the board nor the weekly model carries any
+  opponent-quality signal, so there is no axis to attach a coefficient to.
+
+**None of the three is implemented.** This project does not ship a coefficient its own harness
+cannot price.
+
+### The instrument, again — instance seven, and this time pre-empted
+
+`test_harness_fidelity.py` has asked "change the knob, does a pick move?" for five tiers and "change
+the pool ORDER, does a pick move?" since Tier 10. Tier 11 adds the question aimed at the objective:
+**change the roster in a way the term would care about — does the number move?** Each verdict above
+is a test, and each was mutation-checked: ignoring byes breaks only the bye verdict, zeroing the
+correlation table breaks only the stack verdict, and **adding** a crude workload-transfer process
+breaks only the handcuff verdict — which is what makes the negative result a finding rather than a
+blind spot.
+
+Two of this tier's own tests did **not** fail when first mutated and were rewritten:
+
+- the PSD guard — `numpy.linalg.LinAlgError` subclasses `ValueError` and its message is literally
+  "Matrix is not positive definite", so the obvious matcher passed against numpy with the guard
+  deleted;
+- the ex-ante lineup rule — ranking every dedicated slot by the realized week still left the two
+  totals different, because the flex reads the mode separately, so the original test passed against
+  a fully-hindsight selection.
+
+And two fixtures were vacuous until rebuilt: the first `_shrunk_draft_context` used a league with
+**no K slot**, so R1 had no baseline to shrink toward and every assertion was trivially true; and the
+first handcuff comparison used two bench backs of **different μ**, measuring the value gradient and
+calling it a handcuff verdict.
+
+### What Tier 11 did NOT do
+
+- **No coefficient, no config key, no score changed.** `config/engine.json` and `config/league.json`
+  are untouched, and the Tier 8/9/10 `lambda_slot_override` recommendation is **still OPEN** —
+  verified 2026-08-09, the file still reads `0.4 / −0.4`. The Tier 10 coupling stands: the
+  dictionary-order fix pays nothing until that setting is zeroed.
+- **The live path is bit-identical.** `mu` is untouched; `mu_raw` is new and only the calibration
+  path reads it. Verified by driving the real FastAPI surface: all 50 ranked picks' `projected_points`
+  match the shrunk μ exactly, `recompute_ms` 8.0, both WebSocket channels handshake.
+- **No modifier implemented.** See the verdicts above.
+- **`sigma` still excludes missed-game variance.** `league/xep.py` measures weekly residuals only
+  over weeks a player appeared, so the shipped σ is too small. The weekly model REALLOCATES that σ
+  rather than adding to it, which keeps the marginal exact and the comparison interpretable; fixing
+  σ itself would supersede every number again and is left open.
+- **The demo fixture cannot carry the weekly model faithfully.** Its synthetic value curve is far
+  steeper against the same real σ anchors (median μ/σ at WR **3.9** against the real board's 2.4), so
+  8 of its 178 players degenerate to zero weekly variance where **0 of 305** do on the real board.
+  Surfaced via `WeeklyModel.degenerate`, and the tests that need weekly variance use a realistic
+  context instead. The fixture was not rewritten — that would supersede more numbers for no gain.
+- **E2 was not re-run.** Its reliability range was mis-scaled on `--real` until this tier; re-running
+  the study before the `lambda_slot_override` decision is made would still measure noise around a
+  decision nobody has taken.
+- **Championship probability is still "highest season total of the 12".** A week axis makes
+  head-to-head expressible for the first time, and `config/league.json` specifies **no** playoff
+  bracket and **no** head-to-head schedule. Inventing one would breach its `agent_usage_contract`.
+  Declined deliberately, recorded here so a later tier does not think it was overlooked.
+- **A simulator is not a fact about drafting.** The opponents are behavioural agents, not the eleven
+  people in the room.
+
+### ⚠️ What is superseded
+
+- **Every real-board number produced before this tier**, because all of them came from a harness
+  that shrank K and DST twice. Tier 10's `override_off` figures (0.1161 / 1716.7) and `vbd_only`
+  (0.1066 / 1661.7) remain correct **as the pre-fix measurement** and are labelled as such above;
+  post-fix the same arms are 0.1109 / 1738.5 and 0.1206 / 1702.7.
+- **Tier 10's "+0.0095 ahead on championship probability"**: the point estimate is now −0.0097.
+  Both are inside the noise, so the verdict (a statistical tie) is unchanged — but the number is not.
+- 🔴 **Tier 9's and Tier 10's "the two objectives BRACKET bench value".** They do not. Measured:
+  0.00 and 147.76 against an honest hindsight-free 225.08. The truth is not between them.
+- **Tier 8's "the reliability double-application was not investigated"** and Tier 10's
+  "measured but NOT fixed": closed.
+- Nothing else. Fixture-pool numbers are untouched — `demo_sim_context` was already correct.
+
 ## 📍 Status — 2026-08-09 · Tier 10 (the engine drafted half its roster in dictionary order)
 
 > **Tier 10 of the audit is merged** (PR #62). Tier 9 closed with an unexplained residual: even with
