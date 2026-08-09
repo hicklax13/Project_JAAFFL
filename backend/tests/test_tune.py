@@ -345,3 +345,50 @@ def test_run_study_does_not_spend_a_search_dimension_on_the_inert_modifier_cap()
 
     assert tuned.caps["modifier_abs_max"] == 4.25, "an inert knob must be carried, not searched"
     assert tuned.caps["mu_refinement_pct"] == 0.15
+
+
+def test_evaluate_agent_objectives_simulates_each_draft_once(monkeypatch) -> None:
+    """E6 scored the SAME drafts once per objective. Two objectives meant two full tournaments,
+    which is why --replicates never looked affordable. One draft, every objective."""
+    import jaaffl.calibrate.tune as tune_mod
+    from jaaffl.calibrate.tune import evaluate_agent_objectives, mean_lineup_value_objective
+
+    calls = 0
+    real = tune_mod.simulate_draft
+
+    def counting(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(tune_mod, "simulate_draft", counting)
+    scores = evaluate_agent_objectives(
+        VbdOnlyAgent(),
+        _small_ctx(),
+        opponents=[VbdOnlyAgent()],
+        seeds=[1, 2],
+        objectives={"a": mean_lineup_value_objective, "b": mean_lineup_value_objective},
+    )
+    assert calls == 12 * 2  # slots x seeds -- NOT x objectives
+    assert set(scores) == {"a", "b"}
+    assert len(scores["a"]) == 12
+
+
+def test_evaluate_agent_objectives_agrees_with_evaluate_agent() -> None:
+    """The one-draft path must be numerically identical to the per-objective path it replaces."""
+    from jaaffl.calibrate.tune import (
+        evaluate_agent,
+        evaluate_agent_objectives,
+        mean_lineup_value_objective,
+    )
+
+    ctx = _small_ctx()
+    single = evaluate_agent(VbdOnlyAgent(), ctx, opponents=[VbdOnlyAgent()], seeds=[1, 2])
+    many = evaluate_agent_objectives(
+        VbdOnlyAgent(),
+        ctx,
+        opponents=[VbdOnlyAgent()],
+        seeds=[1, 2],
+        objectives={"pts": mean_lineup_value_objective},
+    )
+    assert many["pts"] == single

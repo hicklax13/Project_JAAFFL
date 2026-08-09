@@ -184,6 +184,43 @@ def evaluate_agent(
     return per_slot
 
 
+def evaluate_agent_objectives(
+    agent: DraftAgent,
+    ctx: SimContext,
+    *,
+    opponents: Sequence[DraftAgent],
+    seeds: Sequence[int],
+    teams: int = 12,
+    objectives: Mapping[str, SimObjective | None],
+) -> dict[str, list[float]]:
+    """Per-slot mean score under EVERY named objective, from ONE simulated draft per (slot, seed).
+
+    :func:`evaluate_agent` scores a single objective, so E6 — which reports two — ran the whole
+    tournament twice over the same seeds and threw the first set of rosters away. Two objectives on
+    one draft is not an optimisation, it is what makes replicate blocks affordable: five disjoint
+    blocks at the old cost is exactly the standard Tier 6 set for E2 and E6 never met.
+
+    A ``None`` objective means :func:`mean_lineup_value_objective`, matching
+    :func:`evaluate_agent`'s default, so a caller can pass the E6 pair as
+    ``{"win probability": WinProbabilityObjective(...), "mean lineup value": None}``.
+    """
+    scored: dict[str, SimObjective] = {
+        name: objective or mean_lineup_value_objective for name, objective in objectives.items()
+    }
+    per_slot: dict[str, list[float]] = {name: [] for name in scored}
+    for slot in range(teams):
+        totals: dict[str, list[float]] = {name: [] for name in scored}
+        for seed in seeds:
+            rosters = simulate_draft(
+                ctx, our_slot=slot, our_agent=agent, opponents=opponents, seed=seed, teams=teams
+            )
+            for name, objective in scored.items():
+                totals[name].append(objective(rosters, our_slot=slot, ctx=ctx, seed=seed))
+        for name, values in totals.items():
+            per_slot[name].append(mean(values))
+    return per_slot
+
+
 def evaluate_params(
     params: EngineParams,
     ctx: SimContext,
