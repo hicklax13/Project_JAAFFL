@@ -21,7 +21,7 @@ from jaaffl.calibrate.tune import (
     promotion_decision,
 )
 from jaaffl.config import EngineParams
-from jaaffl.domain import LeagueSettings, Position, RosterSlot
+from jaaffl.domain import LeagueSettings, Player, Position, RosterSlot
 from jaaffl.engine.optimize import expand_starting_slots
 from jaaffl.engine.simulate import (
     AdpNoiseAgent,
@@ -263,14 +263,153 @@ def test_sim_context_from_draft_context_maps_the_fields() -> None:
         adp_mean={"rb0": 1.0, "wr0": 3.0},
         adp_sd={"rb0": 5.0, "wr0": 6.0},
         cliff_bonus={"rb0": 4.0},
-        projections={"rb0": SimpleNamespace(sigma=40.0), "wr0": SimpleNamespace(sigma=35.0)},
+        # `mu_raw` deliberately DIFFERS from `mu` here: the adapter must read the pre-shrinkage
+        # view, and a stub where the two coincide would pass either way (Tier 11).
+        projections={
+            "rb0": SimpleNamespace(sigma=40.0, mu_raw=210.0),
+            "wr0": SimpleNamespace(sigma=35.0, mu_raw=185.0),
+        },
     )
     sc = sim_context_from_draft_context(dc)
-    assert sc.value == {"rb0": 200.0, "wr0": 180.0}
+    assert sc.value == {"rb0": 210.0, "wr0": 185.0}  # mu_raw, NOT dc.mu
     assert sc.adp_stdev == {"rb0": 5.0, "wr0": 6.0}
     assert sc.sigma == {"rb0": 40.0, "wr0": 35.0}
     assert sc.cliff_bonus == {"rb0": 4.0}
     assert sc.roster_size == sum(s.count for s in settings.roster_slots)
+
+
+def _shrunk_draft_context():
+    """A REAL DraftContext whose K is shrunk by R1, built through ``assemble_projections``.
+
+    Deliberately not a hand-written fixture: the defect being pinned lives in the seam between
+    precompute (which shrinks) and the harness (which shrinks again), so the test has to drive the
+    production blend rather than assert against numbers a fixture declared.
+    """
+    from jaaffl.engine.context import DraftContext
+    from jaaffl.engine.projections import assemble_projections
+    from jaaffl.league.replacement import replacement_values
+    from tests.engine_fixtures import jaaffl_settings
+
+    # The REAL league roster, not `_small_settings()` — that one has no K slot, so
+    # `replacement_values` yields no K baseline, R1 falls back to shrinking toward the player's own
+    # μ, and the shrink is a no-op. The vacuity guard in the test below caught exactly that.
+    settings = jaaffl_settings()
+    params = EngineParams.model_validate(
+        {
+            "flex_split": {"RB": 8, "WR": 4},
+            "caps": {"mu_refinement_pct": 0.15},
+            "reliability_shrinkage": {"K": 0.4, "DST": 0.4},
+        }
+    )
+    points = {f"k{i}": 150.0 - 3.0 * i for i in range(20)}
+    points.update({f"rb{i}": 260.0 - 4.0 * i for i in range(20)})
+    points.update({f"wr{i}": 250.0 - 3.5 * i for i in range(20)})
+
+    def _pos(pid: str) -> Position:
+        return Position.K if pid[0] == "k" else Position.RB if pid[:2] == "rb" else Position.WR
+
+    position = {pid: _pos(pid) for pid in points}
+    projections = assemble_projections(
+        {"cbs": points},
+        position,
+        params,
+        settings,
+        sigma_floor={Position.K: 5.0, Position.RB: 40.0, Position.WR: 35.0},
+    )
+    mu = {pid: proj.mu for pid, proj in projections.items()}
+    players = {pid: Player(player_id=pid, name=pid, position=position[pid]) for pid in projections}
+    flex = (8, 4)
+    baselines = replacement_values(settings, mu, players, flex_split=flex)
+    slots = expand_starting_slots(settings)
+    return DraftContext(
+        settings=settings,
+        params=params,
+        projections=projections,
+        mu=mu,
+        position=position,
+        baselines=baselines,
+        flex_split=flex,
+        tiers={},
+        cliff_bonus={},
+        adp_mean={pid: float(i + 1) for i, pid in enumerate(points)},
+        adp_sd=dict.fromkeys(points, 8.0),
+        ecr={},
+        starting_slots=slots,
+        players=players,
+    )
+
+
+def test_score_agent_effective_value_equals_recommend_context_mu() -> None:
+    """THE harness-fidelity invariant for VALUE, and the reason Tier 11 exists.
+
+    ``recommend()`` scores ``context.mu`` — μ with R1 applied ONCE, at precompute.
+    ``ScoreAgent._effective_value`` applies R1 itself from ``params.reliability_shrinkage``, so the
+    context it is handed must carry the PRE-shrinkage μ or the harness and the shipped engine
+    disagree about what a player is worth.
+
+    Before Tier 11 ``sim_context_from_draft_context`` copied ``dc.mu`` (already shrunk) into
+    ``SimContext.value``, so every ``--real`` measurement this project has published came from an
+    agent whose K/DST μ was compressed by ``0.4**2 = 0.16`` against the live engine's ``0.4``.
+    Measured on the real board 2026-08-09: median value over replacement 2.50x closer to
+    replacement at DST and K (exactly ``1 / 0.4``), 1.00x at QB/RB/TE/WR.
+
+    ``demo_sim_context`` builds ``value`` from a RAW curve, so the fixture pool was always correct
+    and **no test on it could ever have seen this** — there is no ``recommend()`` on that path to
+    disagree with. That is why it survived ten tiers.
+    """
+    from jaaffl.calibrate.tune import sim_context_from_draft_context
+
+    dc = _shrunk_draft_context()
+    ctx = sim_context_from_draft_context(dc)
+    effective = ScoreAgent(dc.params)._effective_value(ctx)  # noqa: SLF001 - the invariant under test
+
+    assert dc.projections["k0"].mu != pytest.approx(dc.projections["k0"].mu_raw), (
+        "this fixture must actually exercise a shrunk position, or the assertion below is vacuous"
+    )
+    for pid, live_mu in dc.mu.items():
+        assert effective[pid] == pytest.approx(live_mu), pid
+
+
+def test_the_harness_scores_the_objective_on_raw_mu_not_the_shrunk_view() -> None:
+    """The other half of the contract ``ScoreAgent`` documents: "our DECISIONS defer high-variance
+    positions while the OBJECTIVE scores raw μ".
+
+    ``optimal_lineup_value`` and ``sample_season_outcomes`` both read ``SimContext.value``, and so
+    does every behavioural opponent's ``value_over_replacement``. Carrying ``dc.mu`` there put the
+    objective AND all eleven simulated opponents on our own K/DST risk adjustment.
+    """
+    from jaaffl.calibrate.tune import sim_context_from_draft_context
+
+    dc = _shrunk_draft_context()
+    ctx = sim_context_from_draft_context(dc)
+    shrunk = [pid for pid, proj in dc.projections.items() if proj.mu != pytest.approx(proj.mu_raw)]
+    assert shrunk, "no player is actually shrunk here, so the assertion below proves nothing"
+    for pid, proj in dc.projections.items():
+        assert ctx.value[pid] == pytest.approx(proj.mu_raw), pid
+    # ... and for the shrunk ones that is a DIFFERENT number from what the live path scores.
+    for pid in shrunk:
+        assert ctx.value[pid] != pytest.approx(dc.mu[pid]), pid
+
+
+def test_sim_context_baselines_are_unmoved_by_carrying_raw_mu() -> None:
+    """R1 pulls μ TOWARD the replacement baseline, so the value AT the replacement rank is a fixed
+    point and the within-position order is preserved — the baselines are identical either way.
+
+    Measured on the real board 2026-08-09: baselines recomputed from un-shrunk μ match
+    ``DraftContext.baselines`` to 4 dp at all six positions. Pinned here because Task 2 now depends
+    on it; a change to ``replacement_values`` that breaks the fixed point would silently rescale
+    every VOR in the harness rather than failing.
+    """
+    from jaaffl.calibrate.tune import sim_context_from_draft_context
+    from jaaffl.league.replacement import replacement_values
+
+    dc = _shrunk_draft_context()
+    ctx = sim_context_from_draft_context(dc)
+    recomputed = replacement_values(
+        dc.settings, dict(ctx.value), dc.players, flex_split=dc.flex_split
+    )
+    for pos, baseline in dc.baselines.items():
+        assert recomputed[pos] == pytest.approx(baseline), pos
 
 
 def test_run_study_actually_uses_the_objective_it_is_given() -> None:

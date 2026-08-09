@@ -38,10 +38,46 @@ if TYPE_CHECKING:
 
 def sim_context_from_draft_context(dc: DraftContext) -> SimContext:
     """Adapt a precompute :class:`DraftContext` into a :class:`SimContext`, so E2 can tune on REAL
-    projections + FFC ADP. σ is read per-player from ``projections``; everything else maps 1:1."""
+    projections + FFC ADP. σ is read per-player from ``projections``; everything else maps 1:1.
+
+    ``value`` is the **pre-shrinkage** μ (``PlayerProjection.mu_raw``), NOT ``dc.mu``. R1
+    reliability shrinkage is applied at precompute into ``dc.mu`` — which is exactly what
+    ``recommend()`` scores — and :class:`~jaaffl.engine.simulate.ScoreAgent` applies it AGAIN from
+    ``params.reliability_shrinkage``. Copying ``dc.mu`` here therefore compressed K and DST by
+    ``0.4**2 = 0.16`` while the live engine used ``0.4``. Measured on the real board 2026-08-09,
+    median value over replacement: **DST 2.50x · K 2.50x · QB/RB/TE/WR 1.00x**, where 2.50 is
+    exactly ``1 / 0.4``, and the identity ``eff == baseline + r*r_pre*(raw − baseline)`` held to
+    1.4e-14 over 300 players.
+
+    **Three channels were wrong, not one**, because ``value`` is read by all of them:
+
+    * our DECISIONS — ``ScoreAgent`` scored μ shrunk twice where ``recommend()`` shrinks once;
+    * the OBJECTIVE — ``optimal_lineup_value`` and ``sample_season_outcomes`` both read ``value``,
+      so a kicker was scored 2.5x closer to replacement than he projects. ``ScoreAgent``'s own
+      docstring states the intended contract: "our DECISIONS defer high-variance positions while
+      the OBJECTIVE scores raw μ";
+    * the OPPONENTS — ``VbdOnlyAgent`` / ``NeedBasedAgent`` / ``SoftmaxVbdAgent`` all rank by
+      ``value_over_replacement(pid, ctx.value, ...)``, so every simulated rival ranked K and DST
+      through OUR engine's risk adjustment.
+
+    It also un-breaks E2's search: ``run_study`` samples ``reliability_k``/``reliability_dst`` over
+    ``[0.1, 1.0]``, but with the committed 0.4 already baked in the effective factor spanned
+    ``[0.04, 0.40]`` and could never reach 1.0 (no shrinkage at all).
+
+    The baselines need no adjustment and are carried unchanged: R1 pulls μ *toward* the replacement
+    baseline, so the value at the replacement rank is a fixed point and the within-position order is
+    preserved. Verified on the real board — baselines recomputed from un-shrunk μ match
+    ``dc.baselines`` at all six positions — and pinned by
+    ``test_sim_context_baselines_are_unmoved_by_carrying_raw_mu``.
+
+    ``demo_sim_context`` has always built ``value`` from a raw curve, so the FIXTURE pool was
+    already correct and **no test on it could ever have seen this**: there is no ``recommend()`` on
+    that path to disagree with. That is how it survived to Tier 11, having been listed as
+    uninvestigated in Tier 8 and measured-but-not-fixed in Tier 10.
+    """
     sigma = {pid: proj.sigma for pid, proj in dc.projections.items()}
     return SimContext(
-        value=dict(dc.mu),
+        value={pid: proj.mu_raw for pid, proj in dc.projections.items()},
         position=dict(dc.position),
         baselines=dict(dc.baselines),
         slots=list(dc.starting_slots),
