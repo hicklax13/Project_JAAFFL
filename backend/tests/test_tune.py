@@ -448,3 +448,33 @@ def test_tournament_verdict_reports_a_clean_sweep() -> None:
     assert verdict["vbd_only"]["beats_all"] is True
     assert verdict["vbd_only"]["split"] is False
     assert verdict["vbd_only"]["loses_on"] == []
+
+
+def _load_e6_script():
+    """Import scripts/run_tournament.py by path -- it is not an installed package."""
+    import importlib.util
+
+    path = _REPO_ROOT / "scripts" / "run_tournament.py"
+    spec = importlib.util.spec_from_file_location("e6_script", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_e6_cli_exposes_replicates_and_a_real_pool() -> None:
+    """E6 accepted only --smoke/--seeds/--draws, so every E6 number ever published is a single
+    seed block -- the standard E2 has met since Tier 6."""
+    args = _load_e6_script().build_parser().parse_args(
+        ["--smoke", "--seeds", "8", "--replicates", "5"]
+    )
+    assert args.replicates == 5
+    assert args.seeds == 8
+    assert hasattr(args, "real")
+    assert hasattr(args, "pool_cap")
+
+
+def test_e6_cli_runs_multiple_blocks_end_to_end() -> None:
+    """The smallest possible real run: the whole script path, two disjoint blocks."""
+    module = _load_e6_script()
+    assert module.main(["--smoke", "--seeds", "1", "--draws", "8", "--replicates", "2"]) == 0
