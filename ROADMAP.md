@@ -120,25 +120,48 @@ measured. The distortion mattered through the **opponents** and the **objective*
 opposite directions on championship probability and the same direction on points. The pool
 composition change is worth about −0.0008 on its own, so this is the values, not the membership.
 
-### 🔴 FINDING B — the two objectives never bracketed bench value
+### 🔴 FINDING B — what a bench is worth turns on an information set nobody had written down
 
 Tier 9 and Tier 10 both recorded that `mean_lineup_value_objective` (bench = 0) and
-`roster_season_values` (perfect hindsight) **bracket** the value of a bench, so the truth lies
-between. With a week axis built, that is measurable, and it is **wrong**. Nine drafted `override_off`
-rosters on the real board, 800 draws, asking what the 8 bench players are worth:
+`roster_season_values` (perfect hindsight) **bracket** bench value. With a week axis built that
+becomes measurable — and the answer turns on a question neither tier asked: **what does the manager
+setting the lineup know on Saturday?** Nine drafted `override_off` rosters, real board, 800 draws,
+asking what the 8 bench players are worth:
 
-| objective                                         | weekly substitution? | hindsight?  | the bench is worth |
-| ------------------------------------------------- | -------------------- | ----------- | ------------------ |
-| `mean_lineup_value_objective`                     | no                   | no          | **0.00**           |
-| `roster_season_values` (inside `win probability`) | no                   | yes, season | **147.76**         |
-| **weekly ex ante (this tier)**                    | **yes**              | **no**      | **225.08**         |
-| weekly with hindsight                             | yes                  | yes         | **1042.82**        |
+| objective                                           | weekly substitution? | what the lineup-setter knows | the bench is worth |
+| --------------------------------------------------- | -------------------- | ---------------------------- | ------------------ |
+| `mean_lineup_value_objective`                       | no                   | nothing                      | **0.00**           |
+| **weekly, BYE CALENDAR ONLY** (this tier's default) | **yes**              | the published bye schedule   | **55.29**          |
+| `roster_season_values` (inside `win probability`)   | no                   | the whole realized season    | **147.76**         |
+| weekly, + foresees every zero-production week       | yes                  | + who will score nothing     | **275.05**         |
+| weekly, + ranks on the realized week                | yes                  | everything                   | **1034.13**        |
 
-The honest, **hindsight-free** number sits **above** the supposed upper bound. The two prior
-objectives differ along the _hindsight_ axis, while what actually creates bench value is **weekly
-substitution** — and `roster_season_values` re-optimises **one lineup for the whole season**, so it
-cannot express a bye or a missed game at all. The real bracket is `[225.08, 1042.82]`; the old one
-was `[0, 147.76]`, entirely below the truth.
+⚠️ **This corrects a claim an earlier draft of this very block made, and code review caught it, not
+the tests.** The first weekly rule ranked lineups on `WeeklyOutcomes.available`, which folds the bye
+calendar together with the **drawn** zero-production event — so the "ex ante" manager foresaw exactly
+who would produce nothing. That is hindsight, in the one place the docstring claimed there was none,
+and it inflated the bench from 55.29 to 275.05. The fix makes the information set an explicit
+argument (`weekly_lineup_totals(..., foresight=...)`) with the honest bye-only default, and a test
+now pins that the default cannot see a zero-production draw.
+
+**The corrected verdict is narrower than the retracted one.** At the defensible lower bound (55.29)
+bench value sits **inside** the old `[0, 147.76]` pair, so Tiers 9 and 10 were not wrong to call it a
+bracket. What is established instead: that pair brackets nothing _in principle_ — it varies along the
+**hindsight** axis, while what actually creates bench value is **weekly substitution**, which neither
+objective models (`roster_season_values` fields one lineup for the whole year and cannot express a
+bye at all). The interval a real manager lives in is `[55.29, 275.05]`, and it **straddles** 147.76.
+
+**The missing measurement, named rather than guessed.** Where in that interval depends on the share
+of zero-production weeks announced before kickoff. `ff_opportunity` cannot answer it — a player who
+did not dress and a player who dressed and saw no targets both appear as no row — and the obvious
+join to `load_snap_counts` leaves ~50% of those weeks unmatched, with "unmatched" conflating "did not
+dress" with a name-join failure. Attempted, refused, and handed to the next tier.
+
+⚠️ **A second defect the same review surfaced: the weekly rule ranked by SEASON μ.** A player's
+season total is spread over however many weeks his team plays, so what a manager filling one slot
+compares is `μ / n`. On the fixture a 257.2-point back with 18 playable weeks (14.29/wk) outranked a
+247.6-point receiver with a bye (14.56/wk) and **lost** points — a bench player measured at **−1.63**.
+Fixed; the rule now ranks on expected points _this week_.
 
 ### The week axis, and every parameter in it measured
 
@@ -174,37 +197,37 @@ same quantity agreeing to 0.02.
 
 ### ⚠️ The two championship objectives DISAGREE in sign, and this tier does not claim the friendly one
 
-Same four arms, post-fix pool, 5 blocks × 8 seeds × 12 slots, 800 draws, field
+Same four arms, post-fix pool, 5 blocks × 8 seeds × 12 slots, 800 draws for every objective, field
 `[SoftmaxVbd, NeedBased]`, `override_off` vs `vbd_only`:
 
 | objective                 | A          | B      | A−B         | min slot | p          | beats?  |
 | ------------------------- | ---------- | ------ | ----------- | -------- | ---------- | ------- |
 | championship (season)     | 0.1109     | 0.1206 | −0.0097     | −0.0492  | 0.9451     | no      |
 | points (season)           | 1738.5     | 1702.7 | **+35.7**   | +6.8     | **0.0002** | **YES** |
-| **championship (weekly)** | **0.1192** | 0.1086 | **+0.0107** | −0.0189  | **0.0046** | **YES** |
-| **points (weekly)**       | **1972.3** | 1937.7 | **+34.7**   | −3.5     | **0.0005** | **YES** |
+| **championship (weekly)** | **0.1288** | 0.1138 | **+0.0150** | −0.0157  | **0.0034** | **YES** |
+| **points (weekly)**       | **1796.0** | 1759.3 | **+36.7**   | +4.9     | **0.0002** | **YES** |
 
 🔴 **The weekly objective reports the first significant championship win over plain VBD this project
 has ever measured. It is NOT being claimed.** The instrument that produces it is one tier old, was
 built in this tier, and has never been validated against a real season outcome. A brand-new measure
-that flatters the engine for the first time in eleven tiers is exactly the shape of every finding
-Tiers 6–10 had to retract. The established results are the ones both objectives agree on: **the
-points leg is a win under either** (+35.7 and +34.7, p ≤ 0.0005), and the championship comparison is
-**not settled**.
+that flatters the engine for the first time in eleven tiers is the exact shape of every finding
+Tiers 6-10 had to retract — and this tier already retracted one of its own after review. The
+established results are the ones both objectives agree on: **the points leg is a win under either**
+(+35.7 and +36.7, p = 0.0002), and the championship comparison is **not settled**.
 
 **Two things argue the weekly objective is measuring something real rather than being kind to us.**
-It is _harsher_ on the committed config than the season objective is — `ours(committed)` scores
-**0.0030** on it against 0.0063 on the season one — so it is not a pro-engine instrument, it is a
-pro-good-bench one. And the σ-order control from Tier 10 is **exactly inert on all four objectives**
-(+0.0000, +0.0, +0.0000, +0.0), which independently re-confirms on a new objective that the pick no
-longer depends on the order the pool arrives in.
+It is _harsher_ on the committed config than the season objective is on the points scale
+(`ours(committed)` loses 323.0 to it against 285.8 on the season leg), so it is not a pro-engine
+instrument, it is a pro-good-bench one. And Tier 10's σ-order control is **exactly inert on all four
+objectives** (+0.0000 / +0.0 / +0.0000 / +0.0), which independently re-confirms on a new objective
+that the pick no longer depends on the order the pool arrives in.
 
-**Which is believed, and why it does not matter yet.** The weekly model is the better description of
-a fantasy season — `roster_season_values` re-optimises **one lineup for the whole year** and cannot
-express a bye or a missed game at all. But both effects sit inside the E6 leg's own noise band
-(per-slot paired sd ~0.018–0.020), and the correct action from either is the same: no claim of
-championship superiority over `vbd_only` is supported. A second, independent replication of the
-weekly result belongs to the next tier.
+**Which is believed, and why it changes nothing yet.** The weekly model is the better description of
+a fantasy season — `roster_season_values` fields **one lineup for the whole year** and cannot express
+a bye or a missed game. But both effects sit inside the E6 leg's own noise band (per-slot paired sd
+~0.018), the weekly result depends on an information set this tier could not measure (FINDING B), and
+the correct action from either is the same: **no claim of championship superiority over `vbd_only` is
+supported.** An independent replication of the weekly result belongs to the next tier.
 
 ### Measurability verdicts on the three modifiers — deliverable, and each one is a test
 
@@ -280,6 +303,16 @@ calling it a handcuff verdict.
   head-to-head expressible for the first time, and `config/league.json` specifies **no** playoff
   bracket and **no** head-to-head schedule. Inventing one would breach its `agent_usage_contract`.
   Declined deliberately, recorded here so a later tier does not think it was overlooked.
+- **Weekly scores are unclipped normals and can go negative** — 15-33% of played weeks on the
+  fixture, worst at QB — which the JAAFFL map cannot produce for an offensive player.
+  `sample_season_outcomes` is safe from this at the season level because `lineup_value` refuses to
+  start a sub-replacement player; the ex-ante weekly rule has no such refusal and books the loss.
+  Fixing it needs a non-negative weekly distribution matched to `(m, s)`, which moves every weekly
+  number again. Disclosed, not fixed.
+- **`foresight="realized"` is a greedy FLOOR on its arm, not the arm.** Verified against a
+  per-`(draw, week)` Hungarian reference: the two `μ`-ranked paths are **exactly** optimal, but the
+  realized-ranked one is systematically ~4-5% low because the true optimum leaves a slot empty
+  rather than starting a negative week. Only the reported bracket top is affected.
 - **A simulator is not a fact about drafting.** The opponents are behavioural agents, not the eleven
   people in the room.
 
@@ -291,10 +324,17 @@ calling it a handcuff verdict.
   post-fix the same arms are 0.1109 / 1738.5 and 0.1206 / 1702.7.
 - **Tier 10's "+0.0095 ahead on championship probability"**: the point estimate is now −0.0097.
   Both are inside the noise, so the verdict (a statistical tie) is unchanged — but the number is not.
-- 🔴 **Tier 9's and Tier 10's "the two objectives BRACKET bench value".** They do not. Measured:
-  0.00 and 147.76 against an honest hindsight-free 225.08. The truth is not between them.
+- 🔴 **Tier 9's and Tier 10's "the two objectives BRACKET bench value"** — REFINED, not refuted.
+  At the honest lower bound the weekly number (55.29) does sit inside their `[0, 147.76]`. What is
+  superseded is the reasoning: those two vary along the HINDSIGHT axis, not the weekly-substitution
+  axis that actually creates bench value, and the real interval `[55.29, 275.05]` straddles 147.76.
 - **Tier 8's "the reliability double-application was not investigated"** and Tier 10's
   "measured but NOT fixed": closed.
+- ⚠️ **An earlier draft of THIS block, retracted before merge.** It claimed the honest weekly bench
+  value (then 225.08) sat above `roster_season_values`' 147.76 and therefore refuted the bracket.
+  Code review found the lineup rule was ranking on the drawn zero-production event; corrected, the
+  honest number is **55.29** and the refutation does not stand. Recorded rather than quietly edited,
+  because the retraction is the more useful fact.
 - Nothing else. Fixture-pool numbers are untouched — `demo_sim_context` was already correct.
 
 ## 📍 Status — 2026-08-09 · Tier 10 (the engine drafted half its roster in dictionary order)
@@ -530,6 +570,16 @@ bracketing needs a week axis and belongs to its own tier.
   `bye_stack`, `handcuff_synergy` and `sos` remain unmeasurable and unimplemented.
 - **E2 was not re-run.** Re-running the study before the `lambda_slot_override` decision is made
   would measure noise around a decision nobody has taken.
+- **Weekly scores are unclipped normals and can go negative** — 15-33% of played weeks on the
+  fixture, worst at QB — which the JAAFFL map cannot produce for an offensive player.
+  `sample_season_outcomes` is safe from this at the season level because `lineup_value` refuses to
+  start a sub-replacement player; the ex-ante weekly rule has no such refusal and books the loss.
+  Fixing it needs a non-negative weekly distribution matched to `(m, s)`, which moves every weekly
+  number again. Disclosed, not fixed.
+- **`foresight="realized"` is a greedy FLOOR on its arm, not the arm.** Verified against a
+  per-`(draw, week)` Hungarian reference: the two `μ`-ranked paths are **exactly** optimal, but the
+  realized-ranked one is systematically ~4-5% low because the true optimum leaves a slot empty
+  rather than starting a negative week. Only the reported bracket top is affected.
 - **A simulator is not a fact about drafting.** The opponents are behavioural agents, not the eleven
   people in the room.
 

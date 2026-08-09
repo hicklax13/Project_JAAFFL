@@ -315,7 +315,12 @@ def test_the_weekly_objective_cannot_see_a_handcuff() -> None:
     # bench backs costs a Monte-Carlo standard error of a few points and the effect being looked for
     # is smaller than that, so a roster-level null would be "no resolution" dressed up as "no
     # effect". The statistic below is the one measured on the real data, over 10^5 player-weeks.
-    ctx = _weekly_ctx(nfl_team={"rb0": "SF", "rb1": "SF"})
+    ctx = _weekly_ctx(
+        nfl_team={"rb0": "SF", "rb1": "SF", "rb2": "SF"},
+        # Byes, because under the honest bye-only information set they are the ONLY thing a
+        # bench player can cover — without them the "he is worth something" leg is vacuous.
+        bye_week={"rb0": 5, "rb1": 9, "wr0": 7, "wr1": 11, "wr2": 13, "qb0": 6, "te0": 10},
+    )
     model = WeeklyModel.from_context(ctx)
     outcomes = model.sample(n_draws=_WEEKLY_DRAWS, seed=41)
     starter, backup = outcomes.index["rb0"], outcomes.index["rb1"]
@@ -333,11 +338,27 @@ def test_the_weekly_objective_cannot_see_a_handcuff() -> None:
         "the verdict in this docstring needs re-measuring against the real x1.6-x2.4"
     )
 
-    # ...and the bench back IS worth something, so the null above is about the HANDCUFF and not
-    # about a bench player being invisible. Measured on this fixture: a 10th player adds ~90 points
-    # where `mean_lineup_value_objective` prices him at exactly 0.00.
-    nine = ["qb0", "rb0", "wr0", "wr1", "wr2", "te0", "k0", "dst0", "wr3"]
-    assert _weekly_points([*nine, "rb1"], ctx) - _weekly_points(nine, ctx) > 10.0
+    # ...and a bench player IS worth something here, so the null above is about the HANDCUFF and not
+    # about the objective pricing every bench player at nothing.
+    #
+    # A BACKUP QUARTERBACK, deliberately. Under the honest bye-only information set a bench player's
+    # entire value is bye coverage, and qb1 is the only man who can fill the single QB slot in
+    # qb0's bye week — so he is worth something for a reason that is easy to state. Two earlier
+    # drafts of this leg were wrong: one used a "bench" back who walked straight into the flex
+    # (measuring the value gradient), and the next used a third RB whom the per-week ranking
+    # correctly never starts (measuring zero). The season-objective guard rules out the first.
+    from jaaffl.calibrate.tune import mean_lineup_value_objective
+
+    nine = ["qb0", "rb0", "rb1", "wr0", "wr1", "wr2", "te0", "k0", "dst0"]
+    ten = [*nine, "qb1"]
+    season_gain = mean_lineup_value_objective(
+        [ten], our_slot=0, ctx=ctx, seed=1
+    ) - mean_lineup_value_objective([nine], our_slot=0, ctx=ctx, seed=1)
+    assert season_gain == pytest.approx(0.0), (
+        f"qb1 improves the starting nine by {season_gain:.2f}, so he is not a bench player and "
+        "this assertion would be measuring the value gradient"
+    )
+    assert _weekly_points(ten, ctx) - _weekly_points(nine, ctx) > 5.0
 
 
 def test_the_weekly_objective_cannot_see_strength_of_schedule() -> None:
@@ -350,9 +371,20 @@ def test_the_weekly_objective_cannot_see_strength_of_schedule() -> None:
 
     Pinned as a structural fact rather than a measurement: there is no opponent axis to attach a
     coefficient to, so a tuned ``sos`` would be tuned to noise — Tier 4's defect exactly.
+
+    Checked by scanning the FIELD NAMES of both the model and the context rather than probing two
+    spellings, so any opponent/defense/schedule data arriving on either side trips it.
     """
+    import dataclasses
+
     from jaaffl.engine.weekly import WeeklyModel
 
-    model = WeeklyModel.from_context(_weekly_ctx())
-    assert not hasattr(model, "opponent"), "an opponent axis appeared; re-measure the sos verdict"
-    assert not hasattr(model, "schedule")
+    ctx = _weekly_ctx()
+    names = {f.name for f in dataclasses.fields(WeeklyModel)} | {
+        f.name for f in dataclasses.fields(ctx)
+    }
+    smells = {n for n in names if any(w in n for w in ("opponent", "defense", "schedule", "sos"))}
+    assert not smells, f"opponent-quality data appeared ({smells}); re-measure the sos verdict"
+    # ...and the one team-ish field that DOES exist is used only to group correlation.
+    assert "nfl_team" in names
+    WeeklyModel.from_context(ctx)

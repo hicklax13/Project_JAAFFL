@@ -16,6 +16,8 @@ import pytest
 from jaaffl.calibrate.pools import demo_sim_context
 from jaaffl.domain import Position
 from jaaffl.engine.weekly import (
+    FORESIGHT_ABSENCE,
+    FORESIGHT_REALIZED,
     REGULAR_SEASON_WEEKS,
     SAME_TEAM_RHO,
     ZERO_PRODUCTION_RATE,
@@ -37,8 +39,12 @@ def test_weekly_totals_reproduce_the_season_marginal() -> None:
     comparison between them means anything — which is exactly the trap Tier 9 fell into when the
     fixture and the real board turned out to disagree.
     """
-    ctx = demo_sim_context()
-    model = _model()
+    ctx = _realistic_ctx()
+    model = WeeklyModel.from_context(ctx)
+    assert not model.degenerate, (
+        "a clamped player's season sigma EXCEEDS the board's, so the guarantee this test names "
+        f"is false for {len(model.degenerate)} players it does not sample"
+    )
     outcomes = model.sample(n_draws=40_000, seed=7)
     totals = outcomes.season_totals()
     for pid in ("rb0", "wr10", "te3", "k3", "dst2", "qb8"):
@@ -201,7 +207,7 @@ def test_zero_production_weeks_happen_at_the_measured_rate() -> None:
     ctx = demo_sim_context()
     for pid, pos in (("rb0", Position.RB), ("te0", Position.TE), ("k0", Position.K)):
         i = outcomes.index[pid]
-        rate = float((outcomes.weekly[:, :, i] == 0.0).mean())
+        rate = float((~outcomes.available[:, :, i]).mean())
         assert rate == pytest.approx(ZERO_PRODUCTION_RATE[pos], abs=0.02), pid
     assert ctx.position["k0"] is Position.K
 
@@ -240,6 +246,69 @@ def _roster(ctx, counts: dict[Position, int]) -> list[str]:
     return out
 
 
+def test_the_default_lineup_setter_cannot_foresee_a_zero_production_week() -> None:
+    """THE information-set guard, and it caught a real leak in this tier's own first draft.
+
+    ``WeeklyOutcomes.available`` folds the bye calendar together with the DRAWN zero-production
+    event. Ranking on it lets the manager know on Saturday exactly who will produce nothing on
+    Sunday — which this module explicitly says is not knowable, because "zero production" counts a
+    healthy receiver who saw no targets. The first version of ``weekly_lineup_totals`` did rank on
+    it while its own docstring claimed "no hindsight anywhere", and code review measured roughly
+    three quarters of the reported bench value coming from the leak.
+
+    The default must therefore see ``plays`` (the bye calendar) and nothing else. Constructed so the
+    two answers are forced apart: the higher-mu starter posts a zero-production week, so a foresight
+    rule benches him and the honest rule starts him and eats it.
+    """
+    import dataclasses
+
+    import numpy as np
+
+    from jaaffl.engine.weekly import (
+        FORESIGHT_ABSENCE,
+        FORESIGHT_BYE,
+        WeeklyOutcomes,
+    )
+
+    ctx = dataclasses.replace(demo_sim_context(), value={"qb0": 300.0, "qb1": 100.0})
+    weekly = np.array([[[0.0, 40.0]]])  # qb0 produced nothing; qb1 posted 40
+    available = np.array([[[False, True]]])  # ...and qb0's zero IS a zero-production week
+    outcomes = WeeklyOutcomes(
+        order=("qb0", "qb1"),
+        index={"qb0": 0, "qb1": 1},
+        weekly=weekly,
+        available=available,
+        plays=np.ones_like(weekly, dtype=bool),  # neither is on a bye
+    )
+    honest = weekly_lineup_totals(["qb0", "qb1"], outcomes, ctx, foresight=FORESIGHT_BYE)
+    foresees = weekly_lineup_totals(["qb0", "qb1"], outcomes, ctx, foresight=FORESIGHT_ABSENCE)
+    assert honest[0] == pytest.approx(0.0), "the default rule peeked at the zero-production draw"
+    assert foresees[0] == pytest.approx(40.0)
+
+
+def test_a_player_on_a_bye_is_never_started_even_under_the_honest_rule() -> None:
+    """The bye IS knowable, so the honest rule must still route around it — otherwise "no
+    foresight" would have collapsed into "no week axis"."""
+    import dataclasses
+
+    import numpy as np
+
+    from jaaffl.engine.weekly import FORESIGHT_BYE, WeeklyOutcomes
+
+    ctx = dataclasses.replace(demo_sim_context(), value={"qb0": 300.0, "qb1": 100.0})
+    weekly = np.array([[[0.0, 40.0]]])
+    outcomes = WeeklyOutcomes(
+        order=("qb0", "qb1"),
+        index={"qb0": 0, "qb1": 1},
+        weekly=weekly,
+        available=np.array([[[False, True]]]),
+        plays=np.array([[[False, True]]]),  # qb0 is on his BYE, which the manager knows
+    )
+    assert weekly_lineup_totals(["qb0", "qb1"], outcomes, ctx, foresight=FORESIGHT_BYE)[
+        0
+    ] == pytest.approx(40.0)
+
+
 def test_ex_ante_lineup_never_benefits_from_hindsight() -> None:
     """Starters are chosen BEFORE the week is played, by mu among the players available that week,
     and scored on what they realized. So the ex-ante total can never exceed the hindsight total on
@@ -258,8 +327,8 @@ def test_ex_ante_lineup_never_benefits_from_hindsight() -> None:
         },
     )
     outcomes = _model().sample(n_draws=200, seed=5)
-    ex_ante = weekly_lineup_totals(roster, outcomes, ctx, hindsight=False)
-    hindsight = weekly_lineup_totals(roster, outcomes, ctx, hindsight=True)
+    ex_ante = weekly_lineup_totals(roster, outcomes, ctx, foresight=FORESIGHT_ABSENCE)
+    hindsight = weekly_lineup_totals(roster, outcomes, ctx, foresight=FORESIGHT_REALIZED)
     assert (ex_ante <= hindsight + 1e-9).all()
     assert (ex_ante < hindsight - 1e-9).any(), "hindsight is worth nothing here — check the fixture"
 
@@ -287,9 +356,10 @@ def test_the_ex_ante_lineup_starts_the_higher_mu_player_even_when_he_scored_less
         index={"qb0": 0, "qb1": 1},
         weekly=weekly,
         available=np.ones_like(weekly, dtype=bool),
+        plays=np.ones_like(weekly, dtype=bool),
     )
-    ex_ante = weekly_lineup_totals(list(order), outcomes, ctx, hindsight=False)
-    hindsight = weekly_lineup_totals(list(order), outcomes, ctx, hindsight=True)
+    ex_ante = weekly_lineup_totals(list(order), outcomes, ctx, foresight=FORESIGHT_ABSENCE)
+    hindsight = weekly_lineup_totals(list(order), outcomes, ctx, foresight=FORESIGHT_REALIZED)
     assert ex_ante[0] == pytest.approx(5.0), "ex ante must start qb0 on mu and take his 5 points"
     assert hindsight[0] == pytest.approx(90.0), "hindsight must start qb1, who actually scored"
 
@@ -317,7 +387,7 @@ def test_with_no_byes_no_absence_and_no_variance_the_weekly_total_matches_lineup
             Position.DST: 1,
         },
     )
-    totals = weekly_lineup_totals(roster, outcomes, ctx, hindsight=False)
+    totals = weekly_lineup_totals(roster, outcomes, ctx, foresight=FORESIGHT_ABSENCE)
     assert totals == pytest.approx(optimal_lineup_value(roster, ctx), rel=1e-9)
 
 
@@ -342,6 +412,6 @@ def test_a_bench_player_is_worth_strictly_more_than_zero() -> None:
         },
     )
     with_bench = [*nine, "rb2"]
-    base = weekly_lineup_totals(nine, outcomes, ctx, hindsight=False).mean()
-    more = weekly_lineup_totals(with_bench, outcomes, ctx, hindsight=False).mean()
+    base = weekly_lineup_totals(nine, outcomes, ctx).mean()
+    more = weekly_lineup_totals(with_bench, outcomes, ctx).mean()
     assert more > base + 1.0, f"the bench RB added only {more - base:.2f} points"

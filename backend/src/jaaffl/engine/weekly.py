@@ -4,8 +4,12 @@
 follow, and the engine has been unable to see any of them for six tiers:
 
 * ``mean_lineup_value_objective`` prices a bench player at exactly **0** — 8 of this league's 17
-  picks — while ``roster_season_values`` re-optimises the lineup with **perfect hindsight** of the
-  realized season. They BRACKET bench value and neither is right.
+  picks — while ``roster_season_values`` re-optimises with **perfect hindsight** of the realized
+  season but still fields **one lineup for the whole year**, so it cannot express a bye or a
+  missed game at all. Measured on nine real-board rosters, what the 8 bench players are worth:
+  **0.00** / **147.76** for those two, against **55.29 to 275.05** for a weekly rule depending
+  on how much of a zero-production week its manager is allowed to foresee. The honest interval
+  STRADDLES the old pair rather than sitting inside it.
 * ``bye_stack`` and ``sos`` have no week to attach to.
 * ``handcuff_synergy`` has no cross-player dependence to attach to.
 
@@ -132,11 +136,18 @@ _PD_TOLERANCE = 1e-9
 class WeeklyOutcomes:
     """``n_draws`` sampled seasons on a week axis.
 
-    ``weekly[d, w, index[pid]]`` is ``pid``'s realized points in week ``w`` of draw ``d``, and
-    ``available[d, w, index[pid]]`` is whether he played at all (False on a bye or a
-    zero-production week). Availability is carried EXPLICITLY rather than inferred from a 0.0
-    score: a present player can legitimately score 0.0, and a lineup rule that confused the two
-    would quietly start absent players.
+    ``weekly[d, w, index[pid]]`` is ``pid``'s realized points in week ``w`` of draw ``d``.
+
+    **Two masks, and the difference between them is an information set, not a detail.** ``plays``
+    is the BYE CALENDAR — published months ahead, so a lineup-setter genuinely knows it.
+    ``available`` additionally excludes the DRAWN zero-production week, which nobody knows on
+    Saturday: this model calls that event "zero production" rather than "injury" precisely because
+    it counts a healthy receiver who saw no targets. Ranking a lineup on ``available`` therefore
+    lets the manager foresee who will score nothing — see :func:`weekly_lineup_totals`, which takes
+    the information set as an explicit argument for exactly that reason.
+
+    Both are carried EXPLICITLY rather than inferred from a 0.0 score: a present player can
+    legitimately score 0.0, and a rule that confused the two would quietly start absent players.
 
     Sampled ONCE for the whole pool and keyed by player id, so a player realizes the SAME season on
     every roster he appears on — the common random numbers that make the 12-slot paired comparison
@@ -146,7 +157,8 @@ class WeeklyOutcomes:
     order: tuple[str, ...]
     index: Mapping[str, int]
     weekly: np.ndarray  # (n_draws, weeks, n_players)
-    available: np.ndarray  # (n_draws, weeks, n_players), bool
+    available: np.ndarray  # (n_draws, weeks, n_players), bool — bye AND zero-production
+    plays: np.ndarray  # (n_draws, weeks, n_players), bool — the BYE CALENDAR alone
 
     def season_totals(self) -> np.ndarray:
         """``(n_draws, n_players)`` — the quantity ``sample_season_outcomes`` draws directly."""
@@ -166,8 +178,11 @@ class WeeklyModel:
     absent_rate: Mapping[str, float]  # q: per-week zero-production probability
     plays_week: np.ndarray  # (weeks, n_players) bool — the bye calendar
     groups: Sequence[tuple[tuple[int, ...], np.ndarray]]  # (member column indices, Cholesky factor)
-    # Players whose board sigma cannot absorb the absence process — ``s**2`` solved negative and was
-    # clamped to 0, leaving them with a deterministic weekly score and no correlation. SURFACED
+    # Players whose board sigma cannot absorb the absence process — ``s**2`` solved negative and
+    # was clamped to 0. They keep NO production noise and no correlation, but they DO keep the
+    # two-point absence distribution, so their sampled season sigma EXCEEDS the board's (measured
+    # up to 1.51x on the fixture) — i.e. the marginal guarantee this module rests on is false for
+    # exactly these players. SURFACED
     # rather than silent, because a silently variance-free player is exactly the kind of degradation
     # this project keeps discovering six tiers late. Measured 2026-08-09: **0 of 305** on the real
     # board (production sd 0.68-1.17x of ``sigma/sqrt(n)``), **8 of 178** on the demo fixture, whose
@@ -216,12 +231,16 @@ class WeeklyModel:
             q = float(rates.get(pos, 0.0))
             mu, sigma = float(ctx.value[pid]), float(ctx.sigma.get(pid, 0.0))
             m = mu / (n * (1.0 - q)) if n and q < 1.0 else 0.0
-            # Solve s so that Var[sum_w] == sigma**2 EXACTLY under the absence process. A negative
-            # solution means the absence process alone already exceeds the board's season sigma;
-            # measured on the real board that happens for 0 of 300 players, so the clamp is a
-            # guard, not a regime — but it must never silently produce a NaN.
+            # Solve s so that Var[sum_w] == sigma**2 EXACTLY under the absence process. A
+            # negative solution means the absence process alone already exceeds the board's
+            # season sigma; measured 2026-08-09 that is 0 of 305 on the REAL board and 8 of 178
+            # on the demo FIXTURE, so the clamp is a guard rather than a regime — but it must
+            # never silently produce a NaN, and `degenerate` reports whoever hits it.
             variance = (sigma**2 / n - q * (1.0 - q) * m**2) / (1.0 - q) if n and q < 1.0 else 0.0
-            if variance < 0.0 and sigma > 0.0:
+            # No `and sigma > 0.0` guard: a player MISSING from ctx.sigma solves negative too,
+            # and silently gets a sampled season sigma where the board says 0. Code review
+            # measured exactly that case going unreported.
+            if variance < 0.0:
                 degenerate.append(pid)
             production_mean[pid] = m
             production_sd[pid] = float(np.sqrt(max(0.0, variance)))
@@ -288,10 +307,15 @@ class WeeklyModel:
         # A bye is a hard zero; a zero-production week is drawn independently per player-week. The
         # two are folded into ONE availability mask so the lineup rule has a single question to ask.
         present = rng.random((n_draws, self.weeks, n)) >= q
-        available = present & self.plays_week[None, :, :]
+        plays = np.broadcast_to(self.plays_week[None, :, :], (n_draws, self.weeks, n))
+        available = present & plays
         weekly = np.where(available, m + s * correlated, 0.0)
         return WeeklyOutcomes(
-            order=self.order, index=self.index, weekly=weekly, available=available
+            order=self.order,
+            index=self.index,
+            weekly=weekly,
+            available=available,
+            plays=np.ascontiguousarray(plays),
         )
 
 
@@ -301,37 +325,60 @@ def _slot_plan(slots: Sequence[StartingSlot]) -> tuple[list[Position], list[froz
     return dedicated, flex
 
 
+FORESIGHT_BYE = "bye"
+FORESIGHT_ABSENCE = "absence"
+FORESIGHT_REALIZED = "realized"
+
+
 def weekly_lineup_totals(
     roster: Sequence[str],
     outcomes: WeeklyOutcomes,
     ctx: SimContext,
     *,
-    hindsight: bool = False,
+    foresight: str = FORESIGHT_BYE,
 ) -> np.ndarray:
     """``(n_draws,)`` season total of ``roster``, summed over per-week starting lineups.
 
-    ``hindsight=False`` (the default and the honest rule) sets each week's lineup **ex ante**: the
-    best legal nine by ``mu`` among the players available that week, scored on what they then
-    realized. No hindsight anywhere. It is therefore a **lower** bound on bench value — a real
-    manager also reacts to in-season information — and that is stated rather than glossed.
+    ``foresight`` is **what the lineup-setter may know on Saturday**, and it is an explicit
+    argument because the first version of this function got it wrong in the flattering direction:
 
-    ``hindsight=True`` ranks by the realized week instead, reproducing the per-week analogue of
-    ``roster_season_values``' whole-season re-optimisation. Kept so the bracket can be REPORTED
-    rather than assumed: ``mean_lineup_value_objective`` (bench = 0) · ex-ante weekly · weekly
-    hindsight, in increasing order of what a bench is allowed to be worth.
+    * ``"bye"`` (**default, and the honest rule**) — he knows only the BYE CALENDAR, a published
+      fact. He ranks by ``mu`` among players whose team plays, and eats a zero if one of them turns
+      out to produce nothing. A strict **lower** bound on bench value: a real manager also reads an
+      inactives list.
+    * ``"absence"`` — he additionally foresees every zero-production week. An **upper** bound on
+      ex-ante play: this model's zero-production event is deliberately NOT "injury" (it counts a
+      healthy receiver who saw no targets), so no real manager could know all of it.
+    * ``"realized"`` — he ranks by the realized week itself. Full weekly hindsight; the top of the
+      bracket, reported so it can be seen rather than assumed.
+
+    The truth for a real manager lies between ``"bye"`` and ``"absence"``, and where exactly depends
+    on what share of zero-production weeks are announced inactives — a quantity ``ff_opportunity``
+    cannot answer, so this module refuses to invent it and reports the interval instead.
 
     The greedy — fill each dedicated slot with the best available player of its position, then let
     each flex slot take the best remaining eligible — is the same rule ``optimize.lineup_value``
     uses, and optimal for this roster's "dedicated + one WR/RB flex" structure for the reason that
-    function's docstring gives. Scored as a FINAL roster: no replacement phantoms, because the
+    function's docstring gives; verified against a per-``(draw, week)`` Hungarian reference as
+    **exactly** optimal on the ``mu``-ranked paths. ``"realized"`` is a greedy FLOOR on its arm
+    rather than the arm itself: the true optimum leaves a slot empty rather than starting a negative
+    week, and this always fills. Scored as a FINAL roster — no replacement phantoms, because the
     draft is over and there is no pick left to draft one.
 
-    Vectorised over ``(draw, week)``. Selection is a ``cumsum`` over the player axis, which turns
-    "the r-th player still available at this position" into one ``argsort`` plus two gathers.
-    Measured 2026-08-09: 2.53 ms per roster-scoring at 400 draws x 18 weeks, so a 4-arm 5-block
-    tournament costs about a minute — comparable to the season objective it sits beside, which it
-    has to be or replicates stop being affordable.
+    ⚠️ **Weekly scores are unclipped normals and can go negative**, which the JAAFFL map cannot
+    produce for an offensive player. ``sample_season_outcomes`` reasons about this at the SEASON
+    level and is safe because ``lineup_value`` refuses to start a sub-replacement player; that
+    justification does NOT transfer here, where the ex-ante rule starts its best ``mu`` and books
+    the loss. Measured on the fixture at real-board mu/sigma: 15-33% of played weeks are negative,
+    worst at QB. Fixing it needs a non-negative weekly distribution matched to ``(m, s)``, which
+    would move every weekly number again; recorded in ``ROADMAP.md`` as open.
+
+    Vectorised over ``(draw, week)``: one ``argsort`` per position plus two ``take_along_axis``
+    gathers per slot. Measured 2026-08-09 on the 178-player FIXTURE pool with a 17-player
+    roster: 4.71 ms per roster-scoring at 400 draws x 18 weeks.
     """
+    if foresight not in (FORESIGHT_BYE, FORESIGHT_ABSENCE, FORESIGHT_REALIZED):
+        raise ValueError(f"unknown foresight {foresight!r}")
     import numpy as np
 
     ids = [pid for pid in roster if pid in outcomes.index]
@@ -350,11 +397,30 @@ def weekly_lineup_totals(
     for pos, cols in by_position.items():
         idx = np.asarray(cols, dtype=int)
         values = outcomes.weekly[:, :, idx]
-        alive = outcomes.available[:, :, idx]
-        mu = np.array([ctx.value[outcomes.order[c]] for c in cols])
-        # Rank available players best-first; unavailable ones sink below every real key so they can
-        # never be selected, and `depth` records how many real ones there are that week.
-        key = values if hindsight else np.broadcast_to(mu, values.shape)
+        # WHAT THE LINEUP-SETTER KNOWS. `plays` is the bye calendar alone; `available` also reveals
+        # the drawn zero-production week, which is foresight rather than planning.
+        alive = (
+            outcomes.plays[:, :, idx]
+            if foresight == FORESIGHT_BYE
+            else outcomes.available[:, :, idx]
+        )
+        # Rank by EXPECTED POINTS THIS WEEK, not by season mu. A player's season total is spread
+        # over however many weeks his team plays, so `mu / n` is what a manager filling one slot
+        # actually compares — and the two orders differ. Measured on the fixture: a 257.2-point RB
+        # with 18 playable weeks (14.29/wk) outranks a 247.6-point WR with a bye (14.56/wk) by
+        # season mu and LOSES to him per week, so ranking on mu made a bench player worth -1.63.
+        # `plays[0][:, idx]` not `plays[0, :, idx]`: with an array index the latter moves the
+        # advanced axis to the front, so the sum would run over the wrong axis.
+        played_weeks = outcomes.plays[0][:, idx].sum(axis=0).astype(float)
+        mu = np.array(
+            [
+                ctx.value[outcomes.order[c]] / max(1.0, n)
+                for c, n in zip(cols, played_weeks, strict=True)
+            ]
+        )
+        # Rank selectable players best-first; the rest sink below every real key so they can never
+        # be chosen, and `depth` records how many real ones there are that week.
+        key = values if foresight == FORESIGHT_REALIZED else np.broadcast_to(mu, values.shape)
         order = np.argsort(np.where(alive, key, -np.inf), axis=2)[:, :, ::-1]
         realized[pos] = values
         ranked[pos] = order
@@ -391,7 +457,7 @@ def weekly_lineup_totals(
         winner: dict[Position, np.ndarray] = {}
         for pos in sorted(eligible, key=lambda p: p.value):
             value, mu, ok = peek(pos)
-            key = np.where(ok, value if hindsight else mu, -np.inf)
+            key = np.where(ok, value if foresight == FORESIGHT_REALIZED else mu, -np.inf)
             take = ok & (key > best_key)
             best_value = np.where(take, value, best_value)
             best_key = np.where(take, key, best_key)

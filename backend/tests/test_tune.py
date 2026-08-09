@@ -467,7 +467,10 @@ def test_the_weekly_objective_prices_a_bench_player_above_zero() -> None:
     """
     from jaaffl.calibrate.tune import WeeklyPointsObjective, mean_lineup_value_objective
 
-    ctx = _sigma_ctx()
+    # Byes matter here: under the DEFAULT (bye-only) information set a bench player cannot cover an
+    # unforeseeable zero-production week, so his entire value is bye coverage and a context with no
+    # byes would price him at exactly 0.00 — correctly, and vacuously.
+    ctx = dataclasses.replace(_sigma_ctx(), bye_week={"rb0": 5, "rb1": 9, "wr0": 12, "qb0": 6})
     # `_small_settings` starts QB + RB + WR + WR/RB, and on this pool every RB outranks every WR,
     # so the flex takes rb1: these four fill all four starting slots and rb2 cracks none of them.
     # (The first draft of this test used a roster that did NOT fill the flex, so the "bench" player

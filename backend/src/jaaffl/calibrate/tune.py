@@ -85,6 +85,11 @@ def sim_context_from_draft_context(dc: DraftContext) -> SimContext:
         adp=dict(dc.adp_mean),
         adp_stdev=dict(dc.adp_sd),
         sigma=sigma,
+        # ⚠️ DISCLOSED, not corrected: `cliff_bonus` is a DraftContext artifact computed from
+        # static MLV on the SHRUNK mu, so it now sits beside a `value` that is raw. Recomputing
+        # it for the harness would put the harness and the live engine on different cliffs,
+        # which is the worse of the two errors. Impact is small — most cliff bonuses are 0.0 —
+        # and it only ever reaches a score through `alpha`.
         cliff_bonus=dict(dc.cliff_bonus),
         roster_capacity=roster_capacity(dc.settings),
         # A measured board FACT, always carried. Only an agent constructed with
@@ -139,6 +144,8 @@ def cap_sim_pool(ctx: SimContext, cap: int, *, per_position: int = 20) -> SimCon
         adp_stdev=trim(ctx.adp_stdev),
         sigma=trim(ctx.sigma),
         cliff_bonus=trim(ctx.cliff_bonus),
+        bye_week=trim(ctx.bye_week),
+        nfl_team=trim(ctx.nfl_team),
     )
 
 
@@ -415,18 +422,28 @@ class _WeeklyBlock:
 
     def __init__(self, *, n_draws: int) -> None:
         self._n_draws = n_draws
-        self._cache: dict[tuple[int, int], tuple[SimContext, object, object]] = {}
+        self._key: tuple[int, int] | None = None
+        self._held: tuple[SimContext, object] | None = None
 
     def outcomes(self, ctx: SimContext, seed: int):
+        """The block for ``(ctx, seed)``, holding exactly ONE at a time.
+
+        A weekly block is ``(draws, weeks, players)`` — 19.8 MB on the real board at 400 draws — and
+        a tournament runs 40 distinct seeds against one context, so an unbounded cache would retain
+        ~790 MB against ``WinProbabilityObjective``'s ~78 MB. Seeds are consumed in order and never
+        revisited within a block, so one entry is all the sharing the two weekly objectives need.
+        The strong ref to ``ctx`` is what makes keying on ``id`` safe.
+        """
         from jaaffl.engine.weekly import WeeklyModel
 
         key = (id(ctx), seed)
-        cached = self._cache.get(key)
-        if cached is None or cached[0] is not ctx:
-            model = WeeklyModel.from_context(ctx)
-            cached = (ctx, model, model.sample(n_draws=self._n_draws, seed=seed))
-            self._cache[key] = cached
-        return cached[2]
+        if self._key != key or self._held is None or self._held[0] is not ctx:
+            self._key = key
+            self._held = (
+                ctx,
+                WeeklyModel.from_context(ctx).sample(n_draws=self._n_draws, seed=seed),
+            )
+        return self._held[1]
 
 
 class WeeklyWinProbabilityObjective:
@@ -571,7 +588,11 @@ def run_tournament(
         raise ValueError("run_tournament needs at least one contender")
     if not seed_blocks or any(not block for block in seed_blocks):
         raise ValueError("run_tournament needs at least one non-empty seed block")
-    scored: Mapping[str, SimObjective | None] = objectives or default_objectives(draws=draws)
+    # `weekly_draws=draws` on purpose: leaving it at its own default meant `--draws 800` printed
+    # 800 while the two weekly objectives quietly ran 400 (found in code review).
+    scored: Mapping[str, SimObjective | None] = objectives or default_objectives(
+        draws=draws, weekly_draws=draws
+    )
     # objective -> agent -> block -> per-slot scores
     raw: dict[str, dict[str, list[list[float]]]] = {name: {} for name in scored}
     for agent_name, agent in contenders.items():

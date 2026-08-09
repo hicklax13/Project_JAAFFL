@@ -420,7 +420,7 @@ total of the 12)` over seasons sampled from `N(μ, σ)` — against a disjoint s
   scorekeeper — real bye weeks, real injury/no-show rates, and the fact that a quarterback and his
   own receivers have good weeks together — because the old one had no concept of a week at all and
   therefore valued your entire bench at exactly **zero**. On that scorekeeper the setting-off engine
-  comes out **ahead** of best-available on championship odds (0.1192 vs 0.1086), and by enough to
+  comes out **ahead** of best-available on championship odds (0.1288 vs 0.1138), and by enough to
   clear the significance bar.
 
   ⚠️ **That would be the first time this engine has ever beaten the naive baseline on championship
@@ -430,8 +430,12 @@ total of the 12)` over seasons sampled from `N(μ, σ)` — against a disjoint s
   the shape of the findings that had to be withdrawn. It needs an independent re-run before it means
   anything.
 
+  It also had to be corrected once during this tier: the first version of the week-by-week
+  scorekeeper let the imaginary manager see, before setting his lineup, which of his players would
+  have a blank week. Real managers cannot. Fixed, and the honest version is the one quoted here.
+
   What both scorekeepers **do** agree on: the setting-off engine beats best-available on **points**
-  (+36 and +35, both solidly measured), and turning the setting off is worth an enormous amount
+  (+36 and +37, both solidly measured), and turning the setting off is worth an enormous amount
   against your current config on every measure tried. That is the decision on your desk, and it is
   unaffected by which scorekeeper is right.
 
