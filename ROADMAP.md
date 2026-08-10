@@ -69,7 +69,7 @@ canonical ids. Real board, 581 players, **the same board fed to both arms**, ADP
 | arm                          | candidates with `vona > 0`   | top recommendation            |
 | ---------------------------- | ---------------------------- | ----------------------------- |
 | shipped (`draft_order` None) | **0 / 50, in all 17 rounds** | —                             |
-| order supplied               | 1–13 / 50                    | **differs in 3 of 17 rounds** |
+| order supplied               | 0–13 / 50                    | **differs in 3 of 17 rounds** |
 
 `config/engine.json` sets `kappa: 0.65`, and it multiplies `max(0, VONA)` — a term that was
 **identically zero on every live pick**. ⚠️ Do not quote the "5 of 17 picks differ" from the
@@ -95,22 +95,45 @@ overall 4  push  my_slot    7.3 ms   ... ~6 ms for every row after
 ```
 
 Reproduced standalone at **268.6 / 0.6 / 0.5 / 0.5 ms**. `engine/opponents.py` and
-`engine/optimize.py` import numpy and scipy **lazily, inside the hot path**, so the owner's FIRST
-PICK paid ~265 ms of import against a documented <200 ms budget and a live clock.
+`engine/optimize.py` import numpy and scipy **lazily, inside the hot path**, so the FIRST RECOMPUTE
+of a draft paid ~265 ms of import against a documented <200 ms budget and a live clock. (Precisely:
+the first recompute fires on the first ingested event — the evidence above says `overall 2` — which
+is normally before the owner's own pick rather than at it.)
 
 ⚠️ **`test_engine_latency.py` is structurally unable to catch it.** It measures **p95 over repeated
 calls in an already-warm process** and calls that "the pick-1 worst case". One 268 ms sample among
 nineteen 0.5 ms ones does not move p95 at all, and by the time it runs some earlier test has
-usually imported scipy anyway. Warmed at precompute, where every other one-time cost already lives.
-Measured after: **6.3 / 6.1 / 6.8 ms**.
+usually imported scipy anyway.
+
+⚠️ **The first fix was instance NINE reproduced by instance NINE's own fix, and code review caught
+it.** Warming inside `precompute` is not enough, because precompute is **lazy on first use** — so
+the warm-up ran inside the very request that served the first recompute. Measured: the first
+request went **245 ms → 309-326 ms** while `recompute_ms` reported **1.2 ms**. The cost left the
+METRIC without leaving the REQUEST, and `rehearsal_report.py`'s latency verdict could no longer see
+it. It is now paid at `create_app`, before any request exists, and pinned by a fresh-interpreter
+test rather than a source grep. `recompute_ms` after: **6.3 / 6.1 / 6.8 ms**, with the import cost
+genuinely gone from the request.
 
 ### 🔴 FINDING C — the dashboard and the overlay disagreed about the same draft
 
 Tier 3 wired `jaaffl_my_team_id` into the **push** path only, and `apps/web/lib/api.ts:38` calls
 `/recommendation?league_id=...` with **no `team_id`** — so the dashboard rendered
 `survival_basis="degraded_no_slot"` while the overlay beside it rendered `my_slot`, on the same
-board, with the quieter surface wrong. The configured slot is now the default on both paths; an
-explicit `?team_id=` still wins, so auditing another seat stays possible.
+board, with the quieter surface wrong.
+
+⚠️ **Stated precisely, because code review caught the overstatement.** That disagreement was
+**not reachable on shipped code**: at `4f7442b` `resolve_league_settings` returned `draft_order=None`
+unconditionally, so BOTH paths degraded and neither could reach `my_slot`. It was found on a server
+already carrying this tier's own Finding-A fix, and it would have bitten on draft night with that
+fix in place. Real defect, correctly fixed — but it is Finding A's consequence, not an independent
+shipped one.
+
+The configured slot is now the default on both paths; an explicit `?team_id=` still wins, so
+auditing another seat stays possible. ⚠️ Code review also caught the first version of that fix
+**introducing** a regression: `JAAFFL_MY_TEAM_ID=` in the owner's real `.env` parses as `''`, not
+`None`, so an `is not None` test overwrote a slot the FOLD already knew with an empty string. Both
+paths now use truthiness and fill only when absent, and `/analytics` — which needs the slot as well
+as the order, and which no extension frame supplies — was given the same rule.
 
 ### 🔴 FINDING D — a stale full-board resync rolled the draft backwards
 

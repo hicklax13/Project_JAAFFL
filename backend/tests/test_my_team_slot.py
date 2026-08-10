@@ -151,3 +151,63 @@ class TestThePullPathGetsTheSlotToo:
         client.post("/draft/events", json=pick_payload(1))
         body = client.get("/recommendation", params={"league_id": "L1"}).json()
         assert body["survival_basis"] == "degraded_no_slot"
+
+    def test_an_EMPTY_configured_slot_does_not_clobber_a_folded_one(self, tmp_path: Path) -> None:
+        """⚠️ Found in code review — a regression Tier 12 introduced, reachable with the owner's
+        real .env. `JAAFFL_MY_TEAM_ID=` parses as '' (not None), so `if resolved is not None`
+        overwrote a slot the fold already knew with an empty string. The push path was never
+        affected: it fills only when absent and tests truthiness. The two paths must agree."""
+        client = TestClient(_app(tmp_path, jaaffl_my_team_id=""))
+        client.post("/draft/events", json=pick_payload(1))
+        client.post(
+            "/draft/events",
+            json={
+                "event_type": "league_settings",
+                "league_id": "L1",
+                "data": {"team_count": 12, "my_team_id": "t0"},
+            },
+        )
+        body = client.get("/recommendation", params={"league_id": "L1"}).json()
+        assert body["survival_basis"] == "my_slot"
+
+
+class TestTheDashboardsMarkersAreLiveToo:
+    """⚠️ Found in code review, and it is instance EIGHT committed by Tier 12's own new test.
+
+    `analytics._marker_picks` needs BOTH the room's order and my slot. Tier 12 wired the order and
+    declared the dashboard fixed — but `grep -rn my_team_id apps/extension/src/` returns NOTHING,
+    so the folded state never carries a slot on the live path, and the markers stayed empty. The
+    test that said otherwise passed only because its fixture supplied a slot by hand.
+
+    This one drives the API with the exact event shape the extension emits, so it can only pass if
+    the WIRING produces both inputs.
+    """
+
+    @staticmethod
+    def _order_event() -> dict:
+        return {
+            "event_type": "league_settings",
+            "league_id": "L1",
+            "source": "ws",
+            "data": {
+                "league_id": "L1",
+                "team_count": 12,
+                "draft_order": [f"t{i}" for i in range(12)],
+            },
+        }
+
+    def test_markers_are_live_from_the_wiring_alone(self, tmp_path: Path) -> None:
+        client = TestClient(_app(tmp_path, jaaffl_my_team_id="t0"))
+        assert client.post("/draft/events", json=self._order_event()).status_code == 200
+        client.post("/draft/events", json=pick_payload(1))
+        body = client.get("/analytics", params={"league_id": "L1"}).json()
+        assert body["my_next_picks"], "markers empty: the live wiring cannot supply order + slot"
+
+    def test_without_a_configured_slot_the_markers_degrade_rather_than_lie(
+        self, tmp_path: Path
+    ) -> None:
+        client = TestClient(_app(tmp_path))
+        client.post("/draft/events", json=self._order_event())
+        client.post("/draft/events", json=pick_payload(1))
+        body = client.get("/analytics", params={"league_id": "L1"}).json()
+        assert body["my_next_picks"] == []

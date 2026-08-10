@@ -77,6 +77,12 @@ def test_the_pick_SET_is_identical_when_the_DELTAS_race_each_other(capture) -> N
     ⚠️ Also deliberately not asserted: ``current_overall_pick``. A ticker ``draft_state`` is
     absolutely authoritative over the clock by design — CBS can pause or rewind a room — so an
     arbitrary last ticker legitimately reports an arbitrary clock, and the next tick corrects it.
+
+    ⚠️ **This test is close to tautological, and code review said so.** Given append-idempotent
+    fold semantics the pick SET is invariant under *every* permutation, so the seed is decorative
+    and it passes with the resync guard removed. What it actually protects is narrow but real:
+    that ``fold_state`` imposes NO ordering constraint on ``pick_made``. The load-bearing disorder
+    tests are ``TestAResyncCanNeverLoseAPick`` below.
     """
     ordered = fold_state(capture)
     head = [
@@ -192,3 +198,78 @@ def test_a_resync_that_EXTENDS_the_board_is_adopted() -> None:
     folded = fold_state([have, later])
     assert sorted(p.overall for p in folded.picks) == [1, 2, 3, 4, 5, 6]
     assert folded.current_overall_pick == 7
+
+
+def _pick_event(seq: int, overall: int) -> LoggedEvent:
+    return LoggedEvent(
+        seq=seq,
+        league_id="cbs-live",
+        event_type=DraftEventType.PICK_MADE,
+        pick_number=overall,
+        data={
+            "overall": overall,
+            "round": 1,
+            "pick_in_round": overall,
+            "team_id": "1",
+            "player_id": f"gsis:p{overall}",
+        },
+        source="ws",
+        captured_at="2026-07-25T15:45:18.000Z",
+    )
+
+
+class TestAResyncCanNeverLoseAPick:
+    """⚠️ Found in code review. Tier 12's first staleness guard compared MAX overall and SKIPPED
+    the snapshot when it lost — which is wrong in BOTH directions, both measured:
+
+    * one pick delta winning the race against the connect snapshot made `incoming(99) <
+      current(100)`, so the whole snapshot was discarded and folded 1 pick instead of 99 —
+      **Tier 3's exact defect resurrected**, with snapshot-only picks left unmasked and
+      recommendable mid-draft;
+    * a same-MAX snapshot with FEWER picks passed the `<` test and was adopted wholesale, losing
+      a pick that had arrived as a delta.
+
+    The predicate was the mistake, not its direction. Picks are now UNIONED by `overall`, which
+    cannot lose one under any arrival order; the staleness test survives for the CLOCK alone,
+    where the measured 169 -> 149 rollback lives.
+    """
+
+    def test_a_delta_that_beats_the_connect_snapshot_does_not_discard_it(self) -> None:
+        folded = fold_state(
+            [_pick_event(1, 100), _state_event(2, overall=100, picks=list(range(1, 100)))]
+        )
+        assert len(folded.picks) == 100
+        assert any(p.overall == 55 for p in folded.picks), "a snapshot-only pick was lost"
+        assert any(p.overall == 100 for p in folded.picks), "the delta was lost"
+
+    def test_a_same_max_snapshot_with_fewer_picks_does_not_drop_one(self) -> None:
+        kept = [o for o in range(1, 101) if o != 55]
+        folded = fold_state(
+            [
+                _state_event(1, overall=101, picks=kept),
+                _pick_event(2, 55),
+                _state_event(3, overall=101, picks=kept),
+            ]
+        )
+        assert any(p.overall == 55 for p in folded.picks), "the delta-only pick was dropped"
+        assert len(folded.picks) == 100
+
+    def test_the_snapshots_version_of_a_pick_wins_over_an_older_one(self) -> None:
+        """A union must still let an authoritative resync CORRECT a pick, not just add to it."""
+        stale = LoggedEvent(
+            seq=1,
+            league_id="cbs-live",
+            event_type=DraftEventType.PICK_MADE,
+            pick_number=5,
+            data={"overall": 5, "round": 1, "pick_in_round": 5, "team_id": "1"},
+            source="ws",
+            captured_at="2026-07-25T15:45:18.000Z",
+        )
+        folded = fold_state([stale, _state_event(2, overall=6, picks=[5])])
+        assert [p.player_id for p in folded.picks] == ["gsis:p5"]
+
+    def test_a_stale_snapshot_still_does_not_roll_the_CLOCK_back(self) -> None:
+        """The measured symptom that motivated the guard: 275 real frames with the resync moved
+        last rolled current_overall_pick from 169 back to 149."""
+        folded = fold_state([_pick_event(1, 100), _state_event(2, overall=4, picks=[1, 2, 3])])
+        assert folded.current_overall_pick == 101

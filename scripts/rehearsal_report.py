@@ -48,7 +48,9 @@ class Verdict:
 
 def _pct(values: list[float], q: float) -> float:
     ordered = sorted(values)
-    return ordered[min(len(ordered) - 1, int(q * len(ordered)))]
+    # int(q * len) overshoots for small n and returns the max, making p95 a duplicate of the
+    # max column. The verdict reads `max` directly, so this only ever affected the detail string.
+    return ordered[max(0, min(len(ordered) - 1, int(q * (len(ordered) - 1))))]
 
 
 def evaluate(rows: list[dict]) -> list[Verdict]:

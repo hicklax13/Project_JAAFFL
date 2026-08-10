@@ -327,7 +327,7 @@ def test_preflight_exits_nonzero_when_a_startable_position_is_missing(preflight)
 
 def test_preflight_exits_zero_when_every_startable_position_is_fillable(preflight) -> None:
     module, holder, tmp_path = preflight
-    # _full_board() (four per startable position) plus a bench-only extra: depth is irrelevant to
+    # _full_board() (ten per startable position) plus a bench-only extra: depth is irrelevant to
     # the coverage verdict this test asserts, but Tier 12's survival guard needs SOME scarcity to
     # price — one player per position makes everyone the best available at his own position, so
     # VONA is structurally 0.00 and the guard correctly reports a board pricing no scarcity.

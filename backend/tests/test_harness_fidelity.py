@@ -451,6 +451,13 @@ class TestInstanceEight_TheFixtureSuppliedWhatTheWiringDropped:
         Asserted structurally rather than assumed, because "this cannot possibly move the numbers"
         is precisely how Tier 10's config/code coupling was missed. If this fails, STOP: the tier
         does move the tournament numbers and the ROADMAP block must say so and re-measure.
+
+        ⚠️ Code review pointed out that the grep is WEAKER than the reason it stands for, and the
+        stronger reason should be recorded here: ``calibrate/`` and ``engine/simulate.py`` never
+        call ``recommend()`` at all (``calibrate/tune.py`` states this), so ``effective_settings``
+        is unreachable from the harness and no simulated ``DraftState`` ever carries a
+        ``draft_order``. The grep would not catch a TRANSITIVE behaviour change; that argument
+        would.
         """
         from pathlib import Path
 

@@ -42,7 +42,7 @@ of each build phase on purpose — nothing here blocks the automated build unles
 > that could not fix it.
 >
 > Measured on your real board: **0 of 50** ranked players carried a scarcity number in any of the
-> 17 rounds. With the order wired through, 1–13 do, and the top recommendation changes in **3 of
+> 17 rounds. With the order wired through, 0–13 do, and the top recommendation changes in **3 of
 > 17 rounds**. Both halves are wired now, and the morning preflight **fails loudly** if either is
 > missing. Nothing about your engine's settings changed.
 >

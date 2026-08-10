@@ -3,7 +3,8 @@
 Measured 2026-08-10 on the real board (581 players): with ``settings.draft_order`` None, ZERO of
 50 ranked candidates carry a positive VONA in ANY of the 17 rounds, so ``kappa * max(0, VONA)`` —
 kappa 0.65 in ``config/engine.json`` — contributes exactly nothing to every live pick. Supplying
-the order moves the top recommendation in 3 of 17 rounds on an identical board.
+the order moves the top recommendation in 3 of 17 rounds on an identical board, and the
+per-round positive-VONA count runs 0-13 (round 13 measures 0; the range is not 1-13).
 
 Why no test saw it: ``engine_fixtures.make_context()`` defaults to
 ``jaaffl_settings(draft_order=teams(12))``, so every engine test in the suite — including Tier 3's

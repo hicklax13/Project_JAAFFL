@@ -12,6 +12,7 @@ fail because a log line could not be written.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -38,14 +39,18 @@ class RehearsalLog:
         path_label: str,
         state: DraftState,
         rec: Recommendation,
-        context: DraftContext | None,
+        context: Callable[[], DraftContext | None],
     ) -> None:
-        """Append one row. Swallows EVERY exception on purpose — see the module docstring."""
+        """Append one row. Swallows EVERY exception on purpose — see the module docstring.
+
+        ``context`` is a THUNK, resolved only after the enabled check, so a switched-off sink puts
+        no work on the hot path at all (it was a cache hit either way, but a disabled feature
+        should cost nothing)."""
         if self._path is None:
             return
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            row = json.dumps(self._row(path_label, state, rec, context))
+            row = json.dumps(self._row(path_label, state, rec, context()))
             with self._path.open("a", encoding="utf-8", newline="\n") as fh:
                 fh.write(row + "\n")
         except Exception:  # noqa: BLE001 — fail-soft is the whole point; see the module docstring
