@@ -7,7 +7,6 @@ The load-bearing invariant is that every RecommendedPick's ``score`` reconstruct
 from __future__ import annotations
 
 import dataclasses
-import time
 
 import pytest
 
@@ -222,41 +221,54 @@ def test_mc_vona_degrades_to_analytic_without_a_readable_draft_order() -> None:
     assert rec.vona_method == "analytic"
 
 
-def test_mc_vona_honours_the_mc_rollouts_budget_knob() -> None:
+def test_mc_vona_honours_the_mc_rollouts_budget_knob(monkeypatch) -> None:
     """MC is NOT free: measured p95 ≈ 1.14 s at the shipped mc_rollouts=2000 on the pick-1 worst
     case, against the plan's <2 s MC budget (analytic stays ≈9 ms). `mc_rollouts` therefore has to
-    be a real lever — it is how the owner trades estimate precision for latency."""
+    be a real lever — it is how the owner trades estimate precision for latency.
+
+    ⚠️ This asserted a RATIO between two wall-clock samples (`dear_ms > cheap_ms * 3.0`) until
+    2026-08-10, when it failed once during a full suite run while the machine was loaded by
+    background servers and subprocess tests — and passed 12/12 in isolation immediately after. A
+    test that can fail on machine load is noise in CI, and noise gets trained away.
+
+    So it now asserts the LEVER instead of the latency: that `mc_rollouts` actually arrives at
+    `simulate.mc_expected_best_available` as `n_sims`. That is the property the knob IS, it is
+    deterministic, and it is strictly STRONGER than the timing version — the old assertion could
+    only infer the knob was connected from a ratio it hoped was signal, and with `dear` mutated
+    down to `cheap`'s count it survived 4 runs in 6 before the margin was widened.
+
+    The cost claim in the first paragraph stays as a recorded measurement rather than an
+    assertion. Nothing wall-clock guards it now, and that is deliberate: MC is opt-in
+    (`mc_enabled: false` in config/engine.json) and off the draft-night path entirely, while the
+    budget that does matter — the <200 ms ANALYTIC recompute — is held by
+    `tests/test_engine_latency.py` and `tests/test_cold_start_latency.py`.
+    """
+    import jaaffl.engine.simulate as simulate
+
     ctx = make_context(_board())
     state = draft_state(3)
-    cheap = engine_params(mc_rollouts=100)
-    dear = engine_params(mc_rollouts=1000)
 
-    # Warm up FIRST. `engine.simulate` (and the SciPy/NumPy it pulls) is imported lazily on the
-    # first MC call, and that one-off import dwarfs the rollout cost being compared — measured
-    # 941 ms of import landing inside `cheap_ms` against 145 ms for 100x the rollouts. This used
-    # to be paid by accident, because `assign_tiers` imported sklearn (hence NumPy/SciPy) during
-    # `make_context`; Tier 5 dropped that dependency, so the warm-up has to be explicit rather
-    # than a side effect of an unrelated module's imports.
-    recommend(state, ctx, cheap, limit=5, use_mc_vona=True)
+    seen: list[int] = []
+    real = simulate.mc_expected_best_available
 
-    start = time.perf_counter()
-    lo = recommend(state, ctx, cheap, limit=5, use_mc_vona=True)
-    cheap_ms = (time.perf_counter() - start) * 1000.0
+    def spy(*args, n_sims: int, **kwargs):
+        seen.append(n_sims)
+        return real(*args, n_sims=n_sims, **kwargs)
 
-    start = time.perf_counter()
-    hi = recommend(state, ctx, dear, limit=5, use_mc_vona=True)
-    dear_ms = (time.perf_counter() - start) * 1000.0
+    # `_mc_expected_best` imports the symbol INSIDE the function, so patching the module attribute
+    # is what the call actually resolves.
+    monkeypatch.setattr(simulate, "mc_expected_best_available", spy)
+
+    lo = recommend(state, ctx, engine_params(mc_rollouts=100), limit=5, use_mc_vona=True)
+    hi = recommend(state, ctx, engine_params(mc_rollouts=1000), limit=5, use_mc_vona=True)
 
     assert lo.vona_method == "monte_carlo" and hi.vona_method == "monte_carlo"
-    # Both arms sit well clear of fixed overhead, and the assertion demands a MARGIN. Measured
-    # warm on this board: 4 rollouts → 3.9 ms, 400 → 93 ms, 2000 → 502 ms, i.e. ~0.225 ms per
-    # rollout over ~3 ms of fixed cost. The old 4-vs-400 pair therefore spent 77% of `cheap_ms`
-    # on overhead the knob does not control, and asserted a bare `<` on two ~4 ms samples — with
-    # `dear` mutated down to `cheap`'s rollout count that survived 4 runs in 6, then 2 in 6 once
-    # a 3x margin was added. 100 vs 1000 is ~25 ms vs ~228 ms: a 9x real gap against a 3x floor,
-    # and a mutated-equal pair now has to produce a 3x swing at 228 ms to sneak through.
-    assert dear_ms > cheap_ms * 3.0, "mc_rollouts does not drive cost — the budget knob is inert"
+    assert seen, "the simulator was never reached — MC VONA silently fell back to analytic"
+    assert set(seen) == {100, 1000}, (
+        f"mc_rollouts does not reach the simulator — the budget knob is inert (n_sims seen: {seen})"
+    )
     assert "100 rollouts" in (lo.reasoning or "")
+    assert "1000 rollouts" in (hi.reasoning or "")
 
 
 def test_the_analytic_hot_path_never_imports_the_simulator() -> None:
