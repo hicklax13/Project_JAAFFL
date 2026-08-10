@@ -222,6 +222,34 @@ def fold_state(events: Iterable[LoggedEvent]) -> DraftState:
                     state = state.model_copy(update={"draft_order": teams})
         elif ev.event_type == DraftEventType.DRAFT_STATE:
             snap = DraftState.model_validate({"league_id": ev.league_id, **ev.data})
+            # A full-board resync REPLACES the board and the clock, and a `draft_state` carries no
+            # pick_number — so `_dedup_pick_number` returns None for it and the storage layer
+            # cannot de-dup it. Meanwhile `lib/transport.ts::send` queues an event for WS flush on
+            # reconnect AND mirrors it over REST immediately, so the SAME subscribe/response
+            # snapshot legitimately arrives twice on a reconnect, with the second copy landing
+            # after every pick that came in between.
+            #
+            # Measured on the real Tier-3 capture: replaying its 275 frames with the single resync
+            # moved from index 0 to index 266 folded 9 picks instead of 168, and rolled the clock
+            # from 169 back to 149. A snapshot describing an OLDER board than the one already
+            # folded is stale by definition, so the whole event is skipped — clock included.
+            # Ignoring it cannot lose a pick; applying it loses 159.
+            #
+            # Scoped deliberately to RESYNC frames. A plain ticker `draft_state` stays absolutely
+            # authoritative over the clock, because CBS can legitimately pause or rewind a room and
+            # this project has no evidence that a stale ticker is reachable — the next tick
+            # corrects it either way.
+            if "picks" in ev.data:
+                incoming = max((p.overall for p in snap.picks), default=0)
+                current = max((p.overall for p in state.picks), default=0)
+                if incoming < current:
+                    log.warning(
+                        "draft_state_resync_ignored_as_stale",
+                        league_id=ev.league_id,
+                        incoming_max_overall=incoming,
+                        current_max_overall=current,
+                    )
+                    continue
             update: dict = {
                 "current_overall_pick": snap.current_overall_pick,
                 "on_the_clock_team_id": snap.on_the_clock_team_id,

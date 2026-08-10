@@ -13,11 +13,10 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from jaaffl.config import EngineParams
+from jaaffl.config import Settings
 from jaaffl.domain import LeagueSettings, Player, Position, RosterSlot
 from jaaffl.league.coverage import (
     board_coverage_gaps,
@@ -204,35 +203,77 @@ def _load_preflight():
 
 
 def _fake_context(board: dict[str, Position], *, cliffs: dict | None = None):
-    """Enough of a DraftContext for preflight: settings + mu + position + tier-cliff + byes.
+    """A REAL DraftContext for preflight, with the tier/cliff shape under test injected.
 
-    ``players``/``bye_week`` are populated (rather than omitted) because the real ``DraftContext``
-    always carries them, and a fixture thinner than the object under test only proves the fixture.
+    Was a SimpleNamespace until Tier 12, whose fourth guard calls the real ``recommend()`` — and
+    the namespace had no ``flex_split``, so it AttributeError'd. That is the failure its own
+    docstring predicted ("a fixture thinner than the object under test only proves the fixture"),
+    so it is built from ``engine_fixtures.make_context`` now rather than widened by one attribute.
+
+    ``mu`` descends across the board so the survival probe has a real value gradient to price; a
+    flat board would make VONA zero everywhere and the guard would fire for the wrong reason.
     """
+    import dataclasses
+
+    from tests.engine_fixtures import make_context
+
     tiers, cliff_bonus, cliff_position = _tiered(**(cliffs if cliffs is not None else _LIVE_BOARD))
-    return SimpleNamespace(
-        settings=_settings(),
-        params=EngineParams(),
-        mu=dict.fromkeys(board, 1.0),
-        position={**cliff_position, **board},
+    # Interleaved by position with a within-position value gradient, i.e. the shape of a real
+    # board rather than blocks of one position. A flat or block-ordered board leaves every
+    # candidate the best available at his own position, so expected_best_available equals his own
+    # MLV and VONA is 0.00 for all of them — which Tier 12's survival guard correctly reads as a
+    # board that prices no scarcity (the very failure an unseeded crosswalk produced live:
+    # `ffc_adp kept=0` with every recommendation carrying vona 0.0).
+    by_position: dict[Position, list[str]] = {}
+    for pid, pos in board.items():
+        by_position.setdefault(pos, []).append(pid)
+    specs = []
+    for pos, pids in by_position.items():
+        for rank, pid in enumerate(pids):
+            specs.append(
+                {
+                    "pid": pid,
+                    "pos": pos,
+                    "mu": 300.0 - 40.0 * rank,
+                    "adp": float(rank * len(by_position) + len(specs) % len(by_position) + 1),
+                    "sd": 8.0,
+                    "ecr": float(rank * len(by_position) + 1),
+                }
+            )
+    context = make_context(specs, settings=_settings())
+    return dataclasses.replace(
+        context,
         tiers=tiers,
         cliff_bonus=cliff_bonus,
-        players={
-            pid: Player(player_id=pid, name=pid, position=pos, nfl_team="SEA")
-            for pid, pos in board.items()
-        },
+        position={**cliff_position, **context.position},
         bye_week=dict.fromkeys(board, 5),
     )
 
 
 def _full_board() -> dict[str, Position]:
+    """Ten players per startable position, not one.
+
+    One-per-position satisfied the coverage guards but priced no SCARCITY: every player was the
+    best available at his own position, so ``expected_best_available`` fell back to the
+    replacement baseline and VONA came out NEGATIVE for all of them (measured: mlv 120.00,
+    vona −40.32). Tier 12's survival guard reads that as a board on which the scarcity term is
+    dead — correctly, because a board with no tail cannot express scarcity.
+
+    Measured depth sweep (positive-VONA candidates from ``preflight.survival_probe``):
+    4 -> 0, 10 -> 30, 20 -> 20, 30 -> 20. Ten is the smallest realistic tail, and the real 2026
+    board carries 581 players.
+    """
     return {
-        "a": Position.QB,
-        "b": Position.RB,
-        "c": Position.WR,
-        "d": Position.TE,
-        "e": Position.K,
-        "f": Position.DST,
+        f"{letter}{i}": position
+        for letter, position in (
+            ("a", Position.QB),
+            ("b", Position.RB),
+            ("c", Position.WR),
+            ("d", Position.TE),
+            ("e", Position.K),
+            ("f", Position.DST),
+        )
+        for i in range(10)
     }
 
 
@@ -268,6 +309,10 @@ def preflight(monkeypatch, tmp_path):
         "build_registry_context_source",
         lambda *a, **k: lambda league_id: holder.get("context"),
     )
+    # Tier 12's fourth guard reads the configured draft slot, which is deliberately EMPTY in the
+    # owner's real .env until draft morning. These tests are about the BOARD guards, so the slot
+    # is supplied here; the guard itself is pinned by its own test below.
+    monkeypatch.setattr(module, "get_settings", lambda: Settings(jaaffl_my_team_id="7"))
     return module, holder, tmp_path
 
 
@@ -282,17 +327,11 @@ def test_preflight_exits_nonzero_when_a_startable_position_is_missing(preflight)
 
 def test_preflight_exits_zero_when_every_startable_position_is_fillable(preflight) -> None:
     module, holder, tmp_path = preflight
-    holder["context"] = _fake_context(
-        {
-            "a": Position.QB,
-            "b": Position.RB,
-            "c": Position.WR,
-            "d": Position.TE,
-            "e": Position.K,
-            "f": Position.DST,
-            "g": Position.LB,  # bench-only extras never affect the verdict
-        }
-    )
+    # _full_board() (four per startable position) plus a bench-only extra: depth is irrelevant to
+    # the coverage verdict this test asserts, but Tier 12's survival guard needs SOME scarcity to
+    # price — one player per position makes everyone the best available at his own position, so
+    # VONA is structurally 0.00 and the guard correctly reports a board pricing no scarcity.
+    holder["context"] = _fake_context({**_full_board(), "g0": Position.LB})
     assert module.main(["--data-dir", str(tmp_path)]) == 0
 
 
