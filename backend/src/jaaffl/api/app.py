@@ -277,8 +277,14 @@ def create_app(
                     "picks": [p for p in state.picks if p.overall < as_of_overall_pick],
                 }
             )
-        if team_id is not None:
-            state = state.model_copy(update={"my_team_id": team_id})
+        # An explicit ?team_id= wins (auditing another seat's board stays possible); otherwise the
+        # configured slot is the DEFAULT here exactly as it is on the push path. Without this the
+        # dashboard (apps/web/lib/api.ts sends no team_id) rendered a degraded model while the
+        # overlay beside it rendered a live one, on the same draft — and the quieter surface was
+        # the wrong one. Measured 2026-08-10 against a running server.
+        resolved_team_id = team_id if team_id is not None else settings.jaaffl_my_team_id
+        if resolved_team_id is not None:
+            state = state.model_copy(update={"my_team_id": resolved_team_id})
         state = _resolve_state(state, league_id)
         rec = app.state.rec_engine.recommend(state, limit=limit, use_mc=mc)
         if rec is None:

@@ -124,3 +124,30 @@ class TestThePushPathGetsTheSlot:
         # The caller asked about t3's board; the configured default must not override it.
         assert body["survival_basis"] == "my_slot"
         assert body["roster_filled"] is not None
+
+
+class TestThePullPathGetsTheSlotToo:
+    """TIER 12. The push path reads jaaffl_my_team_id (Tier 3); the pull path did not, so
+    apps/web/lib/api.ts — which calls /recommendation?league_id=... with NO team_id — rendered a
+    degraded model while the overlay next to it rendered a live one, on the same draft. Two
+    surfaces disagreeing about the same board, with the quieter one wrong."""
+
+    def test_the_configured_slot_is_the_pull_default(self, tmp_path: Path) -> None:
+        client = TestClient(_app(tmp_path, jaaffl_my_team_id="t0"))
+        client.post("/draft/events", json=pick_payload(1))
+        body = client.get("/recommendation", params={"league_id": "L1"}).json()
+        assert body["survival_basis"] == "my_slot"
+
+    def test_an_explicit_query_slot_still_wins_on_the_pull_path(self, tmp_path: Path) -> None:
+        """Auditing another seat's board stays possible — the setting is a default, not a lock."""
+        client = TestClient(_app(tmp_path, jaaffl_my_team_id="t0"))
+        client.post("/draft/events", json=pick_payload(1))
+        body = client.get("/recommendation", params={"league_id": "L1", "team_id": "t3"}).json()
+        assert body["survival_basis"] == "my_slot"
+        assert body["roster_filled"] is not None
+
+    def test_with_no_setting_the_pull_path_is_still_honestly_degraded(self, tmp_path: Path) -> None:
+        client = TestClient(_app(tmp_path))
+        client.post("/draft/events", json=pick_payload(1))
+        body = client.get("/recommendation", params={"league_id": "L1"}).json()
+        assert body["survival_basis"] == "degraded_no_slot"
