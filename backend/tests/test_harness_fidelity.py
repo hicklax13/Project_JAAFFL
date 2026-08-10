@@ -388,3 +388,102 @@ def test_the_weekly_objective_cannot_see_strength_of_schedule() -> None:
     # ...and the one team-ish field that DOES exist is used only to group correlation.
     assert "nfl_team" in names
     WeeklyModel.from_context(ctx)
+
+
+class TestInstanceEight_TheFixtureSuppliedWhatTheWiringDropped:
+    """Five tiers asked "change the knob, does a pick move?". Tier 10 asked "change the pool
+    ORDER, does a pick move?". Tier 11 asked "change the roster, does the OBJECTIVE move?".
+
+    Tier 12 asks the question none of those can: **does the engine get this input from the WIRING,
+    or from the fixture?** ``engine_fixtures.make_context()`` defaults to
+    ``jaaffl_settings(draft_order=teams(12))``, so every engine test in this suite — including
+    Tier 3's own ``test_my_team_slot.py``, via ``test_api._primed_engine()`` — handed the engine a
+    draft order that ``resolve_league_settings`` has never produced and, by its own docstring,
+    never will. ``test_precompute.py`` even PINS ``ctx.settings.draft_order is None``. The
+    production behaviour was asserted in one file, fixtured around in another, and nothing
+    compared them.
+    """
+
+    def test_the_default_test_fixture_supplies_an_order_the_live_wiring_cannot(self) -> None:
+        from jaaffl.league.constitution import resolve_league_settings
+        from tests.engine_fixtures import make_context
+
+        fixture = make_context([{"pid": "rb0", "pos": Position.RB, "mu": 300.0}])
+        assert fixture.settings.draft_order is not None, "fixture no longer supplies an order"
+        assert resolve_league_settings("cbs-live").draft_order is None
+        # The gap itself, asserted. If a future change makes the constitution carry an order this
+        # fails and the ROADMAP's instance-eight note has to be rewritten — the correct outcome,
+        # not a nuisance.
+
+    def test_the_survival_model_is_reachable_from_the_state_alone(self) -> None:
+        """The routing this tier added: given a LIVE-WIRING context (no order on the settings) the
+        engine still reaches 'my_slot', because the ROOM's order arrives on the DraftState."""
+        from jaaffl.domain import DraftState
+        from jaaffl.engine.recommend import recommend
+        from jaaffl.league.constitution import resolve_league_settings
+        from tests.engine_fixtures import make_context
+
+        specs = [
+            {
+                "pid": f"rb{i}",
+                "pos": Position.RB,
+                "mu": 300.0 - 5 * i,
+                "adp": float(i + 1),
+                "sd": 6.0,
+                "ecr": float(i + 1),
+            }
+            for i in range(24)
+        ]
+        ctx = make_context(specs, settings=resolve_league_settings("cbs-live"))
+        state = DraftState(
+            league_id="cbs-live",
+            current_overall_pick=13,
+            my_team_id="7",
+            draft_order=[str(i) for i in range(1, 13)],
+        )
+        assert recommend(state, ctx, ctx.params, limit=10).survival_basis == "my_slot"
+
+    def test_the_calibration_harness_never_reads_a_draft_order(self) -> None:
+        """Tier 11 superseded every real-board number when the harness changed. This tier's fix
+        must NOT: ``calibrate/tune.py`` builds a ``SimContext`` and ``simulate.py`` derives its own
+        slot schedule, so neither reads ``settings.draft_order``.
+
+        Asserted structurally rather than assumed, because "this cannot possibly move the numbers"
+        is precisely how Tier 10's config/code coupling was missed. If this fails, STOP: the tier
+        does move the tournament numbers and the ROADMAP block must say so and re-measure.
+        """
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1] / "src" / "jaaffl" / "calibrate"
+        offenders = [
+            path.name
+            for path in sorted(root.rglob("*.py"))
+            if "draft_order" in path.read_text(encoding="utf-8")
+        ]
+        assert offenders == [], f"calibrate reads draft_order in {offenders}"
+
+
+class TestInstanceNine_TheLatencyTestMeasuredTheWrongMOMENT:
+    """The rehearsal instrumentation, not a unit test, found that the FIRST recompute of a draft
+    cost 205 ms against every later one's 6 ms — because ``engine/opponents.py`` and
+    ``engine/optimize.py`` import numpy and scipy lazily, inside the hot path.
+
+    ``test_engine_latency.py`` measures **p95 over repeated calls in an already-warm process** and
+    calls that "the pick-1 worst case". One 268 ms sample among nineteen 0.5 ms ones does not move
+    p95 at all, and by the time it runs some earlier test has usually imported scipy anyway. The
+    defect lived entirely in call #1, which is the owner's first pick.
+
+    The structural fix is pinned in ``tests/test_cold_start_latency.py`` (a fresh interpreter, and
+    an "imports nothing" invariant rather than a millisecond threshold). This asserts the seam.
+    """
+
+    def test_precompute_is_where_the_hot_paths_imports_get_paid(self) -> None:
+        import inspect
+
+        from jaaffl.engine import precompute
+
+        source = inspect.getsource(precompute)
+        assert "warm_hot_path()" in source, (
+            "precompute no longer warms the hot path's lazy imports; the first pick of the draft "
+            "pays ~265ms of scipy/numpy import against a <200ms budget and a live clock"
+        )

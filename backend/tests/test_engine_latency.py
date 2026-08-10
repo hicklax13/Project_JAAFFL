@@ -95,3 +95,30 @@ def test_recompute_meets_the_latency_budget_at_pick_one() -> None:
     p95 = samples_ms[int(0.95 * (len(samples_ms) - 1))]
     assert p95 < 2000.0  # hard end-to-end budget
     assert p95 < 200.0, f"analytic recompute p95 {p95:.1f}ms exceeds the 200ms budget"
+
+
+def test_the_rooms_draft_order_does_not_cost_the_latency_budget() -> None:
+    """TIER 12 — the room's entered order is overlaid onto the context's settings on every
+    recompute (``engine/context.py::effective_settings``), so it is one ``model_copy`` per pick on
+    the hot path. Pinned against the same <200 ms analytic budget, on the same worst case.
+
+    ⚠️ This measures the STEADY STATE, like the test above, and that is now stated rather than
+    assumed: the FIRST recompute of a draft is a different measurement entirely (it used to cost
+    205-269 ms of lazy scipy/numpy import), and it is pinned structurally in
+    ``tests/test_cold_start_latency.py`` because no p95 over a warm process can see it.
+    """
+    ctx = _big_context()
+    state = draft_state(1, my_team_id="t0").model_copy(
+        update={"draft_order": [f"t{i}" for i in range(12)]}
+    )
+    recommend(state, ctx, ctx.params)  # warm up, exactly as the budget test above does
+
+    samples_ms = []
+    for _ in range(25):
+        start = time.perf_counter()
+        rec = recommend(state, ctx, ctx.params)
+        samples_ms.append((time.perf_counter() - start) * 1000.0)
+    samples_ms.sort()
+    p95 = samples_ms[int(0.95 * (len(samples_ms) - 1))]
+    assert rec.survival_basis == "my_slot", "the order never reached the engine; budget is moot"
+    assert p95 < 200.0, f"analytic recompute p95 {p95:.1f}ms exceeds the 200ms budget"
