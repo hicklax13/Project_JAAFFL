@@ -170,7 +170,14 @@ def recommend(
 ) -> Recommendation:
     """Score every candidate into a decomposed, ranked Recommendation (stateless hot path)."""
     started = time.perf_counter()
+    # The entered round-1 order is decided in person minutes before the draft, while DraftContext
+    # is precomputed and cached per league beforehand — and `resolve_league_settings` returns
+    # draft_order=None by construction, so nothing on the settings side ever carries it. The ROOM's
+    # order therefore arrives on the state, and the state wins. Overlaid for THIS CALL ONLY: the
+    # context is a cached object shared across every pick and every connected client.
     settings = context.settings
+    if state.draft_order:
+        settings = settings.model_copy(update={"draft_order": state.draft_order})
     picked = {pick.player_id for pick in state.picks if pick.player_id}
     available = [pid for pid in context.mu if pid not in picked]
     my_roster = [
@@ -206,10 +213,18 @@ def recommend(
     shift = board_adp_shift(run_pressure, context.position, beta=params.board_survival_weight)
     horizon = max(1, int(params.vona_horizon_picks))
 
-    # Whether survival could condition on MY slot at all. A degraded model still ranks (on
-    # MLV), but it reports vona 0.00 on the best pick — indistinguishable on the wire from a
-    # computed 0.00 unless the basis rides along. See Recommendation.survival_basis.
-    survival_basis = "my_slot"
+    # Whether survival could condition on MY slot at all, and if not, WHICH input was missing.
+    # One string used to cover both, and the overlay rendered it as "no draft slot set" — which
+    # told the owner to set JAAFFL_MY_TEAM_ID even when the missing input was the ORDER, which no
+    # setting supplies (it is folded from the room's league_settings event, or pasted as an
+    # ORDER: line). A degraded model still ranks (on MLV), but every VONA is 0.00 and that is
+    # indistinguishable on the wire from a computed 0.00. See Recommendation.survival_basis.
+    if not settings.draft_order:
+        survival_basis = "degraded_no_order"
+    elif state.my_team_id is None or state.my_team_id not in settings.draft_order:
+        survival_basis = "degraded_no_slot"
+    else:
+        survival_basis = "my_slot"
 
     def _survival(h: int) -> dict[str, float]:
         nonlocal survival_basis
@@ -219,7 +234,10 @@ def recommend(
             )
         except ValueError:
             taken = {}  # no draft_order / my_team_id (e.g. pre-draft) → treat everyone as available
-            survival_basis = "degraded_no_slot"
+            # Belt and braces: the branch above should already have classified this, but
+            # _my_overall_picks is the authority on what it can actually compute.
+            if survival_basis == "my_slot":
+                survival_basis = "degraded_no_slot"
         return {pid: 1.0 - taken.get(pid, 0.0) for pid in available}
 
     survival_display = _survival(1)

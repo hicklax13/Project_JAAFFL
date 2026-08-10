@@ -321,9 +321,13 @@ class Recommendation(BaseModel):
     survival_basis: str | None = Field(
         default=None,
         description="What the survival/VONA model could actually condition on: 'my_slot' when "
-        "the entered draft order AND my team are both known, 'degraded_no_slot' when they are "
-        "not — in which case every player is treated as surviving and VONA collapses toward 0. "
-        "Stated because a degraded 0.00 is indistinguishable from a computed 0.00 on the wire.",
+        "the entered draft order AND my team are both known; 'degraded_no_order' when the room's "
+        "round-1 order has not been read yet (no setting supplies it — it is folded from the "
+        "league_settings event, or pasted as an ORDER: line); 'degraded_no_slot' when the order "
+        "is known but my own team is not, or is not one of the teams in it (set "
+        "JAAFFL_MY_TEAM_ID). In both degraded cases every player is treated as surviving and VONA "
+        "collapses toward 0. Stated because a degraded 0.00 is indistinguishable from a computed "
+        "0.00 on the wire.",
     )
 
     @property

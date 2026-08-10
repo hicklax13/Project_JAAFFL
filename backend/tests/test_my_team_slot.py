@@ -61,6 +61,21 @@ class TestTheSurvivalBasisIsStated:
         Recommendation.model_validate(body)
         assert body["survival_basis"] == "degraded_no_slot"
 
+    def test_the_degraded_reason_distinguishes_a_missing_order_from_a_missing_slot(
+        self, tmp_path: Path
+    ) -> None:
+        """⚠️ TIER 12. Every test in this class runs against ``_primed_engine()``, whose context
+        carries a draft order from ``engine_fixtures.make_context``'s default — which is exactly
+        why this file passed for nine tiers while the LIVE path could never reach 'my_slot' at
+        all. Here the order IS known and the slot is not, so 'degraded_no_slot' is the honest
+        answer. The wiring version of this assertion, taken from
+        ``league.constitution.resolve_league_settings`` instead of a fixture, lives in
+        ``test_draft_order_wiring.py``."""
+        client = TestClient(_app(tmp_path))
+        client.post("/draft/events", json=pick_payload(1))
+        body = client.get("/recommendation", params={"league_id": "L1"}).json()
+        assert body["survival_basis"] == "degraded_no_slot"
+
     def test_the_degraded_basis_is_exactly_when_vona_collapses(self, tmp_path: Path) -> None:
         # Ties the flag to the thing it is warning about, so the two cannot drift apart.
         client = TestClient(_app(tmp_path))
