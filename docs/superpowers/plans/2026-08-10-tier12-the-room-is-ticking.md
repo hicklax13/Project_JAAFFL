@@ -33,13 +33,13 @@ dependency. No coefficient. **No edit to `config/engine.json` or `config/league.
 
 Server on `127.0.0.1:8788` at `4f7442b`, 25 events posted, then pulled:
 
-| check                | result                                          |
-| -------------------- | ----------------------------------------------- |
-| `/health`            | `200 {"status":"ok","version":"0.0.0"}`         |
-| `/draft/events` × 25 | all `accepted`, `deduped:false`                 |
-| `/recommendation`    | `200`, 50 ranked, `vona_method="analytic"`      |
-| `recompute_ms`       | **5.36 / 6.00** against the < 200 ms budget     |
-| `/recs/ws`           | `hello` (v1, schema 1.0.0) → `snapshot`         |
+| check                | result                                            |
+| -------------------- | ------------------------------------------------- |
+| `/health`            | `200 {"status":"ok","version":"0.0.0"}`           |
+| `/draft/events` × 25 | all `accepted`, `deduped:false`                   |
+| `/recommendation`    | `200`, 50 ranked, `vona_method="analytic"`        |
+| `recompute_ms`       | **5.36 / 6.00** against the < 200 ms budget       |
+| `/recs/ws`           | `hello` (v1, schema 1.0.0) → `snapshot`           |
 | `/draft/ws`          | `{"control":"pong"}`, `ack seq=37 pick_number=25` |
 
 Every Tier 12 claim rests on that control.
@@ -87,10 +87,10 @@ never changed. Rebuilt to draft real canonical ids off the context.
 
 Real board, 581 players, **the same board fed to both arms**, ADP opponents, my slot = 7:
 
-| arm                       | candidates with `vona > 0` | top recommendation      |
-| ------------------------- | -------------------------- | ----------------------- |
-| shipped (`draft_order` None) | **0 / 50, in all 17 rounds** | —                       |
-| order supplied            | 1–13 / 50                  | **differs in 3 of 17 rounds** |
+| arm                          | candidates with `vona > 0`   | top recommendation            |
+| ---------------------------- | ---------------------------- | ----------------------------- |
+| shipped (`draft_order` None) | **0 / 50, in all 17 rounds** | —                             |
+| order supplied               | 1–13 / 50                    | **differs in 3 of 17 rounds** |
 
 Walking each arm's own draft, **5 of 17 picks differ**. `config/engine.json` sets `kappa: 0.65`,
 and it multiplies `max(0, VONA)` — a term that is **identically zero on every live pick today**.
@@ -450,11 +450,11 @@ destroys uncommitted work elsewhere.
 cp backend/src/jaaffl/ingest/log.py /tmp/log.py.bak
 ```
 
-| # | Mutation | The test that MUST fail |
-| - | -------- | ----------------------- |
-| 1 | delete the whole `order = ...` block | `test_fold_binds_the_order_the_room_reported` |
-| 2 | change `int(expected) != len(teams)` to `False` | `test_fold_refuses_an_order_that_disagrees_with_team_count` |
-| 3 | move `state.model_copy(update={"draft_order": teams})` outside the `if isinstance(...)` guard so it also runs with `order = None` | `test_a_later_settings_event_does_not_erase_a_known_order` |
+| #   | Mutation                                                                                                                          | The test that MUST fail                                     |
+| --- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 1   | delete the whole `order = ...` block                                                                                              | `test_fold_binds_the_order_the_room_reported`               |
+| 2   | change `int(expected) != len(teams)` to `False`                                                                                   | `test_fold_refuses_an_order_that_disagrees_with_team_count` |
+| 3   | move `state.model_copy(update={"draft_order": teams})` outside the `if isinstance(...)` guard so it also runs with `order = None` | `test_a_later_settings_event_does_not_erase_a_known_order`  |
 
 Run the file after each; confirm the NAMED test fails and restore with
 `cp /tmp/log.py.bak backend/src/jaaffl/ingest/log.py` before the next.
@@ -722,12 +722,12 @@ Add to `backend/tests/test_my_team_slot.py`, inside `TestTheSurvivalBasisIsState
 cp backend/src/jaaffl/engine/recommend.py /tmp/recommend.py.bak
 ```
 
-| # | Mutation | The test that MUST fail |
-| - | -------- | ----------------------- |
-| 1 | delete the `if state.draft_order:` override | `test_the_state_order_gives_the_engine_my_slot`, `test_the_rooms_order_makes_the_scarcity_term_live` |
-| 2 | change `settings.model_copy(update=...)` to an in-place `settings.draft_order = state.draft_order` (pydantic allows it on a non-frozen model) | `test_the_context_settings_are_not_mutated_by_the_call` |
-| 3 | swap the precedence: prefer `context.settings.draft_order` when both are set | `test_the_state_wins_when_both_are_present` |
-| 4 | collapse `degraded_no_order` back to `degraded_no_slot` | `test_without_it_the_engine_says_the_ORDER_is_what_is_missing` |
+| #   | Mutation                                                                                                                                      | The test that MUST fail                                                                              |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 1   | delete the `if state.draft_order:` override                                                                                                   | `test_the_state_order_gives_the_engine_my_slot`, `test_the_rooms_order_makes_the_scarcity_term_live` |
+| 2   | change `settings.model_copy(update=...)` to an in-place `settings.draft_order = state.draft_order` (pydantic allows it on a non-frozen model) | `test_the_context_settings_are_not_mutated_by_the_call`                                              |
+| 3   | swap the precedence: prefer `context.settings.draft_order` when both are set                                                                  | `test_the_state_wins_when_both_are_present`                                                          |
+| 4   | collapse `degraded_no_order` back to `degraded_no_slot`                                                                                       | `test_without_it_the_engine_says_the_ORDER_is_what_is_missing`                                       |
 
 ⚠️ For mutation 1, confirm the failure message is about `survival_basis`/VONA — **not** an
 `AttributeError` or `NameError`. A test that fails because the module stopped importing has not
@@ -890,20 +890,20 @@ long order is emitted and `skipped` is empty.
 In `apps/extension/src/lib/parse.ts`, inside `parsePastedReport`, replace the ORDER branch:
 
 ```ts
-    const order = line.match(ORDER_LINE);
-    if (order?.[1]) {
-      const teams = order[1].split(/[,\s]+/).filter(Boolean);
-      // Same guard, same reason, as parseDraftOrder on the network path: opponents.py's snake
-      // math uses len(draft_order) AS the team count, so ANY other length silently corrupts
-      // every "my next pick" for the rest of the draft. Reported, never dropped silently --
-      // a partial parse announced as success is how the owner loses a player.
-      if (teams.length === IMMUTABLE_TEAM_COUNT) {
-        events.push(orderEvent("manual", "paste", teams));
-      } else {
-        skipped.push(line);
-      }
-      continue;
-    }
+const order = line.match(ORDER_LINE);
+if (order?.[1]) {
+  const teams = order[1].split(/[,\s]+/).filter(Boolean);
+  // Same guard, same reason, as parseDraftOrder on the network path: opponents.py's snake
+  // math uses len(draft_order) AS the team count, so ANY other length silently corrupts
+  // every "my next pick" for the rest of the draft. Reported, never dropped silently --
+  // a partial parse announced as success is how the owner loses a player.
+  if (teams.length === IMMUTABLE_TEAM_COUNT) {
+    events.push(orderEvent("manual", "paste", teams));
+  } else {
+    skipped.push(line);
+  }
+  continue;
+}
 ```
 
 - [ ] **Step 4: Run them and watch them pass**
@@ -950,25 +950,25 @@ Append to the degraded-mode `describe` block in `apps/extension/tests/overlay.te
 containing the existing `is-degraded` assertions around line 272):
 
 ```ts
-  it("names the ORDER when that is the missing input", () => {
-    const { handle, foot, sync } = mountForTest();
-    handle.update({ ...REC, survival_basis: "degraded_no_order" });
-    expect(foot().textContent).toContain("VONA degraded · draft order not read yet");
-    expect(sync.classList.contains("is-degraded")).toBe(true);
-  });
+it("names the ORDER when that is the missing input", () => {
+  const { handle, foot, sync } = mountForTest();
+  handle.update({ ...REC, survival_basis: "degraded_no_order" });
+  expect(foot().textContent).toContain("VONA degraded · draft order not read yet");
+  expect(sync.classList.contains("is-degraded")).toBe(true);
+});
 
-  it("still names the SLOT when that is the missing input", () => {
-    const { handle, foot, sync } = mountForTest();
-    handle.update({ ...REC, survival_basis: "degraded_no_slot" });
-    expect(foot().textContent).toContain("VONA degraded · no draft slot set");
-    expect(sync.classList.contains("is-degraded")).toBe(true);
-  });
+it("still names the SLOT when that is the missing input", () => {
+  const { handle, foot, sync } = mountForTest();
+  handle.update({ ...REC, survival_basis: "degraded_no_slot" });
+  expect(foot().textContent).toContain("VONA degraded · no draft slot set");
+  expect(sync.classList.contains("is-degraded")).toBe(true);
+});
 
-  it("does not accuse an unknown basis of being degraded", () => {
-    const { handle, sync } = mountForTest();
-    handle.update({ ...REC, survival_basis: "my_slot" });
-    expect(sync.classList.contains("is-degraded")).toBe(false);
-  });
+it("does not accuse an unknown basis of being degraded", () => {
+  const { handle, sync } = mountForTest();
+  handle.update({ ...REC, survival_basis: "my_slot" });
+  expect(sync.classList.contains("is-degraded")).toBe(false);
+});
 ```
 
 Reuse the exact mount/query helpers that file already uses for the existing degraded tests
@@ -985,21 +985,21 @@ renders and `is-degraded` is false.
 In `apps/extension/src/overlay/overlay.ts`, replace the degraded block in `renderSync`:
 
 ```ts
-    // No CBS frame names the viewer's own team, and the entered round-1 order is only known
-    // once the room reports it — so a degraded VONA has TWO possible causes with two different
-    // owner actions, and saying "no draft slot set" for both told the owner to set
-    // JAAFFL_MY_TEAM_ID when what was missing was the order. Only ever shown when the backend
-    // actually SAID so — an older payload that omits survival_basis is not accused.
-    const degradedReason =
-      survivalBasis === "degraded_no_order"
-        ? "VONA degraded · draft order not read yet"
-        : survivalBasis === "degraded_no_slot"
-          ? "VONA degraded · no draft slot set"
-          : null;
-    if (degradedReason) parts.push(degradedReason);
-    footSync.textContent = parts.join(" · ");
-    footSync.classList.toggle("is-stale", ageMs >= STALE_AFTER_MS);
-    footSync.classList.toggle("is-degraded", degradedReason !== null);
+// No CBS frame names the viewer's own team, and the entered round-1 order is only known
+// once the room reports it — so a degraded VONA has TWO possible causes with two different
+// owner actions, and saying "no draft slot set" for both told the owner to set
+// JAAFFL_MY_TEAM_ID when what was missing was the order. Only ever shown when the backend
+// actually SAID so — an older payload that omits survival_basis is not accused.
+const degradedReason =
+  survivalBasis === "degraded_no_order"
+    ? "VONA degraded · draft order not read yet"
+    : survivalBasis === "degraded_no_slot"
+      ? "VONA degraded · no draft slot set"
+      : null;
+if (degradedReason) parts.push(degradedReason);
+footSync.textContent = parts.join(" · ");
+footSync.classList.toggle("is-stale", ageMs >= STALE_AFTER_MS);
+footSync.classList.toggle("is-degraded", degradedReason !== null);
 ```
 
 - [ ] **Step 4: Run them and watch them pass**
@@ -1319,12 +1319,12 @@ Expected: PASS (7 passed).
 cp backend/src/jaaffl/api/rehearsal.py /tmp/rehearsal.py.bak
 ```
 
-| # | Mutation | The test that MUST fail |
-| - | -------- | ----------------------- |
-| 1 | make `record` return immediately, always | `test_the_push_path_writes_a_line_per_recommendation` |
-| 2 | count `masked` as `len(state.picks)` | `test_it_counts_the_picks_the_engine_actually_masked` |
-| 3 | replace the `except Exception` with `except OSError` and raise a `TypeError` in `_row` | `test_an_unwritable_path_does_not_fail_the_recommendation` |
-| 4 | drop `"top"` from the row | `test_every_field_the_report_reads_is_present` |
+| #   | Mutation                                                                               | The test that MUST fail                                    |
+| --- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 1   | make `record` return immediately, always                                               | `test_the_push_path_writes_a_line_per_recommendation`      |
+| 2   | count `masked` as `len(state.picks)`                                                   | `test_it_counts_the_picks_the_engine_actually_masked`      |
+| 3   | replace the `except Exception` with `except OSError` and raise a `TypeError` in `_row` | `test_an_unwritable_path_does_not_fail_the_recommendation` |
+| 4   | drop `"top"` from the row                                                              | `test_every_field_the_report_reads_is_present`             |
 
 ⚠️ Mutation 3 exists because "fail-soft" is exactly the kind of claim that passes against a
 narrower `except` than the code needs — verify the test fails with a `TypeError` escaping, not
@@ -1580,11 +1580,11 @@ Expected: PASS (5 passed).
 cp scripts/rehearsal_report.py /tmp/rehearsal_report.py.bak
 ```
 
-| # | Mutation | The test that MUST fail |
-| - | -------- | ----------------------- |
-| 1 | change the empty-log branch to `return []` | `test_an_empty_log_is_a_failure_not_a_pass` |
-| 2 | change `bases == {"my_slot"}` to `"my_slot" in bases` | `test_a_degraded_survival_basis_fails_loudly` |
-| 3 | change `max(latencies)` to `statistics.median(latencies)` | `test_a_recompute_over_the_budget_fails` |
+| #   | Mutation                                                  | The test that MUST fail                       |
+| --- | --------------------------------------------------------- | --------------------------------------------- |
+| 1   | change the empty-log branch to `return []`                | `test_an_empty_log_is_a_failure_not_a_pass`   |
+| 2   | change `bases == {"my_slot"}` to `"my_slot" in bases`     | `test_a_degraded_survival_basis_fails_loudly` |
+| 3   | change `max(latencies)` to `statistics.median(latencies)` | `test_a_recompute_over_the_budget_fails`      |
 
 ⚠️ Mutation 1's failure must be an assertion about verdicts, not an `IndexError` from
 `next(...)` finding nothing. Restore between each.
@@ -1875,11 +1875,11 @@ third PASSES only after Task 2 and only if the fixture carries an order.
 cp backend/src/jaaffl/ingest/log.py /tmp/log.py.bak2
 ```
 
-| # | Mutation in `fold_state`'s `PICK_MADE` branch | The test that MUST fail |
-| - | --------------------------------------------- | ----------------------- |
-| 1 | drop the `if all(p.overall != pick.overall ...)` idempotence guard | `test_a_duplicated_pick_frame_does_not_duplicate_the_pick` |
-| 2 | change `max(state.current_overall_pick, pick.overall + 1)` to `pick.overall + 1` | `test_the_board_is_identical_when_pick_frames_arrive_out_of_order` |
-| 3 | delete the Task-2 order block | `test_the_order_survives_a_reconnect_resync` |
+| #   | Mutation in `fold_state`'s `PICK_MADE` branch                                    | The test that MUST fail                                            |
+| --- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 1   | drop the `if all(p.overall != pick.overall ...)` idempotence guard               | `test_a_duplicated_pick_frame_does_not_duplicate_the_pick`         |
+| 2   | change `max(state.current_overall_pick, pick.overall + 1)` to `pick.overall + 1` | `test_the_board_is_identical_when_pick_frames_arrive_out_of_order` |
+| 3   | delete the Task-2 order block                                                    | `test_the_order_survives_a_reconnect_resync`                       |
 
 Restore between each.
 
@@ -2097,11 +2097,11 @@ again when the draft-room popup opens (different origin). Allow both, or nothing
 
 Draft normally against the clock for at least 6 rounds.
 
-| When | Do this | Why |
-| --- | --- | --- |
-| one of your first 3 picks | **let the clock run out** so CBS auto-picks for you | a pick made *for* you takes a different path than one you make |
-| around round 4 | **close the CBS draft tab and reopen the draft room** | the late-join resync — the board must not be lost |
-| around round 6 | in the backend terminal press **Ctrl+C**, then re-run the last two lines of §2 | a mid-draft restart: the durable log must replay and the board must rebuild |
+| When                      | Do this                                                                        | Why                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| one of your first 3 picks | **let the clock run out** so CBS auto-picks for you                            | a pick made _for_ you takes a different path than one you make              |
+| around round 4            | **close the CBS draft tab and reopen the draft room**                          | the late-join resync — the board must not be lost                           |
+| around round 6            | in the backend terminal press **Ctrl+C**, then re-run the last two lines of §2 | a mid-draft restart: the durable log must replay and the board must rebuild |
 
 ⚠️ **In a real league these three cost you something.** The auto-pick spends a real pick, and the
 tab/backend restarts each take ~20 seconds off a clock. Do all three **early, in rounds where you
@@ -2128,26 +2128,26 @@ disk (git-ignored) and lets a future tier replay this exact draft.
 
 ## 5. What each step passes on
 
-| # | Step | Pass |
-| - | ---- | ---- |
-| 1 | preflight | exit 0, including `survival probe: basis=my_slot` |
-| 2 | backend up | `/health` returns `{"status":"ok"}` |
-| 3 | REC on | `recording_stored` lines in the backend terminal; `rec-*.jsonl` grows |
-| 4 | order read from the room | report: **the order was read from the room** PASS |
-| 5 | survival live | report: **survival is live** PASS — every row `my_slot` |
-| 6 | latency | report: **recompute under 200ms** PASS — max under budget |
-| 7 | masking | report: **every drafted player masked** PASS — `unresolved_ids` empty |
-| 8 | scarcity live | report: **the scarcity term is live** PASS — `vona>0` never 0 |
-| 9 | reconnect | `picks_masked` never decreases across the §3 tab reopen |
-| 10 | restart | recommendations resume after the §3 restart, same board |
-| 11 | overlay | your screenshot's foot line matches the report's derived line |
+| #   | Step                     | Pass                                                                  |
+| --- | ------------------------ | --------------------------------------------------------------------- |
+| 1   | preflight                | exit 0, including `survival probe: basis=my_slot`                     |
+| 2   | backend up               | `/health` returns `{"status":"ok"}`                                   |
+| 3   | REC on                   | `recording_stored` lines in the backend terminal; `rec-*.jsonl` grows |
+| 4   | order read from the room | report: **the order was read from the room** PASS                     |
+| 5   | survival live            | report: **survival is live** PASS — every row `my_slot`               |
+| 6   | latency                  | report: **recompute under 200ms** PASS — max under budget             |
+| 7   | masking                  | report: **every drafted player masked** PASS — `unresolved_ids` empty |
+| 8   | scarcity live            | report: **the scarcity term is live** PASS — `vona>0` never 0         |
+| 9   | reconnect                | `picks_masked` never decreases across the §3 tab reopen               |
+| 10  | restart                  | recommendations resume after the §3 restart, same board               |
+| 11  | overlay                  | your screenshot's foot line matches the report's derived line         |
 
 ## 6. What this does NOT establish
 
 - **n = 1.** One draft, one seat, one evening.
 - **A free league is not JAAFFL2025.** Different people, different pace, different runs, and a
   roster/scoring setup that is probably not yours — so nothing here validates the engine against
-  *your* league's board.
+  _your_ league's board.
 - **Nothing about pick QUALITY.** This proves the pipeline is live and honest under a clock; it
   says nothing about whether the recommendations are good. That is what the tournament measures,
   and `lambda_slot_override` is still the open decision there.
