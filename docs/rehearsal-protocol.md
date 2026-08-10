@@ -23,8 +23,20 @@ this project has ever served had a dead scarcity term.
 
 ## 2. Your setup — one block, top to bottom
 
+⚠️ **The room must have exactly 12 teams.** The extension parses CBS frames against a fixed
+12-team assumption (`parse.ts::IMMUTABLE_TEAM_COUNT`, five call sites) — correct for JAAFFL2025,
+and the reason this rehearsal must be run in a 12-team room. In any other size `parseDraftOrder`
+returns `null`, so the order never reaches the engine and **every** recommendation degrades; the
+round number on every pick is wrong too, because `parse.ts` divides by 12 to get it.
+`scripts/rehearsal_report.py` independently asserts `draft_order_len == 12`. **Check the team count
+before the clock starts** — in a CBS mock lobby that is the `MEMBERS` column (`0 of 12`), and in a
+free league it is the league's team count.
+
+⚠️ **The repo path differs per machine** — this project has been worked on from more than one.
+`cd` to wherever your clone actually is, and confirm it before running anything else:
+
 ```powershell
-cd C:\Users\conno\Code\Project_JAAFFL
+cd <your Project_JAAFFL clone>   # verify with: git rev-parse --show-toplevel
 git checkout main
 git pull
 pnpm --filter @jaaffl/extension build
@@ -34,18 +46,44 @@ Open Chrome → `chrome://extensions` → on the **JAAFFL — CBS Draft Assistan
 **Reload**. This matters: a loaded card keeps serving the old build until you reload it, so
 skipping this rehearses the old code.
 
-Open **https://www.cbssports.com/fantasy/football/**, join a **free** league, and open its **Draft
-Room** when it opens (or start a **Mock Draft** if you are shaking out the install). Wait in the
-lobby and **read your team number off the board** — that is your draft slot.
+Both entry points below were loaded and read on 2026-08-10 rather than guessed at, in a Chrome
+already signed in to CBS:
+
+| what                   | URL                                                                                          |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| **Mock draft lobby**   | `https://mockdraft-1.football.cbssports.com/mockdraft/standard`                              |
+| **Free league signup** | `https://freemeeting-0.football.cbssports.com/splash/signup/football/spln/single/free/24406` |
+
+The **mock lobby** lists `START TIME · DETAILS · MEMBERS · ACTION`, refreshed every five minutes,
+and is free and unlimited. Pick a row whose MEMBERS column reads **`of 12`** and prefer
+**`Flex Roster`** — that is non-PPR with a flex slot, the closest available shape to JAAFFL2025.
+Avoid any row labelled **PPR**. Click **JOIN NOW**.
+
+The **free league** page asks for a single `Team Name` and an **OK** button. CBS's own comparison
+table puts the free tier at **$0 · 12 teams · Standard (non-PPR) · Snake** — which matches
+JAAFFL2025 on team count, scoring family and draft type. Its draft time is scheduled by the
+league and is not visible before joining.
+
+Wait in the lobby and **read your team number off the board** — that is your draft slot.
 
 Back in the terminal, with `<N>` = your team number:
 
 ```powershell
-(Get-Content .env) -replace '^JAAFFL_MY_TEAM_ID=.*', 'JAAFFL_MY_TEAM_ID=<N>' | Set-Content .env
+(Get-Content .env) -notmatch '^JAAFFL_MY_TEAM_ID=' | Set-Content .env
+Add-Content .env 'JAAFFL_MY_TEAM_ID=<N>'
 .venv\Scripts\python.exe scripts\preflight.py
 $env:JAAFFL_REHEARSAL_LOG = "data\rehearsal\draft-1.jsonl"
 .venv\Scripts\python.exe -m jaaffl.api
 ```
+
+> ⚠️ **Why `-notmatch` + `Add-Content` and not a plain `-replace`.** This file previously said
+> `(Get-Content .env) -replace '^JAAFFL_MY_TEAM_ID=.*', ...`, which only works if the key is
+> already in `.env`. On the desktop it was **absent**, not empty — so the replace matched nothing,
+> wrote the file back unchanged, and **silently did not set the slot**. Verified 2026-08-10 by
+> applying it to a copy of the real `.env`: zero matching lines afterwards. The form above works
+> whether the key is absent or present, leaves exactly one line when re-run with a different
+> number, and preserves every other key. `JAAFFL_REHEARSAL_LOG` must be set in the **same
+> terminal** that starts the API — it is read at process start.
 
 **Preflight must print `OK` and exit 0.** It now checks the wiring as well as the board — its last
 line reads `survival probe ... basis=my_slot`. If it fails it names the reason; stop and tell me.
