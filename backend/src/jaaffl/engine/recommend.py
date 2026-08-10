@@ -27,7 +27,7 @@ from jaaffl.domain import (
     RecommendedPick,
     ScoreComponents,
 )
-from jaaffl.engine.context import DraftContext
+from jaaffl.engine.context import DraftContext, effective_settings
 from jaaffl.engine.opponents import (
     board_adp_shift,
     expected_best_available,
@@ -170,14 +170,10 @@ def recommend(
 ) -> Recommendation:
     """Score every candidate into a decomposed, ranked Recommendation (stateless hot path)."""
     started = time.perf_counter()
-    # The entered round-1 order is decided in person minutes before the draft, while DraftContext
-    # is precomputed and cached per league beforehand — and `resolve_league_settings` returns
-    # draft_order=None by construction, so nothing on the settings side ever carries it. The ROOM's
-    # order therefore arrives on the state, and the state wins. Overlaid for THIS CALL ONLY: the
-    # context is a cached object shared across every pick and every connected client.
-    settings = context.settings
-    if state.draft_order:
-        settings = settings.model_copy(update={"draft_order": state.draft_order})
+    # The ROOM's entered order, overlaid for THIS CALL ONLY — see effective_settings for why it
+    # arrives on the state rather than on the cached context, and why both consumers share one
+    # definition of that precedence.
+    settings = effective_settings(context, state)
     picked = {pick.player_id for pick in state.picks if pick.player_id}
     available = [pid for pid in context.mu if pid not in picked]
     my_roster = [
