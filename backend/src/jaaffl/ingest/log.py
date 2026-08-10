@@ -19,7 +19,11 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import NamedTuple
 
+import structlog
+
 from jaaffl.domain import DraftEvent, DraftEventType, DraftPick, DraftState
+
+log = structlog.get_logger(__name__)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS draft_event_log (
@@ -197,6 +201,25 @@ def fold_state(events: Iterable[LoggedEvent]) -> DraftState:
             my_team = ev.data.get("my_team_id")
             if my_team:
                 state = state.model_copy(update={"my_team_id": my_team})
+            # The REAL entered round-1 order, verbatim from the room
+            # (parse.ts::parseDraftOrder <- fullstatedelta.order). Never synthesized, and never
+            # ADOPTED when it disagrees with the reported team count: opponents._my_overall_picks
+            # uses len(draft_order) AS the team count, so a short order silently corrupts every
+            # "my next pick" for the rest of the draft. config/league.json is immutable and its
+            # agent_usage_contract says surface a conflict, never apply it.
+            order = ev.data.get("draft_order")
+            if isinstance(order, list) and order:
+                teams = [str(team) for team in order]
+                expected = ev.data.get("team_count")
+                if expected is not None and int(expected) != len(teams):
+                    log.warning(
+                        "draft_order_length_conflict",
+                        league_id=ev.league_id,
+                        reported=len(teams),
+                        team_count=int(expected),
+                    )
+                else:
+                    state = state.model_copy(update={"draft_order": teams})
         elif ev.event_type == DraftEventType.DRAFT_STATE:
             snap = DraftState.model_validate({"league_id": ev.league_id, **ev.data})
             update: dict = {

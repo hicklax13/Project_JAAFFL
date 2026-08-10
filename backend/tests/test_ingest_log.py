@@ -308,3 +308,58 @@ def test_payload_pick_number_mismatch_never_stored(conn) -> None:
             conn, bad, pick_number=bad.pick_number, source="ws", captured_at="2026-08-30T18:00:00Z"
         )
     assert read_events(conn, "L1") == []
+
+
+ROOM_ORDER = [str(i) for i in range(1, 13)]
+
+
+def test_fold_binds_the_order_the_room_reported() -> None:
+    """parse.ts emits league_settings{draft_order} from fullstatedelta.order (Tier 3's capture
+    decode). The fold read only my_team_id off that event, so the order was decoded and then
+    thrown away — and resolve_league_settings returns None by construction, so the engine could
+    never compute a survival model on the live path."""
+    events = [
+        logged(
+            "league_settings",
+            {"league_id": "L1", "team_count": 12, "draft_order": ROOM_ORDER},
+            seq=1,
+        )
+    ]
+    assert fold_state(events).draft_order == ROOM_ORDER
+
+
+def test_fold_refuses_an_order_that_disagrees_with_team_count() -> None:
+    """opponents._my_overall_picks uses len(draft_order) AS the team count, so an 11-entry order
+    silently corrupts every 'my next pick' for the rest of the draft. config/league.json is
+    immutable and fixes teams=12: surface the conflict, never adopt it."""
+    events = [
+        logged(
+            "league_settings",
+            {"league_id": "L1", "team_count": 12, "draft_order": ROOM_ORDER[:11]},
+            seq=1,
+        )
+    ]
+    assert fold_state(events).draft_order is None
+
+
+def test_fold_still_never_synthesizes_an_order() -> None:
+    """A settings event with a team_count and no order must not mint one."""
+    events = [logged("league_settings", {"league_id": "L1", "team_count": 12}, seq=1)]
+    assert fold_state(events).draft_order is None
+
+
+def test_a_later_settings_event_does_not_erase_a_known_order() -> None:
+    """CBS attaches fullstatedelta to picks/completed frames, so the settings event repeats all
+    draft long — and the extension de-dups a non-pick event by its whole data blob, so a variant
+    without the order does reach the fold."""
+    events = [
+        logged(
+            "league_settings",
+            {"league_id": "L1", "team_count": 12, "draft_order": ROOM_ORDER},
+            seq=1,
+        ),
+        logged("league_settings", {"league_id": "L1", "my_team_id": "7"}, seq=2),
+    ]
+    folded = fold_state(events)
+    assert folded.draft_order == ROOM_ORDER
+    assert folded.my_team_id == "7"
