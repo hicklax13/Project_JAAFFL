@@ -13,6 +13,205 @@ order — later stages assume the earlier contracts exist.
 
 Legend: `[ ]` not started · `[~]` scaffolded (stub/contract in place) · `[x]` done
 
+## 📍 Status — 2026-08-10 · Tier 12 (the engine never learned the order, and the first pick paid for scipy)
+
+> **Tier 12 of the audit is merged** (PR #64). ⚠️ **THE REHEARSAL WAS NOT RUN.** This tier was
+> scoped to face a live CBS room with a clock. Before writing the protocol it drove the real
+> FastAPI surface — and the headline question turned out to be already answered on shipped code:
+> **`survival_basis` is `degraded_no_slot` on every live recommendation this project has ever
+> served**, because the entered draft order is decoded from CBS's frames and then dropped twice
+> before it reaches `recommend()`. That is fixed, measured and instrumented. The **room is not
+> faced**: the owner will run the rehearsal on a different machine, in a free-to-join league, and
+> that session owns Tier 12's evidence half. ROADMAP's standing **"a replay is not a live draft"
+> is NOT retired.**
+
+### The control first — the live surface behaves as Tier 11 left it
+
+Server on `127.0.0.1:8788` at `4f7442b`, 25 events posted, then pulled:
+
+| check                | result                                            |
+| -------------------- | ------------------------------------------------- |
+| `/health`            | `200 {"status":"ok","version":"0.0.0"}`           |
+| `/draft/events` × 25 | all `accepted`, `deduped:false`                   |
+| `/recommendation`    | `200`, 50 ranked, `vona_method="analytic"`        |
+| `recompute_ms`       | 5.36 / 6.00                                       |
+| `/recs/ws`           | `hello` (v1, schema 1.0.0) → `snapshot`           |
+| `/draft/ws`          | `{"control":"pong"}`, `ack seq=37 pick_number=25` |
+
+### 🔴 FINDING A — the live path could not compute a survival model, and no setting fixed it
+
+Three links, each read directly:
+
+1. `apps/extension/src/lib/parse.ts:156` — `parseDraftOrder` decodes `fullstatedelta.order` into a
+   `league_settings` event carrying the real entered order, length-guarded at exactly 12. ✅ This
+   half works; it is Tier 3's capture-decode work.
+2. `backend/src/jaaffl/ingest/log.py` — `fold_state`'s `LEAGUE_SETTINGS` branch read **only**
+   `my_team_id`. The order was discarded.
+3. `backend/src/jaaffl/league/constitution.py:71` — `resolve_league_settings` returns
+   `draft_order=None` unconditionally, and a snapshot never rewrites it by design.
+   `DraftContext.settings` is the only thing `recommend()` reads.
+
+So `opponents._my_overall_picks` always raised, `recommend()` caught it, and survival degraded to
+"everyone is still available". Verified rather than inferred: `resolve_league_settings` returns
+`draft_order=None` even with a snapshot, while `normalize_league_settings` parses the order
+correctly — it simply has nowhere to go.
+
+⚠️ **This supersedes how Tier 3's fix was described.** `docs/owner-manual-todo.md` §1 told the
+owner that setting `JAAFFL_MY_TEAM_ID` restores the real VONA. It could not: the second required
+input had no wiring at all. The slot was still EMPTY in `.env` (verified 2026-08-10), and filling
+it in would have changed nothing.
+
+**Measurability first — and the first measurement was thrown away.** It walked 17 rounds with
+synthetic picks carrying `player_id=None`, so nothing was masked, the board never depleted, and
+"0 of 17 top picks moved" was an artifact of a board that never changed. Rebuilt to draft real
+canonical ids. Real board, 581 players, **the same board fed to both arms**, ADP opponents, slot 7:
+
+| arm                          | candidates with `vona > 0`   | top recommendation            |
+| ---------------------------- | ---------------------------- | ----------------------------- |
+| shipped (`draft_order` None) | **0 / 50, in all 17 rounds** | —                             |
+| order supplied               | 1–13 / 50                    | **differs in 3 of 17 rounds** |
+
+`config/engine.json` sets `kappa: 0.65`, and it multiplies `max(0, VONA)` — a term that was
+**identically zero on every live pick**. ⚠️ Do not quote the "5 of 17 picks differ" from the
+each-arm-walks-its-own-draft variant as an effect size: once one pick differs every later board
+differs, so it says "something changed", not "how much".
+
+**The fix.** The room's order rides on `DraftState.draft_order` — folded verbatim, never
+synthesised, and REFUSED when its length disagrees with the reported team count, because
+`_my_overall_picks` uses `len(draft_order)` **as** the team count.
+`engine/context.py::effective_settings` overlays it onto the cached context's settings for one
+call, and both consumers — `recommend()` and `build_analytics` — share that one definition of
+precedence. `survival_basis` gains a third value, `degraded_no_order`, because one string was
+covering two different owner actions.
+
+### 🔴 FINDING B — the first recompute of a draft cost 205 ms, and no test could see it
+
+Found by **this tier's own instrumentation**, on its first smoke run:
+
+```
+overall 2  push  my_slot  205.1 ms   <- the first recompute
+overall 3  push  my_slot    6.3 ms
+overall 4  push  my_slot    7.3 ms   ... ~6 ms for every row after
+```
+
+Reproduced standalone at **268.6 / 0.6 / 0.5 / 0.5 ms**. `engine/opponents.py` and
+`engine/optimize.py` import numpy and scipy **lazily, inside the hot path**, so the owner's FIRST
+PICK paid ~265 ms of import against a documented <200 ms budget and a live clock.
+
+⚠️ **`test_engine_latency.py` is structurally unable to catch it.** It measures **p95 over repeated
+calls in an already-warm process** and calls that "the pick-1 worst case". One 268 ms sample among
+nineteen 0.5 ms ones does not move p95 at all, and by the time it runs some earlier test has
+usually imported scipy anyway. Warmed at precompute, where every other one-time cost already lives.
+Measured after: **6.3 / 6.1 / 6.8 ms**.
+
+### 🔴 FINDING C — the dashboard and the overlay disagreed about the same draft
+
+Tier 3 wired `jaaffl_my_team_id` into the **push** path only, and `apps/web/lib/api.ts:38` calls
+`/recommendation?league_id=...` with **no `team_id`** — so the dashboard rendered
+`survival_basis="degraded_no_slot"` while the overlay beside it rendered `my_slot`, on the same
+board, with the quieter surface wrong. The configured slot is now the default on both paths; an
+explicit `?team_id=` still wins, so auditing another seat stays possible.
+
+### 🔴 FINDING D — a stale full-board resync rolled the draft backwards
+
+A resync REPLACES the board and the clock, and a `draft_state` carries no `pick_number` — so
+`_dedup_pick_number` returns `None` and the storage layer cannot de-dup it. Meanwhile
+`lib/transport.ts::send` queues an event for WS flush on reconnect **and** mirrors it over REST
+immediately, so the same `subscribe/response` snapshot legitimately arrives **twice** on a
+reconnect, the second copy landing after every pick that came in between.
+
+Measured on the real Tier-3 capture: its 275 frames with the single resync moved to the end folded
+**9 picks instead of 168**, and rolled the clock from 169 back to 149. A snapshot describing an
+older board is stale by definition and is now skipped whole, clock included. Scoped to **resync**
+frames only — a plain ticker stays absolutely authoritative over the clock, because CBS can pause
+or rewind a room and nothing here evidences a reachable stale ticker.
+
+### The instrumentation, and what it will produce
+
+`JAAFFL_REHEARSAL_LOG` (unset = off, fail-soft when on) writes one JSONL row per recommendation
+served, from **both** the push and pull paths: `survival_basis`, `vona_method`, `recompute_ms`,
+`draft_order_len`, `positive_vona_n`, `picks_masked`, `unresolved_ids`, and the top pick.
+`scripts/rehearsal_report.py` turns it into seven pass/fail verdicts. An **empty log fails every
+one** rather than passing them vacuously — a rehearsal that recorded nothing is the outcome most
+likely to be misread as success.
+
+The report's one claim about the overlay is DERIVED, not observed: the degraded chip is a pure
+function of `survival_basis`, pinned in `apps/extension/tests/overlay.test.ts`, and the owner's
+screenshot is the ground-truth cross-check.
+
+**An answer to a question the tier set out with.** Does an unresolvable CBS id mid-draft degrade
+safely, or silently unmask a drafted player? **Both.** `ingest/resolve.py` keeps the `cbs:<id>`,
+never guesses, and logs a warning — and the player stays on the board and can be recommended
+again. Before this tier nothing counted it; the report now names the ids.
+
+### The instrument, again — instances EIGHT and NINE
+
+- **Eight — the fixture supplied what the wiring dropped.** `engine_fixtures.make_context()`
+  defaults to `jaaffl_settings(draft_order=teams(12))`, so **every** engine test in the suite —
+  including Tier 3's own `test_my_team_slot.py`, via `test_api._primed_engine()` — handed the
+  engine an order `resolve_league_settings` has never produced. `test_precompute.py` even **pins**
+  `ctx.settings.draft_order is None`. The production behaviour was asserted in one file, fixtured
+  around in another, and nothing compared them.
+- **Nine — the latency test measured the wrong MOMENT** (Finding B).
+
+Every fix is mutation-proved component by component. Three mutations were instructive rather than
+routine: the rehearsal sink's fail-soft claim passes against a narrowed `except OSError` unless the
+test injects a `TypeError`; the resync staleness guard written `<=` instead of `<` passed **every**
+test in its file while silently rejecting a resync that fills gaps without extending the board
+(Tier 3's own defect in miniature, so that case is now constructed); and preflight's gate DECISION
+was uncovered while its probe was covered, so mutating the inline condition to `if False:` left
+every probe test green while the real script wrongly exited 0.
+
+Two fixtures were rebuilt after measurement rather than trusted. `test_coverage.py`'s preflight
+context was a `SimpleNamespace` and `AttributeError`'d the moment preflight called the real
+`recommend()` — the exact failure its own docstring predicted ("a fixture thinner than the object
+under test only proves the fixture"). And one player per position prices **negative** VONA
+(measured: `mlv 120.00, vona −40.32`), because a board with no tail cannot express scarcity: depth
+sweep of positive-VONA candidates **4 → 0, 10 → 30, 20 → 20, 30 → 20**.
+
+### `scripts/preflight.py` now checks the WIRING, not just the board
+
+A fourth guard runs the real `recommend()` against a PROBE order — labelled as one everywhere,
+because `config/league.json` forbids inferring the real order and preflight runs hours before it
+exists — and fails if survival is unreachable **or** prices nothing. Verified both directions on
+2026-08-10: with today's `.env` it **exits 1** (`JAAFFL_MY_TEAM_ID=''` — empty, not unset); with a
+slot set it exits 0 at `basis=my_slot`, 12 candidates with `vona > 0`. **This guard would have
+caught Finding A.**
+
+### What Tier 12 did NOT do
+
+- 🔴 **It did not face a live room.** No rehearsal was run, no live evidence exists, and every
+  number above comes from the real board or the real captures, not from a ticking draft. The
+  protocol (`docs/rehearsal-protocol.md`) and the machine setup (`docs/desktop-draft-setup.md`)
+  ship; the draft belongs to the next session.
+- **No coefficient, no config key, no score changed.** `config/engine.json` and
+  `config/league.json` are untouched, and the Tier 8/9/10/11 `lambda_slot_override` recommendation
+  is **still OPEN** — verified 2026-08-10, the file still reads `0.4 / −0.4`.
+- **No calibration number is re-measured, and that is asserted rather than assumed.**
+  `test_harness_fidelity.py` now pins structurally that nothing under `calibrate/` reads
+  `settings.draft_order`, so every Tier 8–11 tournament figure stands unchanged.
+- **The engine's RANKING was not re-measured with survival live.** Every published tournament
+  number came from a harness whose agent derives its own slot schedule, so the simulator never had
+  this defect — but nobody has asked what the LIVE engine's picks are worth now that its scarcity
+  term is non-zero. That needs the tournament, not a rehearsal.
+- **A ticker `draft_state` is still absolutely authoritative over the clock.** Only resyncs are
+  staleness-guarded.
+- **Bench eligibility is still an open owner question** (`docs/owner-manual-todo.md` §1b).
+- **Every Tier 11 caveat still stands**: `sigma` excludes missed-game variance, weekly scores are
+  unclipped normals, championship probability is still "highest season total of the 12", and the
+  weekly objective's championship result remains unclaimed pending independent replication.
+
+### ⚠️ What is superseded
+
+- **Tier 3's account of the structurally-zero VONA.** Its diagnosis was right and its fix was
+  **necessary but not sufficient**; the missing draft-order wiring was never identified, so the
+  symptom it set out to cure persisted for nine more tiers.
+- **`docs/owner-manual-todo.md` §1's instruction** that setting `JAAFFL_MY_TEAM_ID` restores the
+  real VONA. It did not, until this tier. Corrected in place, with the retraction recorded.
+- **`test_engine_latency.py`'s claim to measure "the pick-1 worst case".** It measures the steady
+  state; the real pick-1 cost was 40× larger.
+- Nothing else. No calibration figure moves.
+
 ## 📍 Status — 2026-08-09 · Tier 11 (the measuring stick was distorted, and it had no week axis)
 
 > **Tier 11 of the audit is merged** (PR #63). Two findings, and the second one corrects a claim

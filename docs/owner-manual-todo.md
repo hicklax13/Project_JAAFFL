@@ -32,12 +32,28 @@ of each build phase on purpose — nothing here blocks the automated build unles
 >
 > ### ⚠️ TWO THINGS TO DO BEFORE DRAFT NIGHT
 >
+> ⛔ **TIER 12 CORRECTION (2026-08-10) — this instruction was NOT ENOUGH, and saying so is the
+> useful part.** Everything below is still true and still required. What it did not say is that
+> setting your slot was only **one of two** inputs the survival model needs. The other is the
+> round-1 order your league enters into CBS — and until Tier 12 that order was read off the live
+> feed correctly and then **thrown away** before it reached the engine. So from Tier 3 until now,
+> setting `JAAFFL_MY_TEAM_ID` would have changed **nothing**: every recommendation this app has
+> ever served had its scarcity term switched off, and the overlay told you to fix the one thing
+> that could not fix it.
+>
+> Measured on your real board: **0 of 50** ranked players carried a scarcity number in any of the
+> 17 rounds. With the order wired through, 1–13 do, and the top recommendation changes in **3 of
+> 17 rounds**. Both halves are wired now, and the morning preflight **fails loudly** if either is
+> missing. Nothing about your engine's settings changed.
+>
 > **1. Set `JAAFFL_MY_TEAM_ID`.** Put your CBS team slot (`"1"`–`"12"`, as CBS numbers the teams in
 > the room) in `.env`. No CBS frame names _your own_ team, so the app cannot work it out from the
 > live feed. Without it the engine cannot tell when your next pick is, survival degrades to
 > "everyone is still available", and every recommendation reads `vona 0.00` — the scarcity half of
 > the model is off. It still ranks on Marginal Lineup Value and it now says so (the overlay foot
-> shows `VONA degraded · no draft slot set`), but you want the real number. One line:
+> shows `VONA degraded · no draft slot set`, or `VONA degraded · draft order not read yet` when it
+> is the ORDER that has not arrived — two different problems, and now two different messages).
+> One line:
 >
 > ```
 > JAAFFL_MY_TEAM_ID=7
@@ -53,7 +69,11 @@ of each build phase on purpose — nothing here blocks the automated build unles
 >
 > It builds the REAL draft context through the same wiring the live service uses, then prints how
 > many draftable players exist at each position and **exits non-zero** if any position you must
-> start has none. Healthy output looks like:
+> start has none — **and, since Tier 12, if the engine cannot compute a survival model at all.**
+> That fourth check is the one that would have caught the defect above: it asks the real
+> recommendation code whether your scarcity term is alive, and stops the draft if it is not.
+> Its line reads `survival probe ... basis=my_slot - N candidates with vona > 0`. Healthy output
+> looks like:
 >
 > ```
 > [preflight] draftable players on the board: 513
@@ -80,9 +100,14 @@ of each build phase on purpose — nothing here blocks the automated build unles
 > if it ever recurs mid-draft — but the preflight is the one that catches it while you can still act.
 >
 > **Still open:** a **replay is not a live draft.** The pipeline has run end to end on real captured
-> frames; it has still never run against a LIVE CBS room that is actually ticking. Also still
-> `TODO(capture)`: the **settings-page** parse and `CbsPageSnapshot` projections/injuries/rankings
-> (§4 below), which need a _settings/board_ page capture rather than draft-room frames.
+> frames; it has still never run against a LIVE CBS room that is actually ticking. Tier 12 built
+> the whole rehearsal apparatus for exactly this — [`rehearsal-protocol.md`](rehearsal-protocol.md)
+> (one draft, one sitting, your steps in one block) and
+> [`desktop-draft-setup.md`](desktop-draft-setup.md) — and then did **not** run it, because the
+> defects above were found before the protocol was written and the rehearsal moved to the machine
+> you will actually draft on. **This is the next thing to do.** Also still `TODO(capture)`: the
+> **settings-page** parse and `CbsPageSnapshot` projections/injuries/rankings (§4 below), which
+> need a _settings/board_ page capture rather than draft-room frames.
 >
 > ✅ **`scripts/seed_cbs_crosswalk.py` is no longer a prerequisite (PR #31).** The crosswalk now
 > seeds itself on the first `/recommendation` (~4,400 players / ~4,360 CBS links from the free

@@ -128,6 +128,10 @@ pnpm --filter @jaaffl/extension build
 
 This creates **`apps/extension/dist/`** — that's the folder you'll point Chrome at in the next step.
 
+> ⚠️ **After ANY later rebuild, click Reload on the extension card** in `chrome://extensions`. A
+> card that is already loaded keeps serving the old `dist/` until you reload it, so skipping this
+> silently tests the previous build.
+
 > Prefer live-rebuild while developing? Run `make ext-dev` instead (watch mode). For recording,
 > the one-shot `build` above is simpler.
 
@@ -171,6 +175,16 @@ make backend-dev
 > Where you launch it from no longer affects where captures land (paths are anchored to the repo
 > root, not the working directory), but the command above is the one that has been tested.
 
+**Optional (Tier 12): record the evidence, not just the frames.** Set `JAAFFL_REHEARSAL_LOG`
+before starting the backend and it writes one line per recommendation served — survival basis,
+recompute time, whether every drafted player was masked — which
+[`scripts/rehearsal_report.py`](../scripts/rehearsal_report.py) turns into a pass/fail table.
+Unset it and nothing is written and nothing changes.
+
+```powershell
+$env:JAAFFL_REHEARSAL_LOG = "data\rehearsal\draft-1.jsonl"
+```
+
 You should see it come up on **`127.0.0.1:8788`**. Confirm it's healthy in a second terminal (or
 your browser):
 
@@ -193,6 +207,11 @@ In the **same Chrome profile** where you loaded the extension and are **logged i
   and start a **Mock Draft** from the Fantasy Football area.
 - **For your real draft (draft night):** open your league and click into the **Draft Room** when
   it opens.
+
+> **Rehearsing rather than capturing?** [`rehearsal-protocol.md`](rehearsal-protocol.md) is the
+> Tier-12 version of this: one draft, three scripted perturbations, and a report at the end that
+> answers with numbers whether the pipeline held up under a clock. If you are setting up a second
+> machine to draft on, start at [`desktop-draft-setup.md`](desktop-draft-setup.md).
 
 The extension activates **automatically** on draft pages — it only runs on URLs that look like:
 
@@ -304,16 +323,18 @@ backstop no matter what.
 
 ## 12. Troubleshooting
 
-| Symptom                                                    | Fix                                                                                                                                                                                                                                                |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No `REC` badge after clicking the icon                     | Make sure the extension card is **ON** in `chrome://extensions`, then reload the CBS tab and click the icon again.                                                                                                                                 |
-| Overlay panel never appears on the CBS page                | Confirm the URL matches the patterns in Step 7. Reload the page. Check the extension card is enabled.                                                                                                                                              |
-| `curl http://127.0.0.1:8788/health` fails                  | The backend isn't running — start it with `make backend-dev` (Step 6) and leave that terminal open.                                                                                                                                                |
-| No `rec-*.jsonl` file appears while recording              | Backend must be running **before** you toggle REC. Check the backend terminal for errors; re-toggle REC off/on.                                                                                                                                    |
-| REC badge is on, sockets connect, but **zero frames land** | You almost certainly dismissed Chrome's **Local Network Access** prompt (Step 8). Click the icon left of the URL and allow it. Confirm by watching for `OPTIONS /dev/recordings ... 400` in the backend log — that is the preflight being blocked. |
-| Overlay panel covers the draft board                       | Click **▾** in the panel header to collapse it, or drag the panel by its header. Both persist across reloads. Do NOT disable the extension — that stops recording.                                                                                 |
-| Extension card shows fewer than 3 content scripts          | Known `@crxjs` build risk with the MAIN-world entry. Re-run `pnpm --filter @jaaffl/extension build`, remove + re-load unpacked.                                                                                                                    |
-| CBS settings don't match Step 1's table                    | **Don't** edit `config/league.json`. Tell Claude what differs so the conflict is handled correctly.                                                                                                                                                |
+| Symptom                                                       | Fix                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No `REC` badge after clicking the icon                        | Make sure the extension card is **ON** in `chrome://extensions`, then reload the CBS tab and click the icon again.                                                                                                                                 |
+| Overlay panel never appears on the CBS page                   | Confirm the URL matches the patterns in Step 7. Reload the page. Check the extension card is enabled.                                                                                                                                              |
+| `curl http://127.0.0.1:8788/health` fails                     | The backend isn't running — start it with `make backend-dev` (Step 6) and leave that terminal open.                                                                                                                                                |
+| No `rec-*.jsonl` file appears while recording                 | Backend must be running **before** you toggle REC. Check the backend terminal for errors; re-toggle REC off/on.                                                                                                                                    |
+| REC badge is on, sockets connect, but **zero frames land**    | You almost certainly dismissed Chrome's **Local Network Access** prompt (Step 8). Click the icon left of the URL and allow it. Confirm by watching for `OPTIONS /dev/recordings ... 400` in the backend log — that is the preflight being blocked. |
+| Overlay panel covers the draft board                          | Click **▾** in the panel header to collapse it, or drag the panel by its header. Both persist across reloads. Do NOT disable the extension — that stops recording.                                                                                 |
+| Extension card shows fewer than 3 content scripts             | Known `@crxjs` build risk with the MAIN-world entry. Re-run `pnpm --filter @jaaffl/extension build`, remove + re-load unpacked.                                                                                                                    |
+| CBS settings don't match Step 1's table                       | **Don't** edit `config/league.json`. Tell Claude what differs so the conflict is handled correctly.                                                                                                                                                |
+| Overlay foot reads `VONA degraded · draft order not read yet` | The room's `league_settings` frame hasn't arrived (or the tab was opened after the order was sent). Paste an `ORDER: 1,2,…,12` line — **exactly 12 entries** — into the Manual paste box (Step 11).                                                |
+| Overlay foot reads `VONA degraded · no draft slot set`        | `JAAFFL_MY_TEAM_ID` is unset, or is not one of the teams in the room. Set it in `.env` and restart the backend.                                                                                                                                    |
 
 ---
 
