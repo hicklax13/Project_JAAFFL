@@ -18,12 +18,14 @@ from pydantic import BaseModel, Field, ValidationError
 from jaaffl import __version__
 from jaaffl.api.origin import allowed_origin_regex, is_origin_allowed, parse_allowed_origins
 from jaaffl.api.recs import PROTOCOL_VERSION, SCHEMA_VERSION, RecsHub
+from jaaffl.api.rehearsal import RehearsalLog
 from jaaffl.config import Settings, get_settings
 from jaaffl.data import Crosswalk
 from jaaffl.data.warehouse import Warehouse, open_app_db
 from jaaffl.domain import DraftEvent, DraftEventType, DraftState, LeagueSettings, Recommendation
 from jaaffl.engine.analytics import DraftAnalytics, build_analytics
 from jaaffl.engine.service import RecommendationEngine
+from jaaffl.engine.warmup import warm_hot_path
 from jaaffl.ingest import DraftLog, IngestResult, handle_event, resolve_pick_ids
 from jaaffl.ingest.board import DraftBoardState, build_board_state
 from jaaffl.ingest.log import LoggedEvent, fold_state
@@ -83,6 +85,17 @@ def create_app(
     else:
         app.state.rec_engine = RecommendationEngine()
     app.state.rec_history = {}
+    # Tier 12 evidence sink — a no-op unless JAAFFL_REHEARSAL_LOG is set.
+    app.state.rehearsal = RehearsalLog(settings.jaaffl_rehearsal_log)
+    # Pay the engine's lazy numpy/scipy imports HERE, at boot, before any request exists.
+    #
+    # ⚠️ Found in code review. Warming inside precompute was NOT enough: precompute is lazy on
+    # first use, so the warm-up ran inside the very request that served the first recompute —
+    # which moved ~265ms out of the `recompute_ms` METRIC without taking it out of the REQUEST
+    # (measured: first request 245ms before, 309-326ms after, with recompute_ms reporting 1.2ms).
+    # That is instance NINE's own failure mode reproduced by instance NINE's fix. At boot the cost
+    # is genuinely paid before draft night, because the owner starts the backend first.
+    warm_hot_path()
     # Ensure the SQLite app-state schema (league_snapshots, players, id_crosswalk, ...) exists
     # from boot — stdlib sqlite only, no DuckDB import, so the base ($0) install still starts
     # without the `data` extra. Full DuckDB/Parquet materialization is `make warehouse`.
@@ -154,6 +167,12 @@ def create_app(
         if recommendation is not None:
             app.state.recs_hub.publish(recommendation)
             app.state.rec_history.setdefault(event.league_id, []).append(recommendation)
+            app.state.rehearsal.record(
+                "push",
+                state,
+                recommendation,
+                lambda: app.state.rec_engine.context_for(event.league_id),
+            )
 
     @app.get("/health")
     def health() -> dict:
@@ -271,12 +290,30 @@ def create_app(
                     "picks": [p for p in state.picks if p.overall < as_of_overall_pick],
                 }
             )
+        # An explicit ?team_id= wins (auditing another seat's board stays possible); otherwise the
+        # configured slot is the DEFAULT here, exactly as on the push path. Without this the
+        # dashboard (apps/web/lib/api.ts sends no team_id) rendered a degraded model while the
+        # overlay beside it rendered a live one, on the same draft.
+        #
+        # ⚠️ Truthiness, not `is not None`, and fill-only-when-absent — matching the push path
+        # exactly. `JAAFFL_MY_TEAM_ID=` in the owner's real .env parses as '' rather than None, so
+        # an `is not None` test overwrote a slot the FOLD already knew with an empty string. Found
+        # in code review; it was a regression this tier introduced, reachable today.
         if team_id is not None:
             state = state.model_copy(update={"my_team_id": team_id})
+        elif state.my_team_id is None and settings.jaaffl_my_team_id:
+            state = state.model_copy(update={"my_team_id": settings.jaaffl_my_team_id})
         state = _resolve_state(state, league_id)
         rec = app.state.rec_engine.recommend(state, limit=limit, use_mc=mc)
         if rec is None:
             raise HTTPException(status_code=503, detail="engine warming up")
+        # Recorded BEFORE the include_components strip: `positive_vona_n` reads ScoreComponents,
+        # so logging the stripped copy would report 0 candidates with a live scarcity term on
+        # every ?include_components=false pull — a silent zero in the exact column Tier 12 exists
+        # to measure.
+        app.state.rehearsal.record(
+            "pull", state, rec, lambda: app.state.rec_engine.context_for(league_id)
+        )
         if not include_components:
             rec = rec.model_copy(
                 update={"ranked": [p.model_copy(update={"components": None}) for p in rec.ranked]}
@@ -411,6 +448,13 @@ def create_app(
                 status_code=503, detail=f"engine warming up for league '{league_id}'"
             )
         state = _resolve_state(fold_state(events), league_id)
+        # The pick markers need BOTH the room's order and my own slot, and no CBS frame names the
+        # viewer's team — `grep my_team_id apps/extension/src/` finds nothing, so the folded state
+        # never carries one on the live path. Without this the dashboard's markers stayed empty
+        # even after the order was wired through: same fill-only-when-absent rule as the other two
+        # surfaces, so all three agree about whose board is being shown.
+        if state.my_team_id is None and settings.jaaffl_my_team_id:
+            state = state.model_copy(update={"my_team_id": settings.jaaffl_my_team_id})
         ids = [pid for pid in (candidates or "").split(",") if pid] or None
         return build_analytics(context, state, candidates=ids)
 

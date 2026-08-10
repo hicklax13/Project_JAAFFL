@@ -19,7 +19,7 @@ from collections.abc import Iterable, Sequence
 from pydantic import BaseModel, Field
 
 from jaaffl.domain import DraftState, LeagueSettings, Position
-from jaaffl.engine.context import DraftContext
+from jaaffl.engine.context import DraftContext, effective_settings
 from jaaffl.engine.opponents import (
     board_adp_shift,
     next_overall_pick,
@@ -153,11 +153,12 @@ def _marker_picks(context: DraftContext, state: DraftState) -> list[int]:
     and entered into CBS — so these MUST come from ``next_overall_pick``. Degrades to ``[]`` when
     the order or our team slot is not known yet (pre-draft), rather than raising.
     """
-    total = _total_picks(context.settings)
+    settings = effective_settings(context, state)
+    total = _total_picks(settings)
     markers: list[int] = []
     for horizon in (1, 2):
         try:
-            pick = next_overall_pick(context.settings, state, horizon=horizon)
+            pick = next_overall_pick(settings, state, horizon=horizon)
         except ValueError:
             return []
         # Beyond the last pick of the draft = the no-picks-left sentinel, not a real upcoming pick.
@@ -205,10 +206,11 @@ def survival_curves(
         chosen = [pid for pid in dict.fromkeys(candidates) if pid in available_set]
     chosen = [pid for pid in chosen if pid in context.adp_mean][:SURVIVAL_CANDIDATES]
 
+    settings = effective_settings(context, state)
     markers = _marker_picks(context, state)
     start = state.current_overall_pick
     end = min((markers[-1] if markers else start) + SURVIVAL_TAIL, start + SURVIVAL_MAX_SPAN)
-    total = _total_picks(context.settings)
+    total = _total_picks(settings)
     if total:
         end = min(end, total)
     picks = list(range(start, end + 1))
@@ -220,9 +222,7 @@ def survival_curves(
     # pulls its survival down, so the chart agrees with the advice the engine is giving.
     available_adp = {pid: context.adp_mean[pid] for pid in available if pid in context.adp_mean}
     try:
-        pressure = run_pressure_by_position(
-            state, context.settings, available_adp, context.position
-        )
+        pressure = run_pressure_by_position(state, settings, available_adp, context.position)
     except ValueError:
         pressure = {}
     shift = board_adp_shift(pressure, context.position, beta=context.params.board_survival_weight)
@@ -235,7 +235,7 @@ def survival_curves(
     for pick in picks:
         taken = pick_probabilities(
             state,
-            context.settings,
+            settings,
             subset_adp,
             subset_sd,
             my_next_overall=pick,

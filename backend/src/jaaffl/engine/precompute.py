@@ -25,6 +25,7 @@ import structlog
 from jaaffl.config import EngineParams, Settings
 from jaaffl.domain import Player, Position
 from jaaffl.engine.context import DraftContext, build_draft_context
+from jaaffl.engine.warmup import warm_hot_path
 from jaaffl.league.constitution import resolve_league_settings
 from jaaffl.league.coverage import board_coverage_gaps, inert_cliff_positions
 from jaaffl.providers.base import Capability, FantasyDataProvider, ProviderError
@@ -259,6 +260,11 @@ def build_registry_context_source(
                 inert=[str(position) for position in inert],
                 priced=sum(1 for bonus in context.cliff_bonus.values() if bonus > 0.0),
             )
+        # Pay the hot path's lazy numpy/scipy imports HERE, where every other one-time cost in
+        # this system already lives. Measured 2026-08-10: the first recommend() of a draft cost
+        # 268.6 ms and every later one 0.5 ms, so without this the owner's FIRST PICK pays ~265 ms
+        # of import against a <200 ms budget and a live clock. See engine/warmup.py.
+        warm_hot_path()
         log.info("precompute_context_built", league_id=league_id, players=len(context.mu))
         return context
 

@@ -288,3 +288,22 @@ def test_build_analytics_passes_candidates_through() -> None:
     context = make_context(_specs())
     analytics = build_analytics(context, draft_state(5), candidates=["wr2"])
     assert [c.player_id for c in analytics.survival_curves] == ["wr2"]
+
+
+def test_markers_read_the_order_the_room_reported_not_just_the_settings() -> None:
+    """TIER 12. `_total_picks` is `rounds * len(settings.draft_order or [])`, i.e. ZERO on the
+    live path, so the dashboard's pick markers were as dead as the overlay's VONA and for the
+    same reason: `resolve_league_settings` returns draft_order=None by construction and the
+    room's order was folded nowhere. Same seam, same fix."""
+    context = make_context(_specs(), settings=jaaffl_settings(draft_order=None))
+    state = draft_state(5, my_team_id="t0").model_copy(update={"draft_order": teams(12)})
+    analytics = build_analytics(context, state)
+    assert analytics.my_next_picks, "no markers: the state's order was ignored"
+
+
+def test_the_state_order_does_not_leak_into_the_cached_context() -> None:
+    """DraftContext is cached per league and shared by every connected dashboard client."""
+    context = make_context(_specs(), settings=jaaffl_settings(draft_order=None))
+    state = draft_state(5, my_team_id="t0").model_copy(update={"draft_order": teams(12)})
+    build_analytics(context, state)
+    assert context.settings.draft_order is None

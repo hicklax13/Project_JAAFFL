@@ -1,6 +1,6 @@
 """Exercise the implemented league logic against a representative 12-team PPR league."""
 
-from jaaffl.domain import LeagueSettings, Position, RosterSlot, ScoringRule
+from jaaffl.domain import DraftState, LeagueSettings, Position, RosterSlot, ScoringRule
 from jaaffl.league import league_points, starter_demand
 
 FLEX = [Position.RB, Position.WR, Position.TE]
@@ -49,3 +49,19 @@ def test_scoring_applies_to_filter() -> None:
     # A WR reception should not score when the rule is RB-only.
     assert league_points({"reception": 4}, scoring, Position.WR) == 0.0
     assert league_points({"reception": 4}, scoring, Position.RB) == 4.0
+
+
+def test_draft_state_carries_the_rooms_entered_order() -> None:
+    """config/league.json forbids inferring a snake order from team count, so the ONLY place the
+    real order can come from is the room. It has to survive the fold, and the fold's output is a
+    DraftState — so DraftState is where it lives."""
+    state = DraftState(
+        league_id="L1",
+        current_overall_pick=1,
+        draft_order=[str(i) for i in range(1, 13)],
+    )
+    assert state.draft_order == [str(i) for i in range(1, 13)]
+
+
+def test_draft_state_order_defaults_to_none_and_is_never_synthesized() -> None:
+    assert DraftState(league_id="L1", current_overall_pick=1).draft_order is None

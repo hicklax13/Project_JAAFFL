@@ -19,7 +19,11 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import NamedTuple
 
+import structlog
+
 from jaaffl.domain import DraftEvent, DraftEventType, DraftPick, DraftState
+
+log = structlog.get_logger(__name__)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS draft_event_log (
@@ -197,14 +201,75 @@ def fold_state(events: Iterable[LoggedEvent]) -> DraftState:
             my_team = ev.data.get("my_team_id")
             if my_team:
                 state = state.model_copy(update={"my_team_id": my_team})
+            # The REAL entered round-1 order, verbatim from the room
+            # (parse.ts::parseDraftOrder <- fullstatedelta.order). Never synthesized, and never
+            # ADOPTED when it disagrees with the reported team count: opponents._my_overall_picks
+            # uses len(draft_order) AS the team count, so a short order silently corrupts every
+            # "my next pick" for the rest of the draft. config/league.json is immutable and its
+            # agent_usage_contract says surface a conflict, never apply it.
+            order = ev.data.get("draft_order")
+            if isinstance(order, list) and order:
+                teams = [str(team) for team in order]
+                # `/draft/events` accepts an arbitrary `data` dict and appends it DURABLY, and
+                # fold_state is on the hot path of /draft/events, /recommendation, /state AND
+                # /analytics — so a bare `int(expected)` on a non-numeric team_count would take the
+                # league down for the rest of the draft, on every request, unrecoverably. fold_state
+                # is a TOTAL function and must stay one: an uninterpretable count is "no reported
+                # count", which falls through to accepting the room's order.
+                try:
+                    expected = int(ev.data["team_count"])
+                except (KeyError, TypeError, ValueError):
+                    expected = None
+                if expected is not None and expected != len(teams):
+                    log.warning(
+                        "draft_order_length_conflict",
+                        league_id=ev.league_id,
+                        reported=len(teams),
+                        team_count=int(expected),
+                    )
+                else:
+                    state = state.model_copy(update={"draft_order": teams})
         elif ev.event_type == DraftEventType.DRAFT_STATE:
             snap = DraftState.model_validate({"league_id": ev.league_id, **ev.data})
-            update: dict = {
-                "current_overall_pick": snap.current_overall_pick,
-                "on_the_clock_team_id": snap.on_the_clock_team_id,
-            }
+            # A full-board resync used to REPLACE the board, and a `draft_state` carries no
+            # pick_number — so `_dedup_pick_number` returns None for it and the storage layer
+            # cannot de-dup it. Meanwhile `lib/transport.ts::send` queues an event for WS flush on
+            # reconnect AND mirrors it over REST immediately, so the SAME subscribe/response
+            # snapshot legitimately arrives twice on a reconnect, with the second copy landing
+            # after every pick that came in between. Measured on the real Tier-3 capture: its 275
+            # frames with the resync moved last folded 9 picks instead of 168 and rolled the clock
+            # from 169 back to 149.
+            #
+            # ⚠️ Tier 12's first attempt SKIPPED a snapshot whose max `overall` was lower than the
+            # board's, and code review measured that wrong in BOTH directions: one pick delta
+            # winning the race against the connect snapshot discarded it entirely (1 pick folded
+            # instead of 99 — Tier 3's exact defect, snapshot-only picks left unmasked), while a
+            # same-max snapshot carrying FEWER picks passed the test and dropped one.
+            #
+            # The predicate was the mistake. Picks are UNIONED by `overall` — which cannot lose one
+            # under any arrival order — with the snapshot winning per pick, so an authoritative
+            # resync can still CORRECT a pick it also carries. The staleness test survives for the
+            # CLOCK alone, where the measured rollback lives, and stays scoped to resync frames: a
+            # plain ticker is absolutely authoritative over the clock, because CBS can legitimately
+            # pause or rewind a room and nothing here evidences a reachable stale ticker.
+            update: dict = {"on_the_clock_team_id": snap.on_the_clock_team_id}
+            stale_clock = False
             if "picks" in ev.data:  # a genuine full resync, not a plain ticker tick
-                update["picks"] = snap.picks
+                merged = {p.overall: p for p in state.picks}
+                merged.update({p.overall: p for p in snap.picks})
+                update["picks"] = sorted(merged.values(), key=lambda p: p.overall)
+                incoming = max((p.overall for p in snap.picks), default=0)
+                current = max((p.overall for p in state.picks), default=0)
+                stale_clock = incoming < current
+                if stale_clock:
+                    log.warning(
+                        "draft_state_resync_clock_ignored_as_stale",
+                        league_id=ev.league_id,
+                        incoming_max_overall=incoming,
+                        current_max_overall=current,
+                    )
+            if not stale_clock:
+                update["current_overall_pick"] = snap.current_overall_pick
             if "available_player_ids" in ev.data:
                 update["available_player_ids"] = snap.available_player_ids
             if snap.my_team_id:

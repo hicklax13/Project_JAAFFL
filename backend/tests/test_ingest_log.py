@@ -255,7 +255,20 @@ def test_fold_draft_state_is_authoritative_resync() -> None:
     ]
     state = fold_state(events)
     assert state.current_overall_pick == 26
-    assert [p.overall for p in state.picks] == [25]
+    # ⚠️ TIER 12 CONTRACT CHANGE (code review): a resync UNIONS by `overall` rather than replacing.
+    # This test asserted `== [25]` — the snapshot wiping the locally folded pick 1 — and that is
+    # what the reviewer measured as a live data-loss path: one pick delta winning the race against
+    # the connect snapshot made the snapshot look "older" and discarded it, folding 1 pick instead
+    # of 99 and leaving snapshot-only picks unmasked (Tier 3's exact defect).
+    #
+    # A real resync is built from `fullstate.teams` (parse.ts::cbsSnapshotPicks), i.e. the WHOLE
+    # board, so on the real path a union and a replacement are identical — they differ only when
+    # the snapshot is not a superset, which is exactly the racing case. The residual cost of a
+    # union is that a pick the room later RETRACTS would survive locally, masking a player who is
+    # really available. Nothing in docs/research/cbs-draft-protocol.md evidences CBS retracting a
+    # pick mid-draft, and that cost is one masked player against losing 99 and re-recommending
+    # players who are already gone.
+    assert [p.overall for p in state.picks] == [1, 25]
     assert state.on_the_clock_team_id == "T3"
     assert state.my_team_id == "T7"  # snapshot without my_team_id must not erase it
 
@@ -308,3 +321,76 @@ def test_payload_pick_number_mismatch_never_stored(conn) -> None:
             conn, bad, pick_number=bad.pick_number, source="ws", captured_at="2026-08-30T18:00:00Z"
         )
     assert read_events(conn, "L1") == []
+
+
+ROOM_ORDER = [str(i) for i in range(1, 13)]
+
+
+def test_fold_binds_the_order_the_room_reported() -> None:
+    """parse.ts emits league_settings{draft_order} from fullstatedelta.order (Tier 3's capture
+    decode). The fold read only my_team_id off that event, so the order was decoded and then
+    thrown away — and resolve_league_settings returns None by construction, so the engine could
+    never compute a survival model on the live path."""
+    events = [
+        logged(
+            "league_settings",
+            {"league_id": "L1", "team_count": 12, "draft_order": ROOM_ORDER},
+            seq=1,
+        )
+    ]
+    assert fold_state(events).draft_order == ROOM_ORDER
+
+
+def test_fold_refuses_an_order_that_disagrees_with_team_count() -> None:
+    """opponents._my_overall_picks uses len(draft_order) AS the team count, so an 11-entry order
+    silently corrupts every 'my next pick' for the rest of the draft. config/league.json is
+    immutable and fixes teams=12: surface the conflict, never adopt it."""
+    events = [
+        logged(
+            "league_settings",
+            {"league_id": "L1", "team_count": 12, "draft_order": ROOM_ORDER[:11]},
+            seq=1,
+        )
+    ]
+    assert fold_state(events).draft_order is None
+
+
+def test_fold_still_never_synthesizes_an_order() -> None:
+    """A settings event with a team_count and no order must not mint one."""
+    events = [logged("league_settings", {"league_id": "L1", "team_count": 12}, seq=1)]
+    assert fold_state(events).draft_order is None
+
+
+def test_a_later_settings_event_does_not_erase_a_known_order() -> None:
+    """CBS attaches fullstatedelta to picks/completed frames, so the settings event repeats all
+    draft long — and the extension de-dups a non-pick event by its whole data blob, so a variant
+    without the order does reach the fold."""
+    events = [
+        logged(
+            "league_settings",
+            {"league_id": "L1", "team_count": 12, "draft_order": ROOM_ORDER},
+            seq=1,
+        ),
+        logged("league_settings", {"league_id": "L1", "my_team_id": "7"}, seq=2),
+    ]
+    folded = fold_state(events)
+    assert folded.draft_order == ROOM_ORDER
+    assert folded.my_team_id == "7"
+
+
+def test_a_non_numeric_team_count_cannot_brick_the_fold() -> None:
+    """⚠️ Found in code review. fold_state was a TOTAL function; Tier 12's length guard made it
+    raise on a non-numeric team_count. /draft/events accepts an arbitrary data dict and appends it
+    DURABLY, and fold_state is on the hot path of /draft/events, /recommendation, /state AND
+    /analytics — so one malformed event would have taken the league down for the rest of the
+    draft, on every request, unrecoverably. A new draft-night failure mode where none existed."""
+    for bad in ("twelve", [12], {"n": 12}, None):
+        events = [
+            logged(
+                "league_settings",
+                {"league_id": "L1", "team_count": bad, "draft_order": ROOM_ORDER},
+                seq=1,
+            )
+        ]
+        state = fold_state(events)  # must not raise
+        assert state.draft_order == ROOM_ORDER, f"team_count={bad!r} lost the order"

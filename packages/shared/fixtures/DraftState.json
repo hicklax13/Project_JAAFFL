@@ -3,6 +3,20 @@
   "current_overall_pick": 14,
   "on_the_clock_team_id": "T11",
   "my_team_id": "T07",
+  "draft_order": [
+    "T01",
+    "T02",
+    "T03",
+    "T04",
+    "T05",
+    "T06",
+    "T07",
+    "T08",
+    "T09",
+    "T10",
+    "T11",
+    "T12"
+  ],
   "picks": [
     {
       "overall": 13,

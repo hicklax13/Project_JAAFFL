@@ -405,16 +405,23 @@ export function mountOverlay(opts: MountOverlayOptions = {}): OverlayHandle {
     const ageMs = Date.now() - receivedAt;
     const parts = [`synced ${(ageMs / 1000).toFixed(1)}s ago`];
     if (recomputeMs !== null) parts.push(`recompute ${Math.round(recomputeMs)}ms`);
-    // No CBS frame names the viewer's own team, so without a configured slot the engine
-    // cannot work out when my next pick is: survival degrades to "everyone available" and
-    // VONA collapses to 0.00. That zero is indistinguishable from a computed zero unless it
-    // is labelled here. Only ever shown when the backend actually SAID so — an older payload
-    // that omits survival_basis is not accused of being degraded.
-    const degraded = survivalBasis === "degraded_no_slot";
-    if (degraded) parts.push("VONA degraded · no draft slot set");
+    // A degraded VONA has TWO possible causes with two DIFFERENT owner actions, and saying
+    // "no draft slot set" for both told the owner to set JAAFFL_MY_TEAM_ID when what was
+    // actually missing was the room's entered order — which no setting supplies (it is folded
+    // from the league_settings frame, or pasted as an ORDER: line). Either way survival
+    // degrades to "everyone available" and VONA collapses to 0.00, and that zero is
+    // indistinguishable from a computed zero unless it is labelled here. Only ever shown when
+    // the backend actually SAID so — an older payload that omits survival_basis is not accused.
+    const degradedReason =
+      survivalBasis === "degraded_no_order"
+        ? "VONA degraded · draft order not read yet"
+        : survivalBasis === "degraded_no_slot"
+          ? "VONA degraded · no draft slot set"
+          : null;
+    if (degradedReason) parts.push(degradedReason);
     footSync.textContent = parts.join(" · ");
     footSync.classList.toggle("is-stale", ageMs >= STALE_AFTER_MS);
-    footSync.classList.toggle("is-degraded", degraded);
+    footSync.classList.toggle("is-degraded", degradedReason !== null);
   }
 
   // Repaint on a timer, not only on push: without this the age would freeze at "0.0s ago" the

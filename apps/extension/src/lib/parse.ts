@@ -453,7 +453,11 @@ function parseBoard(root: ParentNode): DraftEvent[] {
   const order = Array.from(root.querySelectorAll(".draft-order [data-team-id]"))
     .map((el) => el.getAttribute("data-team-id"))
     .filter((id): id is string => !!id);
-  if (order.length > 0) {
+  // Same exactly-12 guard as parseDraftOrder (network) and parsePastedReport (paste), and for the
+  // same reason: opponents.py's snake math uses len(draft_order) AS the team count. This probe is
+  // the one that reads a LIVE, possibly half-rendered DOM, so a partial order is not hypothetical
+  // here — and a wrong-length one would have been reported as a healthy `survival_basis: my_slot`.
+  if (order.length === IMMUTABLE_TEAM_COUNT) {
     events.push(orderEvent(leagueId, "dom", order));
   }
   return events;
@@ -502,7 +506,11 @@ export function parsePastedReport(text: string): PastedReport {
     const order = line.match(ORDER_LINE);
     if (order?.[1]) {
       const teams = order[1].split(/[,\s]+/).filter(Boolean);
-      if (teams.length > 0) {
+      // Same guard, same reason, as parseDraftOrder on the network path: opponents.py's snake
+      // math uses len(draft_order) AS the team count, so ANY other length silently corrupts
+      // every "my next pick" for the rest of the draft. Reported, never dropped silently — a
+      // partial parse announced as "N event(s) sent" is how the owner loses a player.
+      if (teams.length === IMMUTABLE_TEAM_COUNT) {
         events.push(orderEvent("manual", "paste", teams));
       } else {
         skipped.push(line);

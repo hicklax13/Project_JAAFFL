@@ -132,6 +132,12 @@ class Settings(BaseSettings):
     # curation. Git-ignored — raw recordings may carry league names; only redacted
     # goldens are committed (plan §5.10).
     jaaffl_recordings_dir: Path = Path("./apps/extension/fixtures/cbs")
+    # TIER 12 rehearsal evidence sink (api/rehearsal.py). UNSET = off, and off is the draft-night
+    # default: a rehearsal is worth a log line per pick, a real draft is not worth a new failure
+    # mode. When set, one JSONL line per recommendation actually served (push AND pull), written
+    # fail-soft. Read by scripts/rehearsal_report.py. Like the raw captures, a real league's log
+    # names other drafters' teams — keep it under the git-ignored data dir.
+    jaaffl_rehearsal_log: Path | None = None
 
     @field_validator("jaaffl_data_dir", "jaaffl_engine_params_path", "jaaffl_recordings_dir")
     @classmethod

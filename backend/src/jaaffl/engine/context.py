@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 import structlog
 
 from jaaffl.config import EngineParams
-from jaaffl.domain import LeagueSettings, Player, Position
+from jaaffl.domain import DraftState, LeagueSettings, Player, Position
 from jaaffl.engine.optimize import StartingSlot, expand_starting_slots, marginal_lineup_value
 from jaaffl.engine.projections import PlayerProjection, SituationSignal, build_projections
 from jaaffl.engine.tiers import assign_tiers, cliff_bonuses
@@ -53,6 +53,29 @@ class DraftContext:
     # Calendar fact, not a projection: player_id -> the week his NFL team does not play. Absent
     # for a player whose team (or bye) is unknown, so the overlay's chip degrades to "no chip".
     bye_week: dict[str, int] = field(default_factory=dict)
+
+
+def effective_settings(context: DraftContext, state: DraftState) -> LeagueSettings:
+    """The context's settings with the ROOM's entered draft order overlaid, for ONE call.
+
+    `DraftContext` is precomputed and cached per league before a draft exists, and
+    `league.constitution.resolve_league_settings` returns `draft_order=None` by construction —
+    "read from the live CBS room, never inferred here". So the order the room actually entered
+    arrives on the `DraftState` (folded from the `league_settings` event, or pasted as an
+    `ORDER:` line) and, when present, wins: a precomputed order can only ever be stale.
+
+    Defined once because two consumers must agree on that precedence — `recommend()` and
+    `analytics.build_analytics`. When they disagreed (Tier 12: neither could see the order at
+    all) the overlay's VONA and the dashboard's pick markers were both dead, and nothing
+    compared them.
+
+    Returns the context's own settings object unchanged when the state carries no order, so the
+    common path allocates nothing. NEVER mutates `context.settings` — it is shared across every
+    pick and every connected client.
+    """
+    if not state.draft_order:
+        return context.settings
+    return context.settings.model_copy(update={"draft_order": state.draft_order})
 
 
 def build_draft_context(

@@ -151,8 +151,17 @@ describe("manual paste vs the real live-capture vocabulary", () => {
     // A stricter separator makes silent drops MORE likely, and a paste panel that says
     // "21 event(s) sent" after being handed 24 picks reads as success. The owner has to be
     // told which lines were skipped, or a missing pick is invisible until it costs a player.
+    // The ORDER line carries all 12 teams because Tier 12 length-guards it (a short order
+    // silently corrupts every "my next pick" — see the guard's own describe block below). This
+    // test is about unparseable PICK lines; the 3-team order it used to carry was incidental.
     const report = parsePastedReport(
-      ["ORDER: 1, 2, 3", "1. 1 - Puka Nacua, WR, LAR", "2. 2 -- broken", "", "   "].join("\n"),
+      [
+        "ORDER: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12",
+        "1. 1 - Puka Nacua, WR, LAR",
+        "2. 2 -- broken",
+        "",
+        "   ",
+      ].join("\n"),
     );
     expect(report.events).toHaveLength(2); // the ORDER line + the one good pick
     expect(report.skipped).toEqual(["2. 2 -- broken"]);
@@ -177,5 +186,35 @@ describe("manual paste vs the real live-capture vocabulary", () => {
     const serialized = `${JSON.stringify(pasted, null, 2)}\n`;
     if (process.env["JAAFFL_WRITE_REPLAY"]) writeFileSync(artifact, serialized, "utf-8");
     expect(readFileSync(artifact, "utf-8").replace(/\r\n/g, "\n")).toBe(serialized);
+  });
+});
+
+describe("the ORDER: line is length-guarded like the network path", () => {
+  /**
+   * TIER 12. `parseDraftOrder` guards the NETWORK path at exactly 12 and its comment says why:
+   * `opponents._my_overall_picks` uses `len(draft_order)` AS the team count, so any other length
+   * silently gives every "my next pick" the wrong number for the rest of the draft.
+   * `parsePastedReport` — the guaranteed draft-day fallback — accepted any length.
+   */
+  const orderEventsOf = (text: string) =>
+    parsePastedReport(text).events.filter((e) => e.event_type === "league_settings");
+
+  it("accepts exactly twelve teams", () => {
+    const report = parsePastedReport("ORDER: 1,2,3,4,5,6,7,8,9,10,11,12");
+    expect(report.skipped).toEqual([]);
+    const order = report.events.find((e) => e.event_type === "league_settings");
+    expect((order?.data as Record<string, unknown>)["draft_order"]).toHaveLength(12);
+  });
+
+  it("REPORTS a short order instead of emitting it", () => {
+    const line = "ORDER: 1,2,3,4,5,6,7,8,9,10,11";
+    expect(orderEventsOf(line)).toEqual([]);
+    expect(parsePastedReport(line).skipped).toEqual([line]);
+  });
+
+  it("REPORTS a long order instead of emitting it", () => {
+    const line = "ORDER: 1,2,3,4,5,6,7,8,9,10,11,12,13";
+    expect(orderEventsOf(line)).toEqual([]);
+    expect(parsePastedReport(line).skipped).toEqual([line]);
   });
 });

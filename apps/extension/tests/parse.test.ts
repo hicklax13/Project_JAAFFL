@@ -389,3 +389,39 @@ describe("parsePastedResults — manual fallback", () => {
     });
   });
 });
+
+describe("the DOM probe's draft order is length-guarded like the network path", () => {
+  /**
+   * Found in code review. `parseDraftOrder` (network) and `parsePastedReport` (paste) both
+   * require exactly 12 entries, because `opponents._my_overall_picks` uses `len(draft_order)` AS
+   * the team count. The DOM fallback emitted any non-empty order — a partially-rendered board
+   * would have silently given every "my next pick" the wrong number for the whole draft, and the
+   * overlay would have reported `survival_basis: my_slot` over it.
+   */
+  const board = (teamIds: string[]) => {
+    const doc = new DOMParser().parseFromString(
+      `<div class="draft-order">${teamIds
+        .map((id) => `<span data-team-id="${id}"></span>`)
+        .join("")}</div>`,
+      "text/html",
+    );
+    return parseDraftEvents({ via: "dom", root: doc });
+  };
+
+  const orders = (events: ReturnType<typeof parseDraftEvents>) =>
+    events.filter((e) => e.event_type === "league_settings");
+
+  it("emits an order of exactly twelve teams", () => {
+    const events = orders(board(Array.from({ length: 12 }, (_, i) => `t${i}`)));
+    expect(events).toHaveLength(1);
+    expect((events[0]!.data as Record<string, unknown>)["draft_order"]).toHaveLength(12);
+  });
+
+  it("emits NOTHING for a partially rendered board", () => {
+    expect(orders(board(Array.from({ length: 7 }, (_, i) => `t${i}`)))).toEqual([]);
+  });
+
+  it("emits NOTHING for an over-long order", () => {
+    expect(orders(board(Array.from({ length: 13 }, (_, i) => `t${i}`)))).toEqual([]);
+  });
+});
