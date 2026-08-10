@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, ValidationError
 from jaaffl import __version__
 from jaaffl.api.origin import allowed_origin_regex, is_origin_allowed, parse_allowed_origins
 from jaaffl.api.recs import PROTOCOL_VERSION, SCHEMA_VERSION, RecsHub
+from jaaffl.api.rehearsal import RehearsalLog
 from jaaffl.config import Settings, get_settings
 from jaaffl.data import Crosswalk
 from jaaffl.data.warehouse import Warehouse, open_app_db
@@ -83,6 +84,8 @@ def create_app(
     else:
         app.state.rec_engine = RecommendationEngine()
     app.state.rec_history = {}
+    # Tier 12 evidence sink — a no-op unless JAAFFL_REHEARSAL_LOG is set.
+    app.state.rehearsal = RehearsalLog(settings.jaaffl_rehearsal_log)
     # Ensure the SQLite app-state schema (league_snapshots, players, id_crosswalk, ...) exists
     # from boot — stdlib sqlite only, no DuckDB import, so the base ($0) install still starts
     # without the `data` extra. Full DuckDB/Parquet materialization is `make warehouse`.
@@ -154,6 +157,9 @@ def create_app(
         if recommendation is not None:
             app.state.recs_hub.publish(recommendation)
             app.state.rec_history.setdefault(event.league_id, []).append(recommendation)
+            app.state.rehearsal.record(
+                "push", state, recommendation, app.state.rec_engine.context_for(event.league_id)
+            )
 
     @app.get("/health")
     def health() -> dict:
@@ -277,6 +283,11 @@ def create_app(
         rec = app.state.rec_engine.recommend(state, limit=limit, use_mc=mc)
         if rec is None:
             raise HTTPException(status_code=503, detail="engine warming up")
+        # Recorded BEFORE the include_components strip: `positive_vona_n` reads ScoreComponents,
+        # so logging the stripped copy would report 0 candidates with a live scarcity term on
+        # every ?include_components=false pull — a silent zero in the exact column Tier 12 exists
+        # to measure.
+        app.state.rehearsal.record("pull", state, rec, app.state.rec_engine.context_for(league_id))
         if not include_components:
             rec = rec.model_copy(
                 update={"ranked": [p.model_copy(update={"components": None}) for p in rec.ranked]}

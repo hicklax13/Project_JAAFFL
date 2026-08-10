@@ -160,6 +160,7 @@ class TestAContextThatAlreadyKnowsTheOrderStillWorks:
         foreign = [f"other{i}" for i in range(12)]
         ctx = _ctx(_live_settings().model_copy(update={"draft_order": foreign}))
         assert recommend(_state(), ctx, ctx.params, limit=5).survival_basis == "degraded_no_slot"
-        assert recommend(
-            _state(draft_order=ORDER), ctx, ctx.params, limit=5
-        ).survival_basis == "my_slot"
+        assert (
+            recommend(_state(draft_order=ORDER), ctx, ctx.params, limit=5).survival_basis
+            == "my_slot"
+        )

@@ -65,18 +65,23 @@ def client(app) -> TestClient:
     return TestClient(app)
 
 
-def pick_payload(overall: int) -> dict:
+def pick_payload(overall: int, *, player_id: str | None = None) -> dict:
+    """One pick_made envelope. ``player_id`` defaults to None (a name-less pick, which the engine
+    cannot mask) — pass a canonical id when the test needs the pick to actually leave the board."""
+    data: dict = {
+        "overall": overall,
+        "round": 1,
+        "pick_in_round": overall,
+        "team_id": f"T{overall}",
+    }
+    if player_id is not None:
+        data["player_id"] = player_id
     return {
         "event_type": "pick_made",
         "league_id": "L1",
         "pick_number": overall,
         "source": "ws",
-        "data": {
-            "overall": overall,
-            "round": 1,
-            "pick_in_round": overall,
-            "team_id": f"T{overall}",
-        },
+        "data": data,
     }
 
 
