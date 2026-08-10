@@ -42,14 +42,58 @@ from pathlib import Path
 
 from jaaffl.config import Settings, get_settings
 from jaaffl.data import Crosswalk, Warehouse
-from jaaffl.domain import Position
+from jaaffl.domain import DraftPick, DraftState, Position
+from jaaffl.engine.context import DraftContext
 from jaaffl.engine.precompute import build_registry_context_source
+from jaaffl.engine.recommend import recommend
 from jaaffl.league.coverage import (
     board_coverage_gaps,
     inert_cliff_positions,
     startable_positions,
     teams_missing_bye_weeks,
 )
+
+# A PROBE order, never an inference of the real one. config/league.json fixes teams=12 and records
+# that the real order is decided in person and entered into CBS; preflight runs hours before that
+# exists. Its only job is to prove the WIRING can produce a survival model — which is precisely
+# what nothing checked until Tier 12.
+_PROBE_ORDER = [str(i) for i in range(1, 13)]
+
+
+def survival_probe(context: DraftContext, *, my_team_id: str | None) -> tuple[str | None, int]:
+    """Ask the real ``recommend()`` whether a survival model is reachable at all.
+
+    Returns ``(survival_basis, candidates_with_positive_vona)``. ``kappa * max(0, VONA)`` is the
+    engine's entire scarcity term, and measured 2026-08-10 on the real board, with no order
+    reaching the engine it was exactly 0.00 for every candidate in every one of 17 rounds — while
+    the response looked completely healthy. Passes the probe order on the STATE, so nothing is
+    written to the cached context.
+    """
+    state = DraftState(
+        league_id="preflight",
+        current_overall_pick=13,
+        my_team_id=my_team_id,
+        draft_order=_PROBE_ORDER,
+        picks=[
+            DraftPick(overall=o, round=1, pick_in_round=o, team_id=_PROBE_ORDER[o - 1])
+            for o in range(1, 13)
+        ],
+    )
+    rec = recommend(state, context, context.params, limit=50)
+    positive = sum(1 for p in rec.ranked if p.components and (p.components.vona or 0) > 0)
+    return rec.survival_basis, positive
+
+
+def survival_gate_failed(basis: str | None, positive: int) -> bool:
+    """Should preflight stop the draft over this probe result?
+
+    A named predicate rather than an inline condition in ``main`` purely so it is testable: the
+    probe itself was covered and the DECISION was not, which is the same shape of blind spot this
+    tier exists to close (mutating the inline condition to ``if False:`` left every probe test
+    green while the real script wrongly exited 0 on an empty slot). Both halves matter — ``basis``
+    alone would pass a run where the survival model was reachable but priced nothing.
+    """
+    return basis != "my_slot" or positive == 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -156,6 +200,30 @@ def main(argv: list[str] | None = None) -> int:
             f"[preflight]   note: no bye resolved for {', '.join(stale)}"
             " - the schedule and player feeds may have diverged (see league/schedule.py).",
         )
+
+    # Fourth guard (TIER 12): can the engine compute a survival model AT ALL? Everything above
+    # checks the BOARD; this checks the WIRING, through the real recommend(). It fails hard for
+    # the same reason the missing kickers did: a dead scarcity term is invisible in a healthy
+    # response, and the morning of the draft is when there is still time to fix it.
+    my_team_id = get_settings().jaaffl_my_team_id
+    basis, positive = survival_probe(context, my_team_id=my_team_id)
+    print(
+        f"[preflight] survival probe (PROBE order, not the real one): basis={basis}"
+        f" - {positive} candidates with vona > 0"
+    )
+    if survival_gate_failed(basis, positive):
+        print(
+            f"[preflight] FAIL: the engine cannot compute a survival model"
+            f" (JAAFFL_MY_TEAM_ID={my_team_id!r}).",
+            file=sys.stderr,
+        )
+        print(
+            "[preflight] set JAAFFL_MY_TEAM_ID in .env to your CBS team number ('1'..'12')."
+            " Without a survival model every VONA is 0.00 and the engine ranks on MLV alone -"
+            " a healthy-looking response carrying a dead scarcity term.",
+            file=sys.stderr,
+        )
+        return 1
 
     print(f"[preflight] OK: every startable position ({', '.join(sorted(required))}) is fillable.")
     return 0
