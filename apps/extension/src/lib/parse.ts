@@ -502,7 +502,11 @@ export function parsePastedReport(text: string): PastedReport {
     const order = line.match(ORDER_LINE);
     if (order?.[1]) {
       const teams = order[1].split(/[,\s]+/).filter(Boolean);
-      if (teams.length > 0) {
+      // Same guard, same reason, as parseDraftOrder on the network path: opponents.py's snake
+      // math uses len(draft_order) AS the team count, so ANY other length silently corrupts
+      // every "my next pick" for the rest of the draft. Reported, never dropped silently — a
+      // partial parse announced as "N event(s) sent" is how the owner loses a player.
+      if (teams.length === IMMUTABLE_TEAM_COUNT) {
         events.push(orderEvent("manual", "paste", teams));
       } else {
         skipped.push(line);

@@ -285,6 +285,20 @@ describe("overlay foot — roster + freshness (§6.3 anatomy #6, §6.7 auditabil
     handle.destroy();
   });
 
+  it("names the ORDER when that is the missing input, not the slot", () => {
+    // TIER 12: the room's entered draft order reaches the engine on the DraftState, and NO
+    // setting supplies it. Telling the owner to set JAAFFL_MY_TEAM_ID here would send them to
+    // fix the wrong thing — measured 2026-08-10, that is what the overlay did on every live
+    // recommendation this project has ever served.
+    const handle = mountOverlay({ wsFactory: noopFactory });
+    handle.update({ ...REC, survival_basis: "degraded_no_order" });
+    const sync = shadow().querySelector(".ov-sync")!;
+    expect(sync.textContent).toMatch(/draft order not read yet/i);
+    expect(sync.textContent).not.toMatch(/no draft slot/i);
+    expect(sync.classList.contains("is-degraded")).toBe(true);
+    handle.destroy();
+  });
+
   it("says nothing about the basis when the backend did not state one", () => {
     // A pre-Tier-3 payload must not be labelled degraded on a guess.
     const handle = mountOverlay({ wsFactory: noopFactory });
