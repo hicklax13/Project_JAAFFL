@@ -162,6 +162,16 @@ class DraftState(BaseModel):
     current_overall_pick: int = Field(ge=1)
     on_the_clock_team_id: str | None = None
     my_team_id: str | None = None
+    # The round-1 team order ACTUALLY ENTERED into CBS, read from the room
+    # (parse.ts::parseDraftOrder <- fullstatedelta.order) and folded verbatim. NEVER inferred from
+    # team_count (config/league.json -> draft_order.infer_from_team_count = false).
+    #
+    # It lives on the STATE and not on LeagueSettings because DraftContext is precomputed and
+    # cached per league BEFORE a draft starts, while this order is decided in person minutes
+    # beforehand — and resolve_league_settings returns draft_order=None by construction, so
+    # nothing on the settings side can ever carry it. recommend() overlays it onto the context's
+    # settings for one call.
+    draft_order: list[str] | None = None
     picks: list[DraftPick] = Field(default_factory=list)
     available_player_ids: list[str] | None = None
     # §2.6 reducer: a draft_complete event marks the state terminal.

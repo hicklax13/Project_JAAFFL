@@ -71,6 +71,21 @@
       "title": "Current Overall Pick",
       "type": "integer"
     },
+    "draft_order": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Draft Order"
+    },
     "league_id": {
       "title": "League Id",
       "type": "string"

@@ -14,6 +14,8 @@ export const DraftStateSchema = z.object({
   current_overall_pick: z.number().int().min(1),
   on_the_clock_team_id: z.string().nullable().optional(),
   my_team_id: z.string().nullable().optional(),
+  /** The round-1 team order actually entered into CBS, read from the room — never inferred. */
+  draft_order: z.array(z.string()).nullable().optional(),
   picks: z.array(DraftPickSchema).default([]),
   available_player_ids: z.array(z.string()).nullable().optional(),
   // §2.6 reducer: a draft_complete event marks the state terminal.
