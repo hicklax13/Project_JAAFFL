@@ -32,7 +32,12 @@ class RehearsalLog:
 
     @property
     def enabled(self) -> bool:
-        return self._path is not None
+        """A directory is never an append target, so a bare ``.`` is OFF as surely as ``None``.
+
+        Defence in depth behind ``Settings._blank_means_off``: an empty ``JAAFFL_REHEARSAL_LOG``
+        coerces to ``Path('')`` == ``Path('.')``, and ``is not None`` called that enabled. Both
+        layers now agree, the way Tier 12 made both team-id paths agree."""
+        return self._path is not None and self._path != Path(".")
 
     def record(
         self,

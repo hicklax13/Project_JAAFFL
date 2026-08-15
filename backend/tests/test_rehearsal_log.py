@@ -130,3 +130,52 @@ class TestItNeverBreaksTheHotPath:
         client.post("/draft/events", json=pick_payload(1))
         res = client.get("/recommendation", params={"league_id": "L1", "team_id": "t0"})
         assert res.status_code == 200
+
+
+# --- An EMPTY JAAFFL_REHEARSAL_LOG must mean OFF, not "write to the current directory" --------
+#
+# `jaaffl_rehearsal_log: Path | None = None`, and pydantic coerces the empty string to `Path('')`,
+# which IS `Path('.')`. `RehearsalLog.enabled` tested `self._path is not None`, so an empty setting
+# read as ENABLED and every recommendation then tried to open a DIRECTORY for append:
+#
+#     [warning] rehearsal_log_write_failed  path=.
+#     PermissionError: [Errno 13] Permission denied: '.'
+#
+# Observed 2026-08-15 while auditing the dashboard path. Fail-soft caught it, so nothing crashed —
+# but the sink reported itself enabled while writing nothing, which is the one outcome this file's
+# own docstring says must never happen quietly.
+#
+# ⚠️ This is the SAME bug class Tier 12 already fixed for `JAAFFL_MY_TEAM_ID`: `KEY=` in the
+# owner's real `.env` parses as a VALUE, not as absent, so `is not None` is the wrong test.
+# `api/app.py:164` and `:304` use truthiness for exactly this reason. The rehearsal sink was
+# missed, and the owner's `.env` already carries one bare `KEY=` line, so the shape is not
+# hypothetical.
+
+from jaaffl.api.rehearsal import RehearsalLog  # noqa: E402
+
+
+class TestAnEmptySettingMeansOff:
+    def test_the_empty_string_resolves_to_no_path_at_all(self) -> None:
+        assert Settings(jaaffl_rehearsal_log="").jaaffl_rehearsal_log is None
+
+    def test_a_bare_dot_is_not_a_log_file(self) -> None:
+        """Defence in depth: even handed `Path('.')` directly, the sink must stay off. A directory
+        is never a valid append target, and this is what the empty string coerces to."""
+        assert RehearsalLog(Path(".")).enabled is False
+
+    def test_none_is_still_off_and_a_real_path_is_still_on(self, tmp_path: Path) -> None:
+        assert RehearsalLog(None).enabled is False
+        assert RehearsalLog(tmp_path / "run.jsonl").enabled is True
+
+    def test_an_empty_setting_logs_no_write_failure_on_the_hot_path(self, tmp_path: Path) -> None:
+        """End to end, and asserted on the SYMPTOM rather than on survival. Fail-soft already made
+        this harmless, so a status-200 check passes with the bug intact; what actually happened is
+        a PermissionError traceback per recommendation, on a live clock."""
+        from structlog.testing import capture_logs
+
+        client = TestClient(_app(tmp_path, jaaffl_rehearsal_log=""))
+        with capture_logs() as logs:
+            assert client.post("/draft/events", json=pick_payload(1)).status_code == 200
+        failures = [e for e in logs if e.get("event") == "rehearsal_log_write_failed"]
+        assert not failures, f"a disabled sink still tried to write: {failures}"
+        assert not list(Path.cwd().glob("*.jsonl")), "must not litter the CWD"

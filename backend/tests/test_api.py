@@ -894,3 +894,82 @@ def test_recommendation_mc_query_param_reaches_the_engine(tmp_path: Path) -> Non
     assert default["vona_method"] == "analytic"
     assert mc["vona_method"] == "monte_carlo"
     assert "MC VONA" in mc["reasoning"]
+
+
+# --- Ingestion must survive a failing recommendation (2026-08-15 live rehearsal) --------------
+#
+# `publish_recommendation` runs INSIDE the /draft/ws receive loop, and the only handler there is
+# `except WebSocketDisconnect`. Anything else escapes the endpoint and closes the socket.
+#
+# Observed live: at pick 167 an unresolved `cbs:1910` raised KeyError out of `lineup_value`. The
+# ack for 167 had ALREADY been sent (app.py:254, before the publish at :264), so the extension
+# believed the pick landed and never retried — and pick 168, which CBS had delivered in the SAME
+# frame, was never processed. It is missing from `draft_event_log` to this day.
+#
+# CBS BATCHES PICKS: the 2026-08-15 capture carried 1, 2, 3, 6, 7 and TWELVE picks per frame. One
+# exception on the first pick of a 12-pick batch therefore discards eleven picks from the board,
+# permanently and silently.
+#
+# Ingestion is the durable, correctness-critical path. Recommendation is advisory. They must not
+# share a failure domain — that is the property these tests pin, independently of any one bug.
+
+
+class _ExplodingEngine:
+    """A recommendation engine that fails the way the live one did."""
+
+    def __init__(self, fail_on: int | None = None) -> None:
+        self.fail_on = fail_on
+        self.calls = 0
+
+    def recommend(self, state, **kw):  # noqa: ANN001, ANN003
+        self.calls += 1
+        if self.fail_on is None or self.calls == self.fail_on:
+            raise KeyError("cbs:1910")
+        return None
+
+    def context_for(self, league_id):  # noqa: ANN001
+        return None
+
+
+def _exploding_app(tmp_path: Path, engine: _ExplodingEngine):
+    return create_app(
+        Settings(jaaffl_data_dir=tmp_path / "d", jaaffl_recordings_dir=tmp_path / "r"),
+        rec_engine=engine,
+    )
+
+
+def test_a_failing_recommendation_does_not_abort_rest_ingestion(tmp_path: Path) -> None:
+    app = _exploding_app(tmp_path, _ExplodingEngine())
+    client = TestClient(app)
+    res = client.post("/draft/events", json=pick_payload(1))
+    assert res.status_code == 200, "the pick must still be accepted"
+    assert res.json()["accepted"] is True
+
+
+def test_a_failing_recommendation_does_not_drop_the_rest_of_a_ws_batch(tmp_path: Path) -> None:
+    """The live loss, reduced: CBS sends several picks, the recompute raises on the first, and
+    every later pick in the batch must STILL be ingested and acked."""
+    app = _exploding_app(tmp_path, _ExplodingEngine())
+    client = TestClient(app)
+    with client.websocket_connect("/draft/ws") as ws:
+        for overall in (1, 2, 3, 4):
+            ws.send_json(pick_payload(overall))
+            ack = ws.receive_json()
+            assert ack["accepted"] is True, f"pick {overall} was lost after a recompute failure"
+            assert ack["pick_number"] == overall
+    log: DraftLog = app.state.draft_log
+    assert log.state("L1").current_overall_pick == 5, "the board must hold all four picks"
+
+
+def test_the_recommendation_failure_is_logged_not_swallowed(tmp_path: Path) -> None:
+    """Isolating the failure domain must not make the failure invisible — that trade is how a dead
+    engine reads as a healthy one for a whole draft."""
+    from structlog.testing import capture_logs
+
+    app = _exploding_app(tmp_path, _ExplodingEngine())
+    client = TestClient(app)
+    with capture_logs() as logs:
+        client.post("/draft/events", json=pick_payload(1))
+    bad = [entry for entry in logs if "recommendation" in entry.get("event", "").lower()]
+    assert bad, f"no log entry named the failed recommendation; got {logs}"
+    assert any(entry.get("log_level") in {"error", "warning"} for entry in bad)
