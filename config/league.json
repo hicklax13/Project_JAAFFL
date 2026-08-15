@@ -17,6 +17,17 @@
       "infer_from_team_count": false,
       "note": "Do NOT assume a simple snake order from team count alone. The actual order is decided in person and entered into CBS; read the real order from the CBS draft room."
     },
+    "draft_day": {
+      "date": "2026-08-22",
+      "day_of_week": "Saturday",
+      "start_time_local": "17:00",
+      "timezone": "America/New_York",
+      "start_time_utc": "2026-08-22T21:00:00Z",
+      "owner_stated": "08/22/2026 at 5:00pm EST",
+      "timezone_note": "Owner said 'EST'. On 2026-08-22 Eastern is EDT (UTC-04:00), not EST (UTC-05:00). The authoritative value is the WALL CLOCK the owner means: 5:00 PM local Eastern = 17:00 America/New_York = 21:00 UTC. Do NOT re-derive this from the literal string 'EST' or you will be one hour early.",
+      "team_number_known": false,
+      "team_number_note": "The owner's draft slot and team number are DECIDED IN PERSON ON DRAFT DAY and are NOT knowable in advance. JAAFFL_MY_TEAM_ID in .env MUST therefore stay empty until 2026-08-22 and be set on the day, once the order is entered into CBS and the owner reads his team number off the board. An empty JAAFFL_MY_TEAM_ID before draft day is EXPECTED and is not a defect to fix."
+    },
     "scoring_format": "Custom (non-PPR)",
     "scoring_note": "Owner-confirmed JAAFFL2025 custom scoring (2026-07-17), non-PPR (0 per reception). Passing = 1 pt / 50 yds (0.02/yd); rush/rec = 0.1/yd; all TDs = 6; 2-pt = 2; NO offensive INT/fumble penalty. K: FG 3, +1 at 50-59, +1 more at 60+, XP 1. DST: sack 1, INT 2, fumble recovery 2, safety 2, def/ST TD 6, points-allowed 0-9 = 6 (no yards-allowed tier). Typed map: backend/src/jaaffl/league/defaults.py::jaaffl_scoring (single source; this note documents, code encodes).",
     "draft_rounds": 17,
