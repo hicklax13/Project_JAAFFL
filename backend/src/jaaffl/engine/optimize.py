@@ -29,7 +29,11 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+import structlog
+
 from jaaffl.domain import LeagueSettings, Position
+
+log = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +81,40 @@ def roster_capacity(settings: LeagueSettings) -> dict[Position, int]:
     return dict(capacity)
 
 
+def _priceable(
+    player_ids: Sequence[str],
+    mu: Mapping[str, float],
+    position: Mapping[str, Position],
+) -> list[str]:
+    """Roster ids this module can actually assign to a slot — the rest are dropped, loudly.
+
+    CBS pick frames are ID-ONLY, and ``ingest/resolve.py`` deliberately keeps an unmappable
+    ``cbs:<id>`` rather than guessing. Harmless on an opponent's roster; on MINE that raw string
+    reaches ``lineup_value`` via ``recommend.py``, and both lineup paths indexed ``position[pid]``
+    and ``mu[pid]`` with no guard. Observed live on 2026-08-15: the owner drafted the Lions DST at
+    pick 167, CBS sent ``cbs:1910``, and ``KeyError: 'cbs:1910'`` escaped the ASGI handler. A
+    roster never shrinks, so every later recompute would have raised the same way.
+
+    Dropping is the only repair available here: an unresolved id carries no position, so it cannot
+    be assigned to a slot or priced, and inventing one would silently mis-fill a starting slot. The
+    slot it should have occupied reads empty instead, which the replacement-phantom logic already
+    covers. Five other engine call sites already spell this guard ``if pid in context.position``
+    (recommend.py:190/401, risk.py:132, analytics.py:254, precompute.py:239).
+
+    NEVER make this silent. A roster player disappearing from the lineup with no trace is exactly
+    how the defect above survived twelve tiers of replay analysis.
+    """
+    known = [pid for pid in player_ids if pid in position and pid in mu]
+    if len(known) != len(player_ids):
+        log.warning(
+            "lineup_unresolved_roster_ids_dropped",
+            dropped=sorted(set(player_ids) - set(known)),
+            kept=len(known),
+            total=len(player_ids),
+        )
+    return known
+
+
 def _flex_phantom(eligible: frozenset[Position], baselines: Mapping[Position, float]) -> float:
     """Replacement value of an empty slot = the best baseline among its eligible positions."""
     return max((baselines.get(pos, 0.0) for pos in eligible), default=0.0)
@@ -111,7 +149,7 @@ def lineup_value(
     counting.
     """
     pool: dict[Position, list[float]] = defaultdict(list)
-    for pid in player_ids:
+    for pid in _priceable(player_ids, mu, position):
         pool[position[pid]].append(mu[pid])
     for values in pool.values():
         values.sort(reverse=True)
@@ -203,7 +241,7 @@ def lineup_value_hungarian(
 
     n = len(slots)
     # Columns: real players, then one phantom bound to each slot index.
-    player_cols = [(mu[pid], position[pid]) for pid in player_ids]
+    player_cols = [(mu[pid], position[pid]) for pid in _priceable(player_ids, mu, position)]
     phantom_cols = [(_flex_phantom(slot.eligible, baselines), i) for i, slot in enumerate(slots)]
     big = 1.0e9
     cost = np.full((n, len(player_cols) + len(phantom_cols)), big)

@@ -250,3 +250,94 @@ def test_value_over_replacement_is_the_unfloored_mlv() -> None:
     assert mlvs["weak"] == mlvs["weaker"] == 0.0
     assert value_over_replacement("weak", mu, position, baselines) == -40.0
     assert value_over_replacement("weaker", mu, position, baselines) == -90.0
+
+
+# --- Unresolved roster ids: the crash that ended the 2026-08-15 live rehearsal ---------------
+#
+# CBS pick frames are ID-ONLY. When `ingest/resolve.py` cannot map a `cbs:<id>` to a canonical
+# player it keeps the raw string and leaves the player on the board — deliberate, and fine while
+# the id sits on an OPPONENT's roster. But `recommend.py:248` passes MY roster straight into
+# `lineup_value`, which indexed `position[pid]` with no guard, so an unresolved id on my OWN
+# roster raised KeyError out of the ASGI handler and killed every later recommendation.
+#
+# Observed live, not theorised: at pick 167 of the 2026-08-15 mock the owner drafted the Lions
+# DST, CBS sent `cbs:1910`, and the /draft/ws handler died with `KeyError: 'cbs:1910'`. All 32
+# defenses were (and are) absent from the CBS crosswalk, so on draft night this is guaranteed the
+# moment a defense is drafted — and the roster never shrinks, so the engine stays dead.
+#
+# Skipping is the only implementable repair: an unresolved id carries no position, so it cannot be
+# assigned to a slot or priced. The slot it should have filled simply reads empty, which the
+# phantom logic already handles. Five other call sites in the engine already spell this guard
+# `if pid in context.position` (recommend.py:190/401, risk.py:132, analytics.py:254,
+# precompute.py:239); optimize.py never got it.
+
+UNRESOLVED = "cbs:1910"  # the Detroit Lions DST, verbatim from the live crash
+
+
+def _known_roster() -> tuple[list[str], dict[str, float], dict[str, Position]]:
+    ids = ["qb1", "rb1", "wr1", "te1"]
+    mu = {"qb1": 300.0, "rb1": 220.0, "wr1": 210.0, "te1": 160.0}
+    position = {
+        "qb1": Position.QB,
+        "rb1": Position.RB,
+        "wr1": Position.WR,
+        "te1": Position.TE,
+    }
+    return ids, mu, position
+
+
+def test_an_unresolved_roster_id_does_not_crash_the_lineup() -> None:
+    """The live failure, reduced. Before the guard this raised KeyError: 'cbs:1910'."""
+    ids, mu, position = _known_roster()
+    clean = lineup_value(ids, mu, position, BASELINES, _slots())
+    dirty = lineup_value([*ids, UNRESOLVED], mu, position, BASELINES, _slots())
+    assert dirty == clean
+
+
+def test_the_hungarian_verification_path_survives_the_same_id() -> None:
+    """The greedy is the hot path, but the Hungarian path takes the same roster and indexed the
+    same two dicts unguarded (optimize.py:206). Fixing only the greedy would move the crash."""
+    ids, mu, position = _known_roster()
+    clean = lineup_value_hungarian(ids, mu, position, BASELINES, _slots())
+    dirty = lineup_value_hungarian([*ids, UNRESOLVED], mu, position, BASELINES, _slots())
+    assert dirty == clean
+
+
+def test_greedy_and_hungarian_still_agree_with_an_unresolved_id() -> None:
+    """The agreement property this module rests on must survive the guard, or the two paths have
+    silently diverged on exactly the input that caused the outage."""
+    ids, mu, position = _known_roster()
+    roster = [*ids, UNRESOLVED]
+    assert lineup_value(roster, mu, position, BASELINES, _slots()) == pytest.approx(
+        lineup_value_hungarian(roster, mu, position, BASELINES, _slots())
+    )
+
+
+def test_an_id_present_in_position_but_missing_from_mu_is_also_survived() -> None:
+    """Half-resolved is still unusable: the crash site reads BOTH dicts on the same line."""
+    ids, mu, position = _known_roster()
+    position_with = {**position, UNRESOLVED: Position.DST}  # position known, mu absent
+    clean = lineup_value(ids, mu, position, BASELINES, _slots())
+    assert lineup_value([*ids, UNRESOLVED], mu, position_with, BASELINES, _slots()) == clean
+
+
+def test_the_dropped_id_is_logged_rather_than_silently_swallowed() -> None:
+    """A roster player vanishing from the lineup with no trace is how this stays invisible for
+    another twelve tiers. The id must be named."""
+    from structlog.testing import capture_logs
+
+    ids, mu, position = _known_roster()
+    with capture_logs() as logs:
+        lineup_value([*ids, UNRESOLVED], mu, position, BASELINES, _slots())
+    dropped = [entry for entry in logs if "unresolved" in entry.get("event", "")]
+    assert dropped, f"no warning naming the dropped id; got {logs}"
+    assert UNRESOLVED in str(dropped[0])
+
+
+def test_marginal_lineup_value_survives_an_unresolved_roster_id() -> None:
+    """The caller the live path actually uses (recommend.py) goes through marginal_lineup_value."""
+    ids, mu, position = _known_roster()
+    mu_c = {**mu, "wr2": 205.0}
+    pos_c = {**position, "wr2": Position.WR}
+    value = marginal_lineup_value("wr2", [*ids, UNRESOLVED], mu_c, pos_c, BASELINES, _slots())
+    assert value >= 0.0
