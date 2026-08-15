@@ -398,3 +398,53 @@ def test_tied_scores_rank_by_value_over_replacement() -> None:
     assert len(zero) > 1, "fixture no longer produces a tie — the test would prove nothing"
     vor = [p.projected_points - p.components.replacement_baseline for p in zero]
     assert vor == sorted(vor, reverse=True)
+
+
+# --- The roster summary must ADD UP, or say why it doesn't (2026-08-15 live rehearsal) --------
+#
+# `roster_filled` counts every id on my roster; `roster_by_position` counts only the ones the
+# board knows (`if pid in context.position`). An unresolved CBS id is on the roster but not on the
+# board, so the two silently disagreed.
+#
+# Measured on the owner's real post-draft state: `roster_filled: 14`, `sum(roster_by_position) =
+# 13`, and DST ABSENT — he had drafted the Lions, and the dashboard would have shown him with no
+# defense at all. The counts are each individually defensible; publishing both with no third
+# number to reconcile them is what makes the payload lie.
+#
+# Deliberately NOT guessing the position: an unresolved id carries none, and inventing one would
+# mis-fill a starting slot. The honest repair is to publish the gap.
+
+
+def test_the_roster_summary_reconciles_when_an_id_is_unresolved() -> None:
+    ctx = make_context(_board())
+    state = draft_state(
+        25,
+        my_team_id="t0",
+        picks=[
+            DraftPick(overall=1, round=1, pick_in_round=1, team_id="t0", player_id="rb0"),
+            DraftPick(overall=24, round=2, pick_in_round=12, team_id="t0", player_id="wr0"),
+            # The Lions DST exactly as CBS sent it on 2026-08-15: an id the board never resolved.
+            DraftPick(overall=25, round=3, pick_in_round=1, team_id="t0", player_id="cbs:1910"),
+        ],
+    )
+    rec = recommend(state, ctx, ctx.params, limit=3)
+    assert rec.roster_filled == 3, "every drafted spot still counts"
+    assert sum(rec.roster_by_position.values()) == 2, "only board-known ids can carry a position"
+    assert rec.roster_unresolved == 1, (
+        "the gap between the two counts must be published, not left for the reader to notice"
+    )
+
+
+def test_a_fully_resolved_roster_reports_no_gap() -> None:
+    ctx = make_context(_board())
+    state = draft_state(
+        25,
+        my_team_id="t0",
+        picks=[
+            DraftPick(overall=1, round=1, pick_in_round=1, team_id="t0", player_id="rb0"),
+            DraftPick(overall=24, round=2, pick_in_round=12, team_id="t0", player_id="wr0"),
+        ],
+    )
+    rec = recommend(state, ctx, ctx.params, limit=3)
+    assert rec.roster_unresolved == 0
+    assert sum(rec.roster_by_position.values()) == rec.roster_filled
