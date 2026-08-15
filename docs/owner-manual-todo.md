@@ -305,7 +305,28 @@ total of the 12)` over seasons sampled from `N(μ, σ)` — against a disjoint s
   measured on five seed blocks rather than one, and it points the same way on both measures rather
   than trading one for the other. **If you change one thing before draft night, change this.**
 
-  ### 🔴 STILL OPEN — Tier 9 tested the same setting a second way, and it is worse than we thought
+  ### ✅ DECIDED AND APPLIED — 2026-08-15
+
+  **The owner said apply it.** `config/engine.json` now reads `0.0 / 0.0`, and the `EngineParams`
+  default moved with it so a machine whose `engine.json` omits the key cannot silently restore the
+  old behaviour (the trap Tier 6 named when it deleted the positional-modifier caps).
+
+  What tipped it: the 2026-08-15 live rehearsal showed the term ranking a **third quarterback above
+  an empty, mandatory DST slot in the final round** — `surplus_stash_ceiling: -0.4` contributing
+  `Risk +37.6` against an MLV of only 13.4, three times the value term. That is the mechanism
+  described below, seen on a ticking clock rather than in a simulator.
+
+  ⚠️ **The magnitudes below predate Tiers 10 and 11** and have not been re-measured. Tier 10's
+  dictionary-order fix was INERT until this landed ("the Tier 10 coupling stands"), and Tier 11
+  declined to re-run E2 because it "would still measure noise around a decision nobody has taken."
+  Both are now unblocked. Treat the tables as direction, not precision.
+
+  ⚠️ **A single-pick A/B understates it.** Measured on the owner's real board and real roster the
+  day of the decision, the top-5 barely moves (#1 unchanged; Trey McBride rises past Bijan
+  Robinson at rank 4). The case rests on FULL-DRAFT simulation — the term's cost compounds across
+  17 picks, which is why it showed up as picks three and four spent on surplus tight ends.
+
+  ### 🔴 The original finding, kept for the record — Tier 9 tested the same setting a second way, and it is worse than we thought
 
   **This decision is still waiting on you.** As of 2026-08-09 `config/engine.json` still reads
   `0.4 / -0.4`; nothing has been changed, and nothing will be without you saying so.

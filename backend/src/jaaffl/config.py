@@ -36,8 +36,13 @@ class EngineParams(BaseModel):
     flex_split: dict[str, int] = Field(default_factory=lambda: {"RB": 8, "WR": 4})
     # [{"rounds": [lo, hi], "lambda": float}, ...] — floor-tilt >0 early, ceiling-tilt <0 late.
     lambda_schedule: list[dict] = Field(default_factory=list)
+    # Zeroed 2026-08-15 on the owner's decision, after Tiers 8/9/10/11 each recommended it and
+    # the 2026-08-15 live rehearsal showed the term ranking a THIRD QB above an empty mandatory
+    # DST slot in the final round. The DEFAULT moves with the file on purpose: leaving it at
+    # 0.4/-0.4 would silently restore the old behaviour on any machine whose engine.json omits
+    # the key — the exact trap Tier 6 called out when it deleted the positional-modifier caps.
     lambda_slot_override: dict[str, float] = Field(
-        default_factory=lambda: {"last_startable_slot_floor": 0.40, "surplus_stash_ceiling": -0.40}
+        default_factory=lambda: {"last_startable_slot_floor": 0.0, "surplus_stash_ceiling": 0.0}
     )
     replacement_blend: dict[str, float] = Field(
         default_factory=lambda: {"vols_weight": 0.5, "mangames_weight": 0.5}
