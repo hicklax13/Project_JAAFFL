@@ -16,6 +16,28 @@ interface RecorderDeps {
   post?: (payload: unknown) => Promise<void>;
 }
 
+/** `location.href` is unavailable in some test/worker contexts — never let capture throw. */
+function pageUrl(): string {
+  try {
+    return typeof location !== "undefined" ? location.href : "";
+  } catch {
+    return "";
+  }
+}
+
+const MAX_SNAPSHOT_CHARS = 500_000;
+
+/** One dom-snapshot payload: the html, WHERE it came from, and whether it was cut. */
+function snapshotPayload(el: Element): Record<string, unknown> {
+  const full = (el as HTMLElement).outerHTML;
+  return {
+    html: full.slice(0, MAX_SNAPSHOT_CHARS),
+    url: pageUrl(),
+    truncated: full.length > MAX_SNAPSHOT_CHARS,
+    full_length: full.length,
+  };
+}
+
 async function defaultPost(payload: unknown): Promise<void> {
   try {
     await fetch(ENDPOINT, {
@@ -93,15 +115,39 @@ export class Recorder {
     this.frames.push({ kind, ts: Date.now(), payload });
   }
 
-  /** Board snapshots are throttled — frames matter most; DOM shape lands occasionally. */
+  /** Board snapshots are throttled — frames matter most; DOM shape lands occasionally.
+   *
+   * Records the URL and whether the HTML was cut. Both were missing, and both cost real evidence
+   * in the 2026-08-15 capture: all 15 snapshots carried `{html}` alone, so nothing said which page
+   * they came from, and every one was EXACTLY 500,000 chars — all of them silently truncated. A
+   * crosswalk miss then looks like "CBS never rendered it" rather than "we threw it away". The cap
+   * stays (a 12-team draft can emit a lot of these); what changes is that it no longer lies. */
   recordDomSnapshot(el: Element | null): void {
     if (!this.enabled || !el) return;
     if (++this.mutationsSinceSnapshot < DOM_SNAPSHOT_EVERY) return;
     this.mutationsSinceSnapshot = 0;
+    this.frames.push({ kind: "dom-snapshot", ts: Date.now(), payload: snapshotPayload(el) });
+  }
+
+  /** An uncaught extension error, so a content-script crash leaves a trace somewhere.
+   *
+   * Before this the extension had NO error capture: no `window.onerror`, no `unhandledrejection`,
+   * no console forwarding, and the recorder emitted exactly one kind. An uncaught error in the
+   * content script was invisible in the backend log, in the capture AND in the rehearsal report —
+   * the overlay just stopped updating and read as merely stale. `unhandledrejection` also hands
+   * you whatever was rejected, which is frequently not an Error, so this takes `unknown`. */
+  recordError(error: unknown, source: string): void {
+    if (!this.enabled) return;
+    const err = error instanceof Error ? error : undefined;
     this.frames.push({
-      kind: "dom-snapshot",
+      kind: "extension-error",
       ts: Date.now(),
-      payload: { html: (el as HTMLElement).outerHTML.slice(0, 500_000) },
+      payload: {
+        message: err ? `${err.name}: ${err.message}` : String(error),
+        stack: err?.stack ?? null,
+        source,
+        url: pageUrl(),
+      },
     });
   }
 

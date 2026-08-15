@@ -119,3 +119,92 @@ describe("Recorder buffering", () => {
     expect(batches[0]!.frames).toHaveLength(1);
   });
 });
+
+/**
+ * Capture QUALITY — three gaps the 2026-08-15 live rehearsal exposed while auditing the 8 MB
+ * recording it produced.
+ *
+ * The capture is not a nice-to-have: `scripts/seed_cbs_crosswalk.py` mines it for the CBS id ->
+ * player identities that let a drafted player be masked off the board. Every defense drafted that
+ * night went unmasked, and recovering them depends entirely on what this file writes down.
+ */
+/** First batch's frames, narrowed — `batches[0]` is optional under noUncheckedIndexedAccess. */
+function framesOf(batches: Batch[]): Batch["frames"] {
+  const first = batches[0];
+  expect(first).toBeDefined();
+  return first!.frames;
+}
+
+describe("Recorder capture quality", () => {
+  it("records WHICH PAGE a snapshot came from", async () => {
+    // All 15 snapshots in the live capture carried `{html}` and nothing else. With no URL you
+    // cannot tell a draft-room snapshot from a settings page — which is exactly what blocks the
+    // still-open settings-page TODO(capture): you could not even confirm you had taken one.
+    const { rec, batches } = recorderWithSpy();
+    await rec.setEnabled(true);
+    rec.snapshotOnEnable(el());
+    await rec.flush();
+    const snap = framesOf(batches).find((f) => f.kind === "dom-snapshot");
+    expect(snap?.payload).toHaveProperty("url");
+    expect(typeof (snap?.payload as { url: unknown }).url).toBe("string");
+  });
+
+  it("says so when it truncates, instead of cutting silently", async () => {
+    // EVERY snapshot in the live capture was exactly 500,000 chars — all 15 hit the cap. Content
+    // past it is discarded, and nothing recorded that it had happened, so a crosswalk miss looks
+    // like "CBS never rendered it" rather than "we threw it away".
+    const { rec, batches } = recorderWithSpy();
+    await rec.setEnabled(true);
+    const big = document.createElement("div");
+    big.textContent = "x".repeat(600_000);
+    rec.snapshotOnEnable(big);
+    await rec.flush();
+    const p = framesOf(batches).find((f) => f.kind === "dom-snapshot")?.payload as {
+      truncated?: boolean;
+      full_length?: number;
+      html: string;
+    };
+    expect(p.truncated).toBe(true);
+    expect(p.full_length).toBeGreaterThan(500_000);
+    expect(p.html.length).toBe(500_000);
+  });
+
+  it("marks a snapshot that was NOT truncated", async () => {
+    const { rec, batches } = recorderWithSpy();
+    await rec.setEnabled(true);
+    rec.snapshotOnEnable(el());
+    await rec.flush();
+    const p = framesOf(batches).find((f) => f.kind === "dom-snapshot")?.payload as {
+      truncated?: boolean;
+    };
+    expect(p.truncated).toBe(false);
+  });
+
+  it("can record an extension error, so a content-script crash leaves a trace", async () => {
+    // The extension had NO error capture at all: no window.onerror, no unhandledrejection, no
+    // console forwarding, and the recorder emitted exactly one kind (`dom-snapshot`). An uncaught
+    // error in the content script is therefore invisible in the backend log, in the capture and in
+    // the report — the overlay simply stops updating and reads as merely stale.
+    const { rec, batches } = recorderWithSpy();
+    await rec.setEnabled(true);
+    rec.recordError(new Error("boom"), "window.onerror");
+    await rec.flush();
+    const err = framesOf(batches).find((f) => f.kind === "extension-error");
+    expect(err).toBeDefined();
+    const p = err?.payload as { message: string; source: string; stack?: string };
+    expect(p.message).toContain("boom");
+    expect(p.source).toBe("window.onerror");
+  });
+
+  it("records a non-Error rejection value without throwing", async () => {
+    // `unhandledrejection` hands you whatever was rejected — often not an Error.
+    const { rec, batches } = recorderWithSpy();
+    await rec.setEnabled(true);
+    rec.recordError("plain string failure", "unhandledrejection");
+    await rec.flush();
+    const p = framesOf(batches).find((f) => f.kind === "extension-error")?.payload as {
+      message: string;
+    };
+    expect(p.message).toContain("plain string failure");
+  });
+});
