@@ -13,8 +13,8 @@
     { "rounds": [14, 17], "lambda": -0.4 }
   ],
   "lambda_slot_override": {
-    "last_startable_slot_floor": 0.4,
-    "surplus_stash_ceiling": -0.4
+    "last_startable_slot_floor": 0.0,
+    "surplus_stash_ceiling": 0.0
   },
   "replacement_blend": { "vols_weight": 0.5, "mangames_weight": 0.5 },
   "caps": { "mu_refinement_pct": 0.15 },

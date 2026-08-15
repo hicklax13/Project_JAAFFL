@@ -52,9 +52,13 @@ def test_committed_engine_json_has_every_required_key() -> None:
     assert bands == [(1, 2), (3, 6), (7, 9), (10, 13), (14, 17)]
     lambdas = [b["lambda"] for b in params.lambda_schedule]
     assert lambdas[0] > 0 and lambdas[-1] < 0  # floor-tilt early, ceiling-tilt late
+    # ZEROED 2026-08-15 on the owner's decision. Tiers 8, 9, 10 and 11 each recommended it, and
+    # the 2026-08-15 live rehearsal showed the term ranking a THIRD QB above an empty mandatory
+    # DST slot in the final round. Tier 10's dictionary-order fix was inert until this landed.
+    # The override MECHANISM is still tested, with explicit coefficients, in test_risk.py.
     assert params.lambda_slot_override == {
-        "last_startable_slot_floor": 0.40,
-        "surplus_stash_ceiling": -0.40,
+        "last_startable_slot_floor": 0.0,
+        "surplus_stash_ceiling": 0.0,
     }
     assert params.caps["mu_refinement_pct"] == 0.15  # read for real by engine/projections.py
     # The positional-modifier caps are DELIBERATELY absent, and this asserts they stay absent.

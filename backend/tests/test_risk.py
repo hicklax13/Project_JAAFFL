@@ -32,17 +32,27 @@ def test_phase_schedule_maps_round_to_lambda(round_no: int, expected: float) -> 
     assert lambda_weight(round_no, SlotState.NORMAL, engine_params()) == pytest.approx(expected)
 
 
+# The override MECHANISM is tested with EXPLICIT coefficients, never with whatever ships.
+# `config/engine.json` zeroed both halves on 2026-08-15 (owner decision, Tiers 8/9/10/11), which
+# made every assertion below fail — not because the code broke, but because these tests were
+# reading a tunable as if it were a constant. A knob's VALUE belongs in test_config.py; its
+# BEHAVIOUR belongs here, and the two must not be able to break each other.
+_TILT = {"last_startable_slot_floor": 0.4, "surplus_stash_ceiling": -0.4}
+
+
 def test_last_open_startable_forces_floor_tilt_over_phase() -> None:
     """Override test: an R11 pick filling the last WR starter slot is forced positive despite the
     R10–13 ceiling default (−0.3)."""
-    got = lambda_weight(11, SlotState.LAST_OPEN_STARTABLE, engine_params())
-    assert got == pytest.approx(0.4)  # last_startable_slot_floor from lambda_slot_override
+    got = lambda_weight(
+        11, SlotState.LAST_OPEN_STARTABLE, engine_params(lambda_slot_override=_TILT)
+    )
+    assert got == pytest.approx(0.4)  # the override beats the R10-13 ceiling default
 
 
 def test_surplus_forces_ceiling_tilt_over_phase() -> None:
     """A surplus/stash in R2 is forced negative despite the R1–2 floor default (+0.3)."""
-    got = lambda_weight(2, SlotState.SURPLUS, engine_params())
-    assert got == pytest.approx(-0.4)  # surplus_stash_ceiling from lambda_slot_override
+    got = lambda_weight(2, SlotState.SURPLUS, engine_params(lambda_slot_override=_TILT))
+    assert got == pytest.approx(-0.4)  # the override beats the R1-2 floor default
 
 
 def test_out_of_schedule_round_defaults_to_neutral() -> None:
@@ -80,7 +90,7 @@ def test_a_surplus_stash_is_not_a_stash_when_every_pick_is_spoken_for() -> None:
     on a required slot carries none. Inert whenever a stash is still affordable."""
     from jaaffl.engine.risk import lambda_weight
 
-    params = engine_params()
+    params = engine_params(lambda_slot_override=_TILT)
     # 3 picks left, 3 unfilled slots -> spending this one leaves 2 picks for 3 slots.
     assert lambda_weight(15, SlotState.SURPLUS, params, can_stash=False) == pytest.approx(0.0)
     assert lambda_weight(15, SlotState.SURPLUS, params, can_stash=True) == pytest.approx(-0.4)
