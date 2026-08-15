@@ -19,6 +19,17 @@ const socket = new DraftSocket(); // owns ws://127.0.0.1:8788/draft/ws (§5.6)
 const recorder = new Recorder(); // record mode: action toggle -> fixture capture
 const forward = createForwarder((event) => socket.send(event));
 
+// Uncaught errors in THIS script were invisible everywhere — not in the backend log, not in the
+// capture, not in the rehearsal report. The overlay would simply stop updating and read as merely
+// stale, which is indistinguishable from a quiet draft. Both handlers are passive: they observe
+// and never preventDefault, so normal error reporting is unchanged.
+window.addEventListener("error", (e: ErrorEvent) => {
+  recorder.recordError(e.error ?? e.message, "window.onerror");
+});
+window.addEventListener("unhandledrejection", (e: PromiseRejectionEvent) => {
+  recorder.recordError(e.reason, "unhandledrejection");
+});
+
 /** Parse one raw probe payload, then forward each event. Silent on non-draft frames. */
 function emit(raw: RawSource): void {
   for (const event of parseDraftEvents(raw)) forward(event);
