@@ -32,6 +32,10 @@ of each build phase on purpose — nothing here blocks the automated build unles
 >
 > ### ⚠️ TWO THINGS TO DO BEFORE DRAFT NIGHT
 >
+> 🚨 **Draft night is Saturday 2026-08-22, 5:00 PM Eastern.** Both items below are **draft-day**
+> actions, not "sometime before" actions — see the note on each. Canonical copy of the date and
+> time: `CLAUDE.md` and `config/league.json` → `league.draft_day`.
+>
 > ⛔ **TIER 12 CORRECTION (2026-08-10) — this instruction was NOT ENOUGH, and saying so is the
 > useful part.** Everything below is still true and still required. What it did not say is that
 > setting your slot was only **one of two** inputs the survival model needs. The other is the
@@ -46,7 +50,12 @@ of each build phase on purpose — nothing here blocks the automated build unles
 > 17 rounds**. Both halves are wired now, and the morning preflight **fails loudly** if either is
 > missing. Nothing about your engine's settings changed.
 >
-> **1. Set `JAAFFL_MY_TEAM_ID`.** Put your CBS team slot (`"1"`–`"12"`, as CBS numbers the teams in
+> **1. Set `JAAFFL_MY_TEAM_ID`** — ⛔ **ON DRAFT DAY (2026-08-22), NOT BEFORE.** Your draft order is
+> decided in person on the day and only then entered into CBS, so your slot is not knowable in
+> advance. The key is **empty on purpose** until then, and preflight failing with
+> `basis=degraded_no_slot` before draft day is the **correct** behaviour, not a bug. (In a
+> **mock/rehearsal** draft you do set it — to whatever slot the mock lobby hands you — and that
+> value is disposable; overwrite it on draft day.) Put your CBS team slot (`"1"`–`"12"`, as CBS numbers the teams in
 > the room) in `.env`. No CBS frame names _your own_ team, so the app cannot work it out from the
 > live feed. Without it the engine cannot tell when your next pick is, survival degrades to
 > "everyone is still available", and every recommendation reads `vona 0.00` — the scarcity half of
@@ -59,7 +68,7 @@ of each build phase on purpose — nothing here blocks the automated build unles
 > JAAFFL_MY_TEAM_ID=7
 > ```
 >
-> **2. Run the preflight — the morning of the draft, not the night before.** It pulls the live
+> **2. Run the preflight — the morning of Saturday 2026-08-22, not the night before.** It pulls the live
 > feeds, so run it close enough to draft day that you are checking the data you will actually draft
 > against:
 >

@@ -3,6 +3,29 @@
 **JAAFFL** is a local-first, personal-use assistant for a **CBS Sports** fantasy football
 **live snake draft**. Read this file and the persistent league memory **before any work**.
 
+## 🚨 DRAFT DAY — Saturday, 2026-08-22 at 5:00 PM Eastern
+
+**This is the deadline every remaining task is measured against.** The JAAFFL2025 live draft is
+**Saturday 22 August 2026, 17:00 America/New_York** (= `2026-08-22T21:00:00Z`). The owner stated
+it as "5:00pm EST"; on that date Eastern is **EDT (UTC−04:00)**, not EST — the authoritative value
+is the **wall clock, 5:00 PM Eastern**. Do not re-derive it from the literal string "EST" or you
+will be an hour early. Machine-readable copy: `config/league.json` → `league.draft_day`.
+
+### ⛔ `JAAFFL_MY_TEAM_ID` is a DRAFT-DAY action — do not "fix" it before then
+
+The draft order is **decided in person on draft day** and only then entered into CBS. The owner's
+slot and team number are therefore **unknowable in advance**. `JAAFFL_MY_TEAM_ID` in `.env` is
+**empty on purpose** until 2026-08-22 and is set on the day, once the owner reads his team number
+off the CBS board.
+
+- An empty `JAAFFL_MY_TEAM_ID` before draft day is **EXPECTED**, not a defect. Do not fill it with
+  a guess, a placeholder, or a value inferred from anything.
+- `scripts/preflight.py` **exiting 1** with `basis=degraded_no_slot` before draft day is therefore
+  the **correct** behaviour, not a bug to chase.
+- A **mock/rehearsal** draft is the exception: there you set it to whatever slot the mock lobby
+  gives you, purely to exercise the pipeline. That value is disposable and must be cleared or
+  overwritten on draft day.
+
 ## ⛳ Persistent league memory (read first — do not paraphrase or change)
 
 The league configuration is fixed and memorialized in **[`config/league.json`](config/league.json)**.
