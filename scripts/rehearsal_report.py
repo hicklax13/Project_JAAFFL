@@ -25,6 +25,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 LATENCY_BUDGET_MS = 200.0
+# config/league.json is immutable at 12 teams, and opponents._my_overall_picks uses
+# len(draft_order) AS the team count — so any other length silently corrupts every "my next pick".
+TEAM_COUNT = 12
 
 # Every criterion the rehearsal protocol claims to test. Named here so an EMPTY log can fail all
 # of them by name rather than producing an empty (and therefore clean-looking) report.
@@ -72,6 +75,66 @@ def evaluate(rows: list[dict]) -> list[Verdict]:
     live_rows = [row for row in rows if row.get("survival_basis") == "my_slot"]
     positive = [row.get("positive_vona_n", 0) for row in live_rows]
 
+    # --- the prelude, and why these two verdicts are not set-equality anymore ----------------
+    # CBS attaches the entered round-1 order to `fullstatedelta`, which rides on `picks/completed`
+    # frames (apps/extension/src/lib/parse.ts:123). parse.ts pushes that frame's PICK events
+    # (line 332) BEFORE its ORDER event (line 347), and LEAGUE_SETTINGS is not in
+    # `_STATE_ADVANCING` (backend/src/jaaffl/api/app.py:43), so folding the order does not itself
+    # recompute. The opening recompute of EVERY draft therefore runs before the order exists.
+    #
+    # Those opening rows are the PRELUDE and their degradation is structural. The failure that
+    # matters is degradation AFTER the order has arrived. The old checks — `bases == {"my_slot"}`
+    # and `orders == {12}` — collapsed the rows into a set, threw the SEQUENCE away, and so could
+    # not tell the two apart: measured on a live server at 2a69c40, a healthy 7-row run failed
+    # both. Reading the rows in order also buys a property nothing tested before: once the order
+    # has been read, it must never be lost again.
+    first_live = next(
+        (i for i, row in enumerate(rows) if row.get("draft_order_len") == TEAM_COUNT), None
+    )
+    settled = rows[first_live:] if first_live is not None else []
+    prelude_n = first_live if first_live is not None else len(rows)
+    bad_lengths = sorted({o for o in orders if o not in (0, TEAM_COUNT)})
+    order_lost = sum(1 for row in settled if row.get("draft_order_len") != TEAM_COUNT)
+    degraded_after = sorted(
+        {
+            row.get("survival_basis") or "null"
+            for row in settled
+            if row.get("survival_basis") != "my_slot"
+        }
+    )
+    prelude_note = (
+        f"{prelude_n} prelude row(s) before the order arrived - structural, the order rides on "
+        f"the first pick frame"
+        if prelude_n
+        else "no prelude: the order was already present on the first row"
+    )
+
+    if not settled:
+        survival_detail = (
+            "the order NEVER reached the engine, so survival was degraded for the WHOLE run: "
+            f"{sorted(b or 'null' for b in bases)}"
+        )
+        order_detail = f"the order NEVER reached the engine: draft_order_len seen {sorted(orders)}"
+    else:
+        survival_detail = (
+            f"degraded on {len(degraded_after)} basis value(s) AFTER the order arrived: "
+            f"{degraded_after}"
+            if degraded_after
+            else f"my_slot on every row from the order onward ({len(settled)} of {len(rows)}); "
+            f"{prelude_note}"
+        )
+        if bad_lengths:
+            order_detail = (
+                f"draft_order_len was neither 0 nor {TEAM_COUNT} on some row: {bad_lengths} - a "
+                f"wrong-length order corrupts every 'my next pick'"
+            )
+        elif order_lost:
+            order_detail = f"the order was LOST after arriving, on {order_lost} row(s)"
+        else:
+            order_detail = (
+                f"len {TEAM_COUNT} from row {first_live + 1} of {len(rows)} onward; {prelude_note}"
+            )
+
     latency_detail = (
         f"n={len(latencies)} median={statistics.median(latencies):.1f}ms "
         f"p95={_pct(latencies, 0.95):.1f}ms max={max(latencies):.1f}ms "
@@ -103,13 +166,13 @@ def evaluate(rows: list[dict]) -> list[Verdict]:
         ),
         Verdict(
             "survival is live",
-            bases == {"my_slot"},
-            f"survival_basis values seen: {sorted(b or 'null' for b in bases)}",
+            bool(settled) and not degraded_after,
+            survival_detail,
         ),
         Verdict(
             "the order was read from the room",
-            orders == {12},
-            f"draft_order_len values seen: {sorted(orders)}",
+            bool(settled) and not bad_lengths and not order_lost,
+            order_detail,
         ),
         # The MAX, not the median: one 250 ms recompute while the clock runs is exactly what the
         # budget exists to catch, and a median hides it behind every other row.
