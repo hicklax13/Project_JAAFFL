@@ -189,3 +189,65 @@ def test_a_wrong_length_order_in_the_PRELUDE_fails() -> None:
     bad = next(v for v in evaluate(rows) if v.name == "the order was read from the room")
     assert not bad.passed
     assert "11" in bad.detail
+
+
+# --- A run whose ENGINE DIED must FAIL, not pass six of seven ---------------------------------
+#
+# On 2026-08-15 this report printed six PASS verdicts on a draft that ended in an unhandled
+# KeyError. It had no choice: a crash writes no row, the report grades only rows that exist, and
+# no criterion asked whether the engine threw. The most important event of the evening was
+# invisible to the instrument built to observe it — the same failure shape as "an empty log reads
+# as clean", which this file already guards against by name.
+
+
+def _failure_row(**over) -> dict:
+    row = {
+        "ts": "2026-08-15T19:21:07.000+00:00",
+        "path": "push",
+        "league_id": "cbs-live",
+        "overall": 168,
+        "error": "KeyError: 'cbs:1910'",
+    }
+    row.update(over)
+    return row
+
+
+def test_a_recompute_failure_fails_the_run() -> None:
+    rows = [_degraded(overall=1), _row(overall=2), _failure_row()]
+    failed = _failed(rows)
+    assert "no recompute failed" in failed, f"a dead engine still read as clean: {failed}"
+
+
+def test_the_failing_error_is_named_so_it_can_be_chased() -> None:
+    verdict = next(v for v in evaluate([_row(), _failure_row()]) if v.name == "no recompute failed")
+    assert not verdict.passed
+    assert "cbs:1910" in verdict.detail
+
+
+def test_a_clean_run_passes_the_new_criterion_too() -> None:
+    verdicts = evaluate([_degraded(overall=1), _row(overall=2)])
+    assert all(v.passed for v in verdicts), [v.name for v in verdicts if not v.passed]
+
+
+def test_failure_rows_do_not_corrupt_the_other_verdicts() -> None:
+    """A failure row has no survival_basis, no recompute_ms and no top — it must be graded on its
+    own criterion and excluded from the others, or one crash would fail every check for the wrong
+    reason and bury the real signal."""
+    healthy = [_degraded(overall=1)] + [_row(overall=i) for i in range(2, 6)]
+    verdicts = {v.name: v for v in evaluate([*healthy, _failure_row()])}
+    assert verdicts["survival is live"].passed
+    assert verdicts["the order was read from the room"].passed
+    assert verdicts["recompute under 200ms"].passed
+    assert not verdicts["no recompute failed"].passed
+
+
+def test_an_empty_log_still_fails_the_new_criterion_by_name() -> None:
+    assert "no recompute failed" in {v.name for v in evaluate([]) if not v.passed}
+
+
+def test_the_overlay_foot_ignores_a_failure_row() -> None:
+    """The foot describes what the OVERLAY last showed. A failure row has no recompute_ms and no
+    basis, so deriving from it printed a meaningless "recompute 0ms" over a crashed run."""
+    served = _row(overall=9, recompute_ms=12.0)
+    assert "12ms" in report_script._overlay_foot(served)
+    assert report_script._overlay_foot(_failure_row()) != report_script._overlay_foot(served)

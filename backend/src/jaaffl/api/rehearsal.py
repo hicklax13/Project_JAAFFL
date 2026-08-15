@@ -61,6 +61,34 @@ class RehearsalLog:
         except Exception:  # noqa: BLE001 — fail-soft is the whole point; see the module docstring
             log.warning("rehearsal_log_write_failed", path=str(self._path), exc_info=True)
 
+    def record_failure(
+        self, path_label: str, league_id: str, overall: int | None, error: BaseException
+    ) -> None:
+        """Write a row saying the recompute DIED. Fail-soft, exactly like :meth:`record`.
+
+        A crash writes no ordinary row, so before this the report graded only the recommendations
+        that survived — and on 2026-08-15 it printed six PASS verdicts over a draft that ended in
+        an unhandled KeyError. The failure is now itself evidence, on the same principle that makes
+        an EMPTY log fail every check rather than pass them vacuously."""
+        if not self.enabled:
+            return
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)  # type: ignore[union-attr]
+            row = json.dumps(
+                {
+                    "ts": datetime.now(UTC).isoformat(timespec="milliseconds"),
+                    "path": path_label,
+                    "league_id": league_id,
+                    "overall": overall,
+                    "error": f"{type(error).__name__}: {error}",
+                }
+            )
+            nl = chr(10)
+            with self._path.open("a", encoding="utf-8", newline=nl) as fh:  # type: ignore[union-attr]
+                fh.write(row + nl)
+        except Exception:  # noqa: BLE001 — a sink must never add a failure mode of its own
+            log.warning("rehearsal_failure_write_failed", path=str(self._path), exc_info=True)
+
     @staticmethod
     def _row(
         path_label: str,
@@ -106,5 +134,9 @@ class RehearsalLog:
                 "vona": top_components.vona if top_components else None,
                 "mlv": top_components.mlv if top_components else None,
                 "projected_points": top.projected_points if top else None,
+                # The overlay's headline number ("survives 83% - CAN WAIT"). Recorded because a
+                # rehearsal that cannot answer "was that 83% any good?" has not measured the one
+                # thing the owner actually reads at every pick.
+                "next_turn_availability": top.next_turn_availability if top else None,
             },
         }

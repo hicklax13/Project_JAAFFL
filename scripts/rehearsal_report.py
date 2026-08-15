@@ -33,6 +33,11 @@ TEAM_COUNT = 12
 # of them by name rather than producing an empty (and therefore clean-looking) report.
 CRITERIA = (
     "recommendations served",
+    # A crash writes no ordinary row, so before this criterion existed the report graded only the
+    # recommendations that SURVIVED. On 2026-08-15 it printed six PASS verdicts over a draft that
+    # ended in an unhandled KeyError at pick 167 — the single most important event of the evening,
+    # invisible to the instrument built to observe it.
+    "no recompute failed",
     "survival is live",
     "the order was read from the room",
     "recompute under 200ms",
@@ -64,6 +69,26 @@ def evaluate(rows: list[dict]) -> list[Verdict]:
     """
     if not rows:
         return [Verdict(name, False, "no rows: the rehearsal log is empty") for name in CRITERIA]
+
+    # A failure row records a recompute that DIED: it has an ``error`` and none of the measurement
+    # fields. Graded on its own criterion and excluded from the rest — otherwise one crash fails
+    # every check for the wrong reason and buries the real signal under six false alarms.
+    failures = [row for row in rows if row.get("error")]
+    rows = [row for row in rows if not row.get("error")]
+    failure_verdict = Verdict(
+        "no recompute failed",
+        not failures,
+        f"{len(failures)} recompute(s) raised: {sorted({str(f.get('error')) for f in failures})}"
+        if failures
+        else f"no recompute raised across {len(rows)} served recommendation(s)",
+    )
+    if not rows:
+        return [
+            failure_verdict
+            if name == "no recompute failed"
+            else Verdict(name, False, "no recommendation was ever served")
+            for name in CRITERIA
+        ]
 
     bases = {row.get("survival_basis") for row in rows}
     orders = {row.get("draft_order_len", 0) for row in rows}
@@ -164,6 +189,7 @@ def evaluate(rows: list[dict]) -> list[Verdict]:
             f"{len(rows)} rows ({sum(1 for r in rows if r.get('path') == 'push')} push / "
             f"{sum(1 for r in rows if r.get('path') == 'pull')} pull)",
         ),
+        failure_verdict,
         Verdict(
             "survival is live",
             bool(settled) and not degraded_after,
@@ -243,9 +269,13 @@ def main(argv: list[str] | None = None) -> int:
     for verdict in verdicts:
         print(f"  {'PASS' if verdict.passed else 'FAIL'}  {verdict.name:<32} {verdict.detail}")
 
-    if rows:
+    # The foot describes what the OVERLAY last showed, so it must come from the last row that
+    # actually served a recommendation. A failure row carries no recompute_ms and no basis,
+    # and deriving from it printed a meaningless "recompute 0ms" over a run that crashed.
+    served = [row for row in rows if not row.get("error")]
+    if served:
         # ASCII only below the table: this prints to the owner's cp1252 console.
-        print(f"\n[rehearsal] overlay foot, DERIVED from the last row: {_overlay_foot(rows[-1])}")
+        print(f"\n[rehearsal] overlay foot, DERIVED from the last row: {_overlay_foot(served[-1])}")
     failures = [verdict.name for verdict in verdicts if not verdict.passed]
     print(f"\n[rehearsal] {'OK' if not failures else 'FAILED: ' + ', '.join(failures)}")
     return 1 if failures else 0

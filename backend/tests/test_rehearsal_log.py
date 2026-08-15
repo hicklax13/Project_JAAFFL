@@ -179,3 +179,57 @@ class TestAnEmptySettingMeansOff:
         failures = [e for e in logs if e.get("event") == "rehearsal_log_write_failed"]
         assert not failures, f"a disabled sink still tried to write: {failures}"
         assert not list(Path.cwd().glob("*.jsonl")), "must not litter the CWD"
+
+
+# --- #15: the overlay's headline number must be RECOVERABLE from the log ----------------------
+#
+# The overlay puts a survival probability in front of the owner at every single pick — "Malik
+# Nabers survives 83% · CAN WAIT", "McCaffrey survives 0% · TAKE NOW". It is the most decision-
+# shaping number on the surface, and it was absent from the rehearsal row: only `survival_basis`
+# (the LABEL: my_slot / degraded_no_order) was recorded.
+#
+# So after a 212-row live rehearsal, the one question the run existed to make answerable — was
+# that 83% ANY GOOD? — could not be asked at all. `RecommendedPick.next_turn_availability` already
+# carries it; the sink simply never wrote it down.
+
+
+class TestTheSurvivalProbabilityIsRecorded:
+    def test_the_top_pick_carries_its_next_turn_availability(self, tmp_path: Path) -> None:
+        log = tmp_path / "run.jsonl"
+        client = TestClient(_app(tmp_path, jaaffl_rehearsal_log=log))
+        client.post("/draft/events", json=pick_payload(1))
+        top = _lines(log)[0]["top"]
+        assert "next_turn_availability" in top, (
+            "without it, the overlay's headline number can never be calibrated after a run"
+        )
+
+
+# --- #5: a rehearsal whose ENGINE DIED must never read as a clean run -------------------------
+#
+# The 2026-08-15 report printed six PASS verdicts on a draft that ended in an unhandled exception.
+# It could not have done otherwise: a crash writes no row, the report grades only rows that exist,
+# and there was no criterion for "the engine threw". The single most important thing that happened
+# that evening was invisible to the instrument built to observe it.
+#
+# The failure is now itself evidence — the same principle as "an EMPTY log fails every check".
+
+
+class TestAFailedRecomputeIsRecorded:
+    def test_a_crashing_engine_writes_a_failure_row(self, tmp_path: Path) -> None:
+        from tests.test_api import _ExplodingEngine
+
+        log = tmp_path / "run.jsonl"
+        app = create_app(
+            Settings(
+                jaaffl_data_dir=tmp_path / "d",
+                jaaffl_recordings_dir=tmp_path / "r",
+                jaaffl_rehearsal_log=log,
+            ),
+            rec_engine=_ExplodingEngine(),
+        )
+        client = TestClient(app)
+        assert client.post("/draft/events", json=pick_payload(1)).status_code == 200
+        rows = _lines(log)
+        assert rows, "the crash left NO trace in the evidence file"
+        assert any(r.get("error") for r in rows), f"no row marked as a failure: {rows}"
+        assert "KeyError" in str(rows[-1]["error"])
