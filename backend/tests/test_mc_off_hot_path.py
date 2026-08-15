@@ -26,13 +26,31 @@ from jaaffl.engine.service import RecommendationEngine
 _APP_PY = Path(__file__).resolve().parents[1] / "src" / "jaaffl" / "api" / "app.py"
 
 
+# Every function that makes up the /recs/ws push path. Named explicitly, and each one REQUIRED to
+# exist, because this guard is only as wide as the source it reads.
+#
+# ⚠️ It went blind once. `publish_recommendation` was split so a failing recompute could no longer
+# abort ingestion (the 2026-08-15 pick-168 loss), which moved the `.recommend(...)` call into
+# `_recompute_and_push` — and this helper, matching one name, then found no call at all and had
+# nothing left to assert on. Listing the parts and demanding all of them turns a future rename into
+# a loud failure instead of a silently unguarded 1.14s hot path.
+_PUSH_PATH_FUNCTIONS = ("publish_recommendation", "_recompute_and_push")
+
+
 def _publish_recommendation_source() -> str:
-    """The body of api/app.py::publish_recommendation — the /recs/ws push path (§8.4 step 4)."""
+    """The whole /recs/ws push path in api/app.py (§8.4 step 4), as one source blob."""
     tree = ast.parse(_APP_PY.read_text(encoding="utf-8"))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "publish_recommendation":
-            return ast.unparse(node)
-    raise AssertionError("publish_recommendation not found in api/app.py")
+    found = {
+        node.name: ast.unparse(node)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name in _PUSH_PATH_FUNCTIONS
+    }
+    missing = [name for name in _PUSH_PATH_FUNCTIONS if name not in found]
+    assert not missing, (
+        f"push-path function(s) {missing} not found in api/app.py — this guard reads the source by "
+        "name, so a rename silently stops guarding. Update _PUSH_PATH_FUNCTIONS."
+    )
+    return chr(10).join(found[name] for name in _PUSH_PATH_FUNCTIONS)
 
 
 class TestTheAnalyticPathIsTheDefault:

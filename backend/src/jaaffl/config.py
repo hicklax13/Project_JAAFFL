@@ -139,6 +139,26 @@ class Settings(BaseSettings):
     # names other drafters' teams — keep it under the git-ignored data dir.
     jaaffl_rehearsal_log: Path | None = None
 
+    @field_validator("jaaffl_rehearsal_log", mode="before")
+    @classmethod
+    def _blank_means_off(cls, value: object) -> object:
+        """``JAAFFL_REHEARSAL_LOG=`` means OFF, not "append to the current directory".
+
+        pydantic coerces the empty string to ``Path('')``, which IS ``Path('.')``, so a bare
+        ``KEY=`` line read as a configured path. ``RehearsalLog`` then opened a DIRECTORY for
+        append on every recommendation: ``PermissionError: [Errno 13] Permission denied: '.'``.
+        Fail-soft swallowed it, so the sink reported itself ENABLED while writing nothing.
+
+        ⚠️ Same bug class Tier 12 already fixed for ``JAAFFL_MY_TEAM_ID``, where ``KEY=`` in the
+        owner's real ``.env`` parses as ``''`` rather than ``None`` — which is why ``api/app.py``
+        tests that one for truthiness instead of ``is not None``. The owner's ``.env`` still
+        carries a bare ``KEY=`` line, so this shape is routine, not hypothetical. Fixed at the
+        parse boundary so every reader inherits it, not just the one that got bitten.
+        """
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     @field_validator("jaaffl_data_dir", "jaaffl_engine_params_path", "jaaffl_recordings_dir")
     @classmethod
     def _anchor_to_repo_root(cls, value: Path) -> Path:

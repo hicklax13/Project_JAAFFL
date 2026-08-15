@@ -153,9 +153,38 @@ def create_app(
 
         Provider-free hot path: the engine reads its precomputed context, never a provider. A
         deduped re-send (a slower capture probe) does NOT re-broadcast. Recommendations accumulate
-        per league for the draft-complete recommendations.jsonl export."""
+        per league for the draft-complete recommendations.jsonl export.
+
+        ⚠️ NOTHING HERE MAY ESCAPE. This runs INSIDE the /draft/ws receive loop, whose only handler
+        is ``except WebSocketDisconnect`` — so any other exception closed the socket mid-batch. The
+        ack has already been sent by then (see the sender above this call), so the extension
+        believes the pick landed and never retries: the loss is silent by construction.
+
+        Measured live on 2026-08-15. At pick 167 an unresolved ``cbs:1910`` raised KeyError out of
+        ``lineup_value``; pick 168, delivered by CBS in the SAME frame, was never processed and is
+        absent from ``draft_event_log``. CBS batches picks — that capture carried 1, 2, 3, 6, 7 and
+        TWELVE per frame — so one exception can discard eleven picks from the board permanently.
+
+        Ingestion is the durable, correctness-critical path; a recommendation is advisory. They
+        must not share a failure domain, and that is a property of this boundary rather than of any
+        single bug: the KeyError is fixed, but the next one must not cost picks either. Logged at
+        ERROR with the traceback, because a recommendation that stops arriving silently is exactly
+        how a dead engine reads as a healthy one for a whole draft."""
         if result.seq is None or event.event_type not in _STATE_ADVANCING:
             return
+        try:
+            _recompute_and_push(event, result)
+        except Exception:  # noqa: BLE001 — see the docstring: ingestion must outlive the engine
+            log.error(
+                "recommendation_publish_failed",
+                league_id=event.league_id,
+                pick_number=result.pick_number,
+                seq=result.seq,
+                exc_info=True,
+            )
+
+    def _recompute_and_push(event: DraftEvent, result: IngestResult) -> None:
+        """The recompute itself. Separated so the isolation above is one unmissable boundary."""
         state = _resolve_state(result.state, event.league_id)
         # The overlay never sends a query string — it just receives pushes — so the draft slot
         # has to come from config here. Without it survival degrades to "everyone available"
