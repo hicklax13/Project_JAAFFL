@@ -174,7 +174,7 @@ def create_app(
             return
         try:
             _recompute_and_push(event, result)
-        except Exception:  # noqa: BLE001 — see the docstring: ingestion must outlive the engine
+        except Exception as exc:  # noqa: BLE001 — see the docstring: ingestion must outlive the engine
             log.error(
                 "recommendation_publish_failed",
                 league_id=event.league_id,
@@ -182,6 +182,10 @@ def create_app(
                 seq=result.seq,
                 exc_info=True,
             )
+            # Leave the failure in the EVIDENCE FILE too, not just the console. The 2026-08-15
+            # report passed six of seven verdicts over a draft whose engine had already died,
+            # because a crash wrote no row and nothing asked whether one had happened.
+            app.state.rehearsal.record_failure("push", event.league_id, result.pick_number, exc)
 
     def _recompute_and_push(event: DraftEvent, result: IngestResult) -> None:
         """The recompute itself. Separated so the isolation above is one unmissable boundary."""
