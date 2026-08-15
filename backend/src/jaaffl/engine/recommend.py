@@ -410,6 +410,9 @@ def recommend(
         roster_filled=len(my_roster),
         roster_size=roster_size or None,
         roster_by_position={pos.value: n for pos, n in roster_by_position.items()},
+        # Publish the gap rather than leaving the reader to spot it. NOT a guessed position: an
+        # unresolved id carries none, and inventing one would mis-fill a starting slot.
+        roster_unresolved=len(my_roster) - sum(roster_by_position.values()),
         vona_method=vona_method,
         survival_basis=survival_basis,
         # Measured LAST so it covers the whole recompute — this is the <200ms budget (§6.7)

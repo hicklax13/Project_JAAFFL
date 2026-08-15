@@ -66,6 +66,13 @@ export const RecommendationSchema = z.object({
   roster_filled: z.number().int().nonnegative().nullable().optional(),
   roster_size: z.number().int().nonnegative().nullable().optional(),
   roster_by_position: z.record(z.number().int()).optional(),
+  /**
+   * Roster spots whose CBS id the board could not resolve, so they carry no position.
+   * `roster_filled` counts them and `roster_by_position` cannot — without this the two silently
+   * disagree, as they did on 2026-08-15 (filled 14, positions summed to 13, DST absent though a
+   * defense had been drafted).
+   */
+  roster_unresolved: z.number().int().nonnegative().nullable().optional(),
   /** Which VONA estimator produced these numbers, so `?mc=true` can never be a silent no-op. */
   vona_method: z.string().nullable().optional(),
   /**

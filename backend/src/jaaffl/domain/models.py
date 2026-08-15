@@ -313,6 +313,16 @@ class Recommendation(BaseModel):
     roster_by_position: dict[str, int] = Field(
         default_factory=dict, description="My filled spots per position, e.g. {'RB': 1, 'WR': 2}."
     )
+    roster_unresolved: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Roster spots whose CBS id the board could not resolve, so they carry no position. "
+            "`roster_filled` counts them and `roster_by_position` cannot, and without this the "
+            "two silently disagree: on 2026-08-15 the payload read filled=14 while the positions "
+            "summed to 13, with DST absent though a defense had been drafted."
+        ),
+    )
     vona_method: str | None = Field(
         default=None,
         description="Which VONA estimator produced these numbers: 'analytic' | 'monte_carlo'. "
