@@ -229,3 +229,65 @@ def test_extract_row_only_id_with_no_name_anywhere_is_dropped() -> None:
 
 def test_extract_returns_empty_dict_for_no_matches() -> None:
     assert extract_cbs_players(["<html><body>nothing relevant here</body></html>"]) == {}
+
+
+# --- Team defenses reach the crosswalk by NICKNAME ALONE (2026-08-15 live rehearsal) ----------
+#
+# Every defense drafted in the 2026-08-15 mock went UNMASKED — 11 of 11 — because the CBS
+# crosswalk held 0 of 32 defenses. The auto-seed pulls ~4,360 links from the DynastyProcess table,
+# and crosswalk.py's own comment records that this table "carries NO team-defense rows at all".
+#
+# Re-extracting that capture found 23 of the 32 in CBS's own markup. 21 carried a player-list row
+# and linked. TWO — the Rams and the Texans — appeared ONLY as a snippet link:
+#
+#     <a href="/players/playerpage/snippet/1932" class="playerLink">Texans</a>
+#
+# No row, so no position, so `seed_cbs_crosswalk.py` filed them under "unresolvable (no position
+# extracted, never attempted)" and skipped them without trying.
+#
+# A bare NFL nickname IS the identity. `normalize_snippet_name`'s docstring already anticipates
+# "a DST's plain nickname", and `crosswalk.py:124` already normalizes DST names down to exactly
+# that token. The one missing step was saying so. All 32 nicknames are unique (verified against
+# the players table), so this is deterministic — not the id-range guess, which is NOT safe: the
+# block 1901..1932 is only roughly alphabetical (1908 is Dallas where the alphabet says Cleveland)
+# and a wrong guess masks the WRONG defense, which is worse than masking none.
+
+
+class TestABareTeamNicknameIsADefense:
+    def test_a_snippet_only_defense_is_typed_and_teamed(self) -> None:
+        """The exact markup from the live capture, verbatim."""
+        html = (
+            '<a href="/players/playerpage/snippet/1932" class="playerLink">Texans</a>'
+            '<a href="/players/playerpage/snippet/1923" class="playerLink">Rams</a>'
+        )
+        out = extract_cbs_players([html])
+        assert out["1932"].position == "DST"
+        assert out["1932"].nfl_team == "HOU"
+        assert out["1923"].position == "DST"
+        assert out["1923"].nfl_team == "LAR"
+
+    def test_a_real_player_list_row_still_wins_over_the_inference(self) -> None:
+        """The inference must only fill a GAP. If CBS actually told us the position, that is the
+        answer — inferring over it would be the id-range guess wearing a different hat."""
+        html = (
+            '<a href="/players/playerpage/snippet/1923" class="playerLink">Rams</a>'
+            '<tr id="playerListDD_1923">'
+            '<td align="left">WR</td><td align="left">NYJ</td></tr>'
+        )
+        out = extract_cbs_players([html])
+        assert out["1923"].position == "WR", "an extracted row must beat the nickname inference"
+        assert out["1923"].nfl_team == "NYJ"
+
+    def test_an_ordinary_player_name_is_never_typed_as_a_defense(self) -> None:
+        """The guard that keeps this from becoming a wildcard."""
+        html = '<a href="/players/playerpage/snippet/3162723" class="playerLink">Gibbs, Jahmyr</a>'
+        out = extract_cbs_players([html])
+        assert out["3162723"].position is None
+        assert out["3162723"].nfl_team is None
+
+    def test_all_thirty_two_nicknames_are_covered_and_unique(self) -> None:
+        """A rebrand (Redskins -> Commanders) must fail here rather than silently drop a defense."""
+        from jaaffl.data.cbs_extract import _DST_NICKNAME_TO_TEAM
+
+        assert len(_DST_NICKNAME_TO_TEAM) == 32
+        assert len(set(_DST_NICKNAME_TO_TEAM.values())) == 32

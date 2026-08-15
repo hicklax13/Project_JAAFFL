@@ -71,6 +71,55 @@ _SNIPPET_LINK_RE = re.compile(
 )
 _TRAILING_PAREN_RE = re.compile(r"\s*\([^)]*\)\s*$")  # a queue widget's trailing " (POS TEAM)"
 
+# --- team defenses: the nickname IS the identity -----------------------------------------------
+# CBS renders a defense as a bare nickname on a snippet link and gives it no player-list row, so
+# it arrives with no position and `seed_cbs_crosswalk.py` skips it as "unresolvable". Measured on
+# the 2026-08-15 live capture: 23 of 32 defenses were present, 21 had rows, and the Rams and
+# Texans had only the link. Every defense drafted that day went unmasked because the crosswalk
+# held 0 of 32.
+#
+# All 32 nicknames are unique (asserted in test_cbs_extract.py), so this is a LOOKUP, not a guess.
+# The alternative — inferring from the contiguous id block 1901..1932 — is NOT safe: the ordering
+# is only roughly alphabetical (1908 is Dallas where the alphabet says Cleveland), and a wrong id
+# masks the WRONG defense, which is worse than masking none.
+#
+# ⚠️ On a rebrand, update this map. `test_all_thirty_two_nicknames_are_covered_and_unique` fails
+# loudly rather than letting a defense drop out silently.
+_DST_NICKNAME_TO_TEAM = {
+    "Cardinals": "ARI",
+    "Falcons": "ATL",
+    "Ravens": "BAL",
+    "Bills": "BUF",
+    "Panthers": "CAR",
+    "Bears": "CHI",
+    "Bengals": "CIN",
+    "Browns": "CLE",
+    "Cowboys": "DAL",
+    "Broncos": "DEN",
+    "Lions": "DET",
+    "Packers": "GB",
+    "Texans": "HOU",
+    "Colts": "IND",
+    "Jaguars": "JAX",
+    "Chiefs": "KC",
+    "Chargers": "LAC",
+    "Rams": "LAR",
+    "Raiders": "LV",
+    "Dolphins": "MIA",
+    "Vikings": "MIN",
+    "Patriots": "NE",
+    "Saints": "NO",
+    "Giants": "NYG",
+    "Jets": "NYJ",
+    "Eagles": "PHI",
+    "Steelers": "PIT",
+    "Seahawks": "SEA",
+    "49ers": "SF",
+    "Buccaneers": "TB",
+    "Titans": "TEN",
+    "Commanders": "WAS",
+}
+
 
 def normalize_snippet_name(raw: str) -> str:
     """Normalize a source-3 snippet-link name: strip a queue '*' star and any trailing
@@ -148,6 +197,12 @@ def extract_cbs_players(texts: Iterable[str]) -> dict[str, CbsPlayer]:
                 team = pair.group(2).strip().upper() or None
                 pos_team[cbs_id] = (position, team)
                 break
+
+    # A bare NFL nickname with no player-list row is that team's defense. Fills a GAP only: an id
+    # that HAS a row keeps what CBS actually said, so this can never override a real position.
+    for cbs_id, name in names.items():
+        if cbs_id not in pos_team and name in _DST_NICKNAME_TO_TEAM:
+            pos_team[cbs_id] = ("DST", _DST_NICKNAME_TO_TEAM[name])
 
     return {
         cbs_id: CbsPlayer(
